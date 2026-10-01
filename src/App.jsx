@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { GoogleOAuthProvider, GoogleLogin, googleLogout } from '@react-oauth/google';
+import { jwtDecode } from 'jwt-decode';
 import { 
   Calendar as CalendarIcon, 
   CheckSquare, 
@@ -18,20 +20,13 @@ import {
   UserPlus 
 } from 'lucide-react';
 
+const GOOGLE_CLIENT_ID = "147696997284-sttbu4gtchokcqqn0votaeq49s17dtbf.apps.googleusercontent.com";
+
 const INITIAL_ROLES = {
   admin: { level: 40, name: '管理者' },
   area_manager: { level: 30, name: 'エリアM' },
   manager: { level: 20, name: '店長' },
   staff: { level: 10, name: 'スタッフ' }
-};
-
-const MOCK_USERS = {
-  u0: { id: 'u0', name: '管理者', role: 'admin', canManageShift: true },
-  u1: { id: 'u1', name: '竹添', role: 'area_manager', canManageShift: true },
-  u2: { id: 'u2', name: '高橋', role: 'manager', canManageShift: false },
-  u3: { id: 'u3', name: '江藤', role: 'manager', canManageShift: false },
-  u4: { id: 'u4', name: '平川', role: 'staff', canManageShift: false },
-  u5: { id: 'u5', name: '井上', role: 'staff', canManageShift: false }
 };
 
 const DEFAULT_SHIFT_TYPES = [
@@ -78,35 +73,22 @@ const checkCanManageShift = (user, roles) => {
   return level >= 30 || !!user.canManageShift;
 };
 
-const LoginScreen = ({ onLogin, users, roleNames, roles }) => (
+const LoginScreen = ({ onGoogleLoginSuccess }) => (
   <div className="flex-1 flex flex-col items-center justify-center bg-gray-50 p-6 min-h-screen">
     <div className="w-full max-w-sm bg-white p-8 rounded-2xl shadow-lg text-center space-y-6">
       <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto">
         <Users size={32}/>
       </div>
       <div>
-        <h1 className="text-xl font-bold text-gray-800">チームアプリ</h1>
-        <p className="text-sm text-gray-500 mt-2">デモ用にアカウントを選んでください</p>
+        <h1 className="text-xl font-bold text-gray-800">TeamShift App</h1>
+        <p className="text-sm text-gray-500 mt-2">Google アカウントでログインしてください</p>
       </div>
-      <div className="space-y-3 pt-4 text-left max-h-[60vh] overflow-y-auto">
-        {Object.values(users).map(u => {
-          const roleObj = roles[u.role] || { level: 10, name: '未設定' };
-          return (
-            <button
-              key={u.id}
-              onClick={() => onLogin(u.id)}
-              className="w-full flex items-center justify-between p-3 rounded-xl border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all active:scale-95"
-            >
-              <div className="flex items-center">
-                <span className="font-bold text-gray-700">{u.name}</span>
-                <span className={`ml-2 text-[10px] px-2 py-0.5 rounded-full font-bold ${roleObj.level >= 40 ? 'bg-red-100 text-red-700' : roleObj.level >= 30 ? 'bg-purple-100 text-purple-700' : roleObj.level >= 20 ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'}`}>
-                  {roleNames[u.role] || roleObj.name}
-                </span>
-              </div>
-              <LogIn className="text-gray-400" size={16}/>
-            </button>
-          );
-        })}
+      <div className="pt-4 flex justify-center">
+        <GoogleLogin
+          onSuccess={onGoogleLoginSuccess}
+          onError={() => alert('Google ログインに失敗しました')}
+          useOneTap
+        />
       </div>
     </div>
   </div>
@@ -1001,210 +983,179 @@ const BottomNav = ({ activeTab, setActiveTab, currentUser, roles }) => {
 };
 
 export default function App() {
-  const [currentUserId, setCurrentUserId] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
   const [activeTab, setActiveTab] = useState('calendar');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(formatDate(new Date()));
   const [shiftTypes, setShiftTypes] = useState(DEFAULT_SHIFT_TYPES);
   const [roles, setRoles] = useState(INITIAL_ROLES);
   const [roleNames, setRoleNames] = useState(DEFAULT_ROLE_NAMES);
-  const [users, setUsers] = useState(MOCK_USERS);
+  const [users, setUsers] = useState({});
   
   const [teamData, setTeamData] = useState({ shifts: {}, tasks: {} });
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    const today = formatDate(new Date());
-    const initialData = {
-      shifts: {
-        [today]: { u1: 'day', u2: 'early', u3: 'off', u4: 'late', u5: 'night' }
-      },
-      tasks: {
-        [today]: {
-          u2: [{ id: '1', text: '本日の売上目標確認', completed: false }],
-          u4: [{ id: '2', text: 'レジ締め', completed: true }]
-        }
+    const savedUser = localStorage.getItem('google_user');
+    const savedUsersList = localStorage.getItem('app_users');
+    
+    let currentUsersMap = {};
+    if (savedUsersList) {
+      currentUsersMap = JSON.parse(savedUsersList);
+    }
+
+    if (savedUser) {
+      const parsedUser = JSON.parse(savedUser);
+      setCurrentUser(parsedUser);
+      if (!currentUsersMap[parsedUser.id]) {
+        currentUsersMap[parsedUser.id] = parsedUser;
       }
-    };
-    setTeamData(initialData);
+    }
+    
+    setUsers(currentUsersMap);
+
+    const today = formatDate(new Date());
+    setTeamData({
+      shifts: { [today]: {} },
+      tasks: { [today]: {} }
+    });
     setIsLoaded(true);
   }, []);
 
+  const handleGoogleLoginSuccess = (credentialResponse) => {
+    const decoded = jwtDecode(credentialResponse.credential);
+    
+    const newUser = {
+      id: decoded.sub,
+      name: decoded.name,
+      email: decoded.email,
+      picture: decoded.picture,
+      role: 'admin', // 初回ログインユーザーを管理者権限にする場合
+      canManageShift: true
+    };
+
+    setCurrentUser(newUser);
+    localStorage.setItem('google_user', JSON.stringify(newUser));
+
+    setUsers(prev => {
+      const updated = { ...prev, [newUser.id]: newUser };
+      localStorage.setItem('app_users', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const handleLogout = () => {
+    googleLogout();
+    setCurrentUser(null);
+    localStorage.removeItem('google_user');
+  };
+
   if (!isLoaded) return <div className="flex-1 bg-gray-50 flex items-center justify-center">Loading...</div>;
 
-  if (!currentUserId) {
-    return <LoginScreen onLogin={(id) => setCurrentUserId(id)} users={users} roleNames={roleNames} roles={roles} />;
-  }
-
-  const currentUser = users[currentUserId];
-  const myRoleInfo = roles[currentUser.role] || { name: '未設定', level: 10 };
-
-  const updateUserShift = (dateStr, targetUid, shiftId) => {
-    setTeamData(prev => ({
-      ...prev,
-      shifts: {
-        ...prev.shifts,
-        [dateStr]: { ...(prev.shifts[dateStr] || {}), [targetUid]: shiftId }
-      }
-    }));
-  };
-
-  const addTask = (dateStr, targetUid, text) => {
-    const newTask = { id: Date.now().toString(), text, completed: false };
-    setTeamData(prev => {
-      const dayTasks = prev.tasks[dateStr] || {};
-      const userTasks = dayTasks[targetUid] || [];
-      return {
-        ...prev,
-        tasks: {
-          ...prev.tasks,
-          [dateStr]: { ...dayTasks, [targetUid]: [...userTasks, newTask] }
-        }
-      };
-    });
-  };
-
-  const toggleTask = (dateStr, targetUid, taskId) => {
-    setTeamData(prev => {
-      const dayTasks = prev.tasks[dateStr] || {};
-      const userTasks = dayTasks[targetUid] || [];
-      return {
-        ...prev,
-        tasks: {
-          ...prev.tasks,
-          [dateStr]: {
-            ...dayTasks,
-            [targetUid]: userTasks.map(t => t.id === taskId ? { ...t, completed: !t.completed } : t)
-          }
-        }
-      };
-    });
-  };
-
-  const updateTaskText = (dateStr, targetUid, taskId, newText) => {
-    setTeamData(prev => {
-      const dayTasks = prev.tasks[dateStr] || {};
-      const userTasks = dayTasks[targetUid] || [];
-      return {
-        ...prev,
-        tasks: {
-          ...prev.tasks,
-          [dateStr]: {
-            ...dayTasks,
-            [targetUid]: userTasks.map(t => t.id === taskId ? { ...t, text: newText } : t)
-          }
-        }
-      };
-    });
-  };
-
-  const deleteTask = (dateStr, targetUid, taskId) => {
-    setTeamData(prev => {
-      const dayTasks = prev.tasks[dateStr] || {};
-      const userTasks = dayTasks[targetUid] || [];
-      return {
-        ...prev,
-        tasks: {
-          ...prev.tasks,
-          [dateStr]: { ...dayTasks, [targetUid]: userTasks.filter(t => t.id !== taskId) }
-        }
-      };
-    });
-  };
-
-  const changeMonth = (offset) => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + offset, 1));
-  };
-
-  const changeDay = (offset) => {
-    const d = new Date(selectedDate);
-    d.setDate(d.getDate() + offset);
-    const newDateStr = formatDate(d);
-    setSelectedDate(newDateStr);
-    setCurrentDate(new Date(d.getFullYear(), d.getMonth(), 1));
-  };
-
-  const handleDateClick = (dateStr) => {
-    setSelectedDate(dateStr);
-    setActiveTab('daily');
-  };
-
   return (
-    <div className="flex justify-center bg-gray-900 min-h-screen">
-      <div className="w-full max-w-md bg-white h-screen flex flex-col shadow-2xl relative overflow-hidden font-sans">
-        
-        <div className="bg-white border-b border-gray-100 pt-safe px-4 py-3 flex justify-between items-center z-20 shrink-0">
-          <div>
-            <h1 className="text-lg font-black text-gray-900 tracking-tight flex items-center">
-              TeamShift <span className="text-blue-600 ml-1">App</span>
-            </h1>
-          </div>
-          <button 
-            onClick={() => setCurrentUserId(null)}
-            className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-full transition-colors active:scale-95"
-          >
-            <div className="text-right flex items-center">
-              <span className="text-[10px] font-bold text-gray-500 mr-1">{roleNames[currentUser.role] || myRoleInfo.name}</span>
-              <span className="text-xs font-bold text-gray-800">{currentUser.name.split(' ')[0]}</span>
+    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+      {!currentUser ? (
+        <LoginScreen onGoogleLoginSuccess={handleGoogleLoginSuccess} />
+      ) : (
+        <div className="flex justify-center bg-gray-900 min-h-screen">
+          <div className="w-full max-w-md bg-white h-screen flex flex-col shadow-2xl relative overflow-hidden font-sans">
+            
+            <div className="bg-white border-b border-gray-100 pt-safe px-4 py-3 flex justify-between items-center z-20 shrink-0">
+              <div>
+                <h1 className="text-lg font-black text-gray-900 tracking-tight flex items-center">
+                  TeamShift <span className="text-blue-600 ml-1">App</span>
+                </h1>
+              </div>
+              <button 
+                onClick={handleLogout}
+                className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-full transition-colors active:scale-95"
+              >
+                <img src={currentUser.picture} alt="Avatar" className="w-5 h-5 rounded-full" />
+                <div className="text-right flex items-center">
+                  <span className="text-[10px] font-bold text-gray-500 mr-1">{roleNames[currentUser.role] || roles[currentUser.role]?.name || '管理者'}</span>
+                  <span className="text-xs font-bold text-gray-800">{currentUser.name.split(' ')[0]}</span>
+                </div>
+                <LogOut className="text-gray-500" size={14}/>
+              </button>
             </div>
-            <LogOut className="text-gray-500" size={14}/>
-          </button>
+
+            {activeTab === 'calendar' ? (
+              <CalendarView 
+                changeMonth={(offset) => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + offset, 1))} 
+                currentDate={currentDate} 
+                currentUserUid={currentUser.id} 
+                onDateClick={(dateStr) => { setSelectedDate(dateStr); setActiveTab('daily'); }} 
+                shiftTypes={shiftTypes} 
+                teamData={teamData} 
+                users={users}
+              />
+            ) : activeTab === 'team-shift' ? (
+              <TeamShiftView 
+                changeMonth={(offset) => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + offset, 1))} 
+                currentDate={currentDate} 
+                currentUserUid={currentUser.id} 
+                roleNames={roleNames} 
+                roles={roles} 
+                shiftTypes={shiftTypes} 
+                teamData={teamData} 
+                updateUserShift={(dateStr, targetUid, shiftId) => setTeamData(prev => ({
+                  ...prev,
+                  shifts: { ...prev.shifts, [dateStr]: { ...(prev.shifts[dateStr] || {}), [targetUid]: shiftId } }
+                }))} 
+                users={users}
+              />
+            ) : activeTab === 'daily' ? (
+              <DailyDetailView 
+                addTask={(dateStr, targetUid, text) => setTeamData(prev => {
+                  const dayTasks = prev.tasks[dateStr] || {};
+                  const userTasks = dayTasks[targetUid] || [];
+                  return { ...prev, tasks: { ...prev.tasks, [dateStr]: { ...dayTasks, [targetUid]: [...userTasks, { id: Date.now().toString(), text, completed: false }] } } };
+                })} 
+                changeDay={(offset) => {
+                  const d = new Date(selectedDate);
+                  d.setDate(d.getDate() + offset);
+                  const newDateStr = formatDate(d);
+                  setSelectedDate(newDateStr);
+                  setCurrentDate(new Date(d.getFullYear(), d.getMonth(), 1));
+                }} 
+                currentUserUid={currentUser.id} 
+                deleteTask={(dateStr, targetUid, taskId) => setTeamData(prev => ({
+                  ...prev,
+                  tasks: { ...prev.tasks, [dateStr]: { ...(prev.tasks[dateStr] || {}), [targetUid]: (prev.tasks[dateStr]?.[targetUid] || []).filter(t => t.id !== taskId) } }
+                }))} 
+                roleNames={roleNames} 
+                roles={roles} 
+                selectedDate={selectedDate} 
+                shiftTypes={shiftTypes} 
+                teamData={teamData} 
+                toggleTask={(dateStr, targetUid, taskId) => setTeamData(prev => ({
+                  ...prev,
+                  tasks: { ...prev.tasks, [dateStr]: { ...(prev.tasks[dateStr] || {}), [targetUid]: (prev.tasks[dateStr]?.[targetUid] || []).map(t => t.id === taskId ? { ...t, completed: !t.completed } : t) } }
+                }))} 
+                updateTaskText={(dateStr, targetUid, taskId, newText) => setTeamData(prev => ({
+                  ...prev,
+                  tasks: { ...prev.tasks, [dateStr]: { ...(prev.tasks[dateStr] || {}), [targetUid]: (prev.tasks[dateStr]?.[targetUid] || []).map(t => t.id === taskId ? { ...t, text: newText } : t) } }
+                }))} 
+                users={users}
+              />
+            ) : (
+              <SettingsView 
+                currentUserUid={currentUser.id} 
+                roleNames={roleNames} 
+                roles={roles} 
+                setRoleNames={setRoleNames} 
+                setRoles={setRoles} 
+                setShiftTypes={setShiftTypes} 
+                setUsers={setUsers} 
+                shiftTypes={shiftTypes} 
+                users={users}
+              />
+            )}
+
+            <BottomNav activeTab={activeTab} currentUser={currentUser} roles={roles} setActiveTab={setActiveTab}/>
+          </div>
         </div>
-
-        {activeTab === 'calendar' ? (
-          <CalendarView 
-            changeMonth={changeMonth} 
-            currentDate={currentDate} 
-            currentUserUid={currentUserId} 
-            onDateClick={handleDateClick} 
-            shiftTypes={shiftTypes} 
-            teamData={teamData} 
-            users={users}
-          />
-        ) : activeTab === 'team-shift' ? (
-          <TeamShiftView 
-            changeMonth={changeMonth} 
-            currentDate={currentDate} 
-            currentUserUid={currentUserId} 
-            roleNames={roleNames} 
-            roles={roles} 
-            shiftTypes={shiftTypes} 
-            teamData={teamData} 
-            updateUserShift={updateUserShift} 
-            users={users}
-          />
-        ) : activeTab === 'daily' ? (
-          <DailyDetailView 
-            addTask={addTask} 
-            changeDay={changeDay} 
-            currentUserUid={currentUserId} 
-            deleteTask={deleteTask} 
-            roleNames={roleNames} 
-            roles={roles} 
-            selectedDate={selectedDate} 
-            shiftTypes={shiftTypes} 
-            teamData={teamData} 
-            toggleTask={toggleTask} 
-            updateTaskText={updateTaskText} 
-            updateUserShift={updateUserShift} 
-            users={users}
-          />
-        ) : (
-          <SettingsView 
-            currentUserUid={currentUserId} 
-            roleNames={roleNames} 
-            roles={roles} 
-            setRoleNames={setRoleNames} 
-            setRoles={setRoles} 
-            setShiftTypes={setShiftTypes} 
-            setUsers={setUsers} 
-            shiftTypes={shiftTypes} 
-            users={users}
-          />
-        )}
-
-        <BottomNav activeTab={activeTab} currentUser={currentUser} roles={roles} setActiveTab={setActiveTab}/>
-      </div>
-    </div>
+      )}
+    </GoogleOAuthProvider>
   );
 }
