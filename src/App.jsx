@@ -212,18 +212,23 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
     if (!importText.trim()) return;
 
     const rawLines = importText.replace(/\r\n?/g, '\n').split('\n');
-    let newShifts = { ...teamData.shifts };
+    const newShifts = { ...teamData.shifts };
     let newShiftTypes = [...shiftTypes];
     const importedUsers = [];
     const errors = [];
+    const importedUserIds = new Set();
 
+    // 名前比較用。全角/半角スペース、改行などをすべて無視する。
     const normalizeName = (value) =>
-      String(value || '').replace(/[\s　]+/g, '').trim();
+      String(value ?? '').replace(/[\s\u3000]+/g, '').trim();
 
-    const normalizeSymbol = (value) => String(value ?? '').trim();
+    const cleanCell = (value) =>
+      String(value ?? '')
+        .replace(/<br\s*\/?>/gi, '')
+        .replace(/`/g, '')
+        .trim();
 
-    const isMarkdownSeparator = (cells) =>
-      cells.length > 0 && cells.every(cell => /^:?-{3,}:?$/.test(String(cell).trim()));
+    const normalizeSymbol = (value) => cleanCell(value);
 
     const findUserByCell = (cell) => {
       const target = normalizeName(cell);
@@ -231,12 +236,37 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
       return sortedUsers.find(u => normalizeName(u.name) === target) || null;
     };
 
-    const findUserInPlainLine = (line) => {
-      const compact = normalizeName(line);
-      return sortedUsers
+    // Markdown表、タブ区切り、通常の空白区切りを同じ形式にする。
+    const parseLine = (line) => {
+      const text = line.trim();
+      if (!text) return null;
+
+      if (text.includes('|')) {
+        let cells = text.split('|').map(cleanCell);
+        if (cells.length && cells[0] === '') cells.shift();
+        if (cells.length && cells[cells.length - 1] === '') cells.pop();
+        return cells;
+      }
+
+      if (text.includes('\t')) {
+        return text.split('\t').map(cleanCell);
+      }
+
+      // 最後の保険：登録済みメンバー名を先頭部分から探し、残りをシフト列として扱う。
+      const candidates = sortedUsers
         .slice()
-        .sort((a, b) => normalizeName(b.name).length - normalizeName(a.name).length)
-        .find(u => compact.includes(normalizeName(u.name))) || null;
+        .sort((a, b) => normalizeName(b.name).length - normalizeName(a.name).length);
+      for (const user of candidates) {
+        const name = String(user.name || '').trim();
+        if (!name) continue;
+        const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/[\\s\\u3000]+/g, '[\\s\\u3000]*');
+        const match = text.match(new RegExp('^\\s*' + escaped + '(?:\\s+|$)', 'i'));
+        if (match) {
+          const rest = text.slice(match[0].length).trim();
+          return [name, ...rest.split(/[\s\u3000]+/).filter(Boolean)];
+        }
+      }
+      return null;
     };
 
     const findOrCreateShiftId = (symbol) => {
@@ -252,12 +282,10 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
       else if (sym === '講習') targetLabel = '講習';
 
       let matched = newShiftTypes.find(s => s.label === targetLabel);
-      if (matched) return matched.id;
-
-      if (targetLabel === '出勤') {
+      if (!matched && targetLabel === '出勤') {
         matched = newShiftTypes.find(s => s.id === 'work' || s.id === 'early' || s.label === '早番');
-        if (matched) return matched.id;
       }
+      if (matched) return matched.id;
 
       const newId = `shift_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
       const colors = [
@@ -280,52 +308,31 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
     };
 
     rawLines.forEach((rawLine, lineIndex) => {
-      const line = rawLine.trim();
-      if (!line) return;
+      const cells = parseLine(rawLine);
+      if (!cells || cells.length === 0) return;
 
-      let cells = null;
+      // 日付見出し・曜日行・Markdown区切り行などはメンバー名がないので無視。
+      const userIndex = cells.findIndex(cell => !!findUserByCell(cell));
+      if (userIndex < 0) return;
 
-      // Markdown table: | 名前 | A | ／ | ... |
-      if (line.includes('|')) {
-        cells = line.split('|').map(cell => cell.trim());
-        while (cells.length && cells[0] === '') cells.shift();
-        while (cells.length && cells[cells.length - 1] === '') cells.pop();
-        if (!cells.length || isMarkdownSeparator(cells)) return;
-      }
-      // Excel / Google Sheets: tab separated
-      else if (line.includes('\t')) {
-        cells = line.split('\t').map(cell => cell.trim());
-      }
-      // Plain text fallback. Do not split the registered name itself.
-      else {
-        const foundUser = findUserInPlainLine(line);
-        if (!foundUser) return;
-        const namePattern = String(foundUser.name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const nameMatch = line.match(new RegExp(namePattern));
-        if (!nameMatch) return;
-        const rest = line.slice(nameMatch.index + nameMatch[0].length).trim();
-        cells = [foundUser.name, ...rest.split(/\s+/).filter(Boolean)];
+      const matchedUser = findUserByCell(cells[userIndex]);
+      const shiftValues = cells.slice(userIndex + 1).map(cleanCell);
+
+      if (importedUserIds.has(matchedUser.id)) {
+        errors.push(`${lineIndex + 1}行目 ${matchedUser.name}: 同じメンバーが複数行あります`);
+        return;
       }
 
-      // Ignore header rows such as: | 木 | 金 | ... |
-      const matchIndex = cells.findIndex(cell => !!findUserByCell(cell));
-      if (matchIndex < 0) return;
-
-      const matchedUser = findUserByCell(cells[matchIndex]);
-      const shiftValues = cells.slice(matchIndex + 1);
-
-      // For October 2026 this must be exactly 31 values. Do not silently import
-      // a partially parsed row, because that leaves the old schedule in place.
       if (shiftValues.length < daysInMonth) {
         errors.push(`${lineIndex + 1}行目 ${matchedUser.name}: シフトが${shiftValues.length}個しかありません（${daysInMonth}個必要）`);
         return;
       }
 
-      const imported = { user: matchedUser, values: shiftValues.slice(0, daysInMonth) };
-      importedUsers.push(imported);
+      importedUserIds.add(matchedUser.id);
+      importedUsers.push(matchedUser);
 
       for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
-        const val = normalizeSymbol(imported.values[dayNum - 1]);
+        const val = shiftValues[dayNum - 1];
         const dateStr = formatDate(new Date(year, month, dayNum));
         const shiftId = findOrCreateShiftId(val);
         if (!newShifts[dateStr]) newShifts[dateStr] = {};
@@ -343,12 +350,12 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
       return;
     }
 
-    // One Firestore write for both shiftTypes and shifts prevents the realtime
-    // listener from briefly applying one half of the import over the other.
+    // 今月の対象メンバーについて31日分を確定保存する。
+    // shiftTypesとteamDataを同じFirestore更新で保存するため、途中状態を作らない。
     bulkImportShifts(newShifts, newShiftTypes);
     setShowImportModal(false);
     setImportText('');
-    alert(`${importedUsers.length}人 × ${daysInMonth}日分のシフトを取り込みました。`);
+    alert(`${importedUsers.length}人 × ${daysInMonth}日分のシフトを取り込みました。\n\n${importedUsers.map(u => u.name).join('、')}`);
   };
 
   return (
