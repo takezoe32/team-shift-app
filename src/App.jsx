@@ -1304,49 +1304,55 @@ export default function App() {
         let currentShifts = data.teamData?.shifts || {};
         let currentTasks = data.teamData?.tasks || {};
 
-        // メールアドレスが重複している同一人物を自動検出して統合
+        // 同じメールアドレスの重複ユーザーは、リアルタイム監視中にはFirestoreへ書き戻さない。
+        // 一括取り込み直後に古い重複ユーザーのデータを保存すると、
+        // 新しく取り込んだシフトを古いデータで上書きする競合が起きるため。
+        // 画面上だけは重複を整理し、正式ID側に既に値がある場合はそれを優先する。
         const emailMap = {};
-        let needsCleanup = false;
 
         Object.values(currentUsers).forEach(u => {
           if (u.email) {
             const em = u.email.toLowerCase();
-            if (!emailMap[em]) {
-              emailMap[em] = [];
-            }
+            if (!emailMap[em]) emailMap[em] = [];
             emailMap[em].push(u);
           }
         });
 
-        Object.keys(emailMap).forEach(em => {
-          const list = emailMap[em];
-          if (list.length > 1) {
-            needsCleanup = true;
-            const realUser = list.find(u => !u.id.startsWith('u_')) || list[0];
-            const dummyUsers = list.filter(u => u.id !== realUser.id);
+        Object.values(emailMap).forEach(list => {
+          if (list.length <= 1) return;
 
-            dummyUsers.forEach(dUser => {
-              Object.keys(currentShifts).forEach(dStr => {
-                if (currentShifts[dStr]?.[dUser.id]) {
-                  currentShifts[dStr][realUser.id] = currentShifts[dStr][dUser.id];
-                  delete currentShifts[dStr][dUser.id];
-                }
-              });
-              Object.keys(currentTasks).forEach(dStr => {
-                if (currentTasks[dStr]?.[dUser.id]) {
-                  currentTasks[dStr][realUser.id] = [...(currentTasks[dStr][realUser.id] || []), ...currentTasks[dStr][dUser.id]];
-                  delete currentTasks[dStr][dUser.id];
-                }
-              });
-              delete currentUsers[dUser.id];
+          // Googleログイン由来の数値IDを正式IDとして優先。
+          // それがなければ userOrder に含まれるID、最後に先頭を使用。
+          const realUser =
+            list.find(u => /^\d+$/.test(String(u.id))) ||
+            list.find(u => data.userOrder?.includes(u.id)) ||
+            list[0];
+
+          const duplicateUsers = list.filter(u => u.id !== realUser.id);
+
+          duplicateUsers.forEach(dUser => {
+            Object.keys(currentShifts).forEach(dStr => {
+              const duplicateValue = currentShifts[dStr]?.[dUser.id];
+              const realValue = currentShifts[dStr]?.[realUser.id];
+              // 正式ID側に値がある場合は必ずそちらを優先する。
+              if (duplicateValue !== undefined && realValue === undefined) {
+                currentShifts[dStr][realUser.id] = duplicateValue;
+              }
+              if (currentShifts[dStr]) delete currentShifts[dStr][dUser.id];
             });
-          }
-        });
 
-        if (needsCleanup) {
-          const updatedTeamData = { shifts: currentShifts, tasks: currentTasks };
-          saveToFirestore({ users: currentUsers, teamData: updatedTeamData });
-        }
+            Object.keys(currentTasks).forEach(dStr => {
+              const duplicateTasks = currentTasks[dStr]?.[dUser.id];
+              if (duplicateTasks) {
+                const realTasks = currentTasks[dStr][realUser.id] || [];
+                currentTasks[dStr][realUser.id] = [...realTasks, ...duplicateTasks];
+                delete currentTasks[dStr][dUser.id];
+              }
+            });
+
+            delete currentUsers[dUser.id];
+          });
+        });
 
         setUsers(currentUsers);
         if (data.userOrder) setUserOrder(data.userOrder);
