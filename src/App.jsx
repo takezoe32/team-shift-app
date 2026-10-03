@@ -254,9 +254,26 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
     };
 
     rawLines.forEach(lineStr => {
-      // タブおよび任意の空白文字でトークン化して空要素を除去
-      const tokens = lineStr.split(/[\t\s]+/).filter(Boolean);
-      if (tokens.length < 2) return;
+      // Markdown表（| 名前 | A | ／ | ... |）にも対応
+      // 外側の | を除去し、| を区切りとして扱う。
+      // 通常のExcel/スプレッドシート貼り付け（タブ区切り）も従来どおり対応。
+      const isMarkdownTableRow = lineStr.trim().startsWith('|') && lineStr.trim().endsWith('|');
+      let tokens;
+
+      if (isMarkdownTableRow) {
+        tokens = lineStr
+          .trim()
+          .replace(/^\|/, '')
+          .replace(/\|$/, '')
+          .split('|')
+          .map(token => token.trim())
+          .filter(Boolean);
+      } else {
+        tokens = lineStr.split(/[\t\s]+/).filter(Boolean);
+      }
+
+      // Markdownの見出し・区切り行は無視
+      if (tokens.length < 2 || tokens.every(token => /^:?-{3,}:?$/.test(token))) return;
 
       let matchedUser = null;
       let userTokenIndex = -1;
