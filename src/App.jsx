@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { GoogleOAuthProvider, GoogleLogin, googleLogout } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode';
+import { initializeApp } from 'firebase/app';
+import { getFirestore, doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { 
   Calendar as CalendarIcon, 
   CheckSquare, 
@@ -19,7 +21,21 @@ import {
   UserPlus 
 } from 'lucide-react';
 
+// Google OAuth Client ID
 const GOOGLE_CLIENT_ID = "147696997284-sttbu4gtchokcqqn0votaeq49s17dtbf.apps.googleusercontent.com";
+
+// Firebase Configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyB0VeqCI-it5uqe5BTjNcdDM25ciTB5Tlk",
+  authDomain: "team-shift-app.firebaseapp.com",
+  projectId: "team-shift-app",
+  storageBucket: "team-shift-app.firebasestorage.app",
+  messagingSenderId: "147696997284",
+  appId: "1:147696997284:web:359a8e43d8aef38aab2731"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
 const INITIAL_ROLES = {
   admin: { level: 40, name: '管理者' },
@@ -495,7 +511,7 @@ const DailyDetailView = ({
   );
 };
 
-const SettingsView = ({ shiftTypes, setShiftTypes, users, setUsers, currentUserUid, roleNames, setRoleNames, roles, setRoles }) => {
+const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, currentUserUid, roleNames, updateRoleNames, roles, updateRoles }) => {
   const [newUserName, setNewUserName] = useState('');
   const [newUserRole, setNewUserRole] = useState(Object.keys(roles)[0] || 'staff');
   const [showAddForm, setShowAddForm] = useState(false);
@@ -511,7 +527,7 @@ const SettingsView = ({ shiftTypes, setShiftTypes, users, setUsers, currentUserU
   const [newShiftColor, setNewShiftColor] = useState(COLOR_PRESETS[0]);
 
   const handleLabelChange = (id, newLabel) => {
-    setShiftTypes(prev => prev.map(s => s.id === id ? { ...s, label: newLabel } : s));
+    updateShiftTypes(shiftTypes.map(s => s.id === id ? { ...s, label: newLabel } : s));
   };
 
   const handleAddShift = () => {
@@ -521,11 +537,9 @@ const SettingsView = ({ shiftTypes, setShiftTypes, users, setUsers, currentUserU
       label: newShiftLabel.trim(),
       color: newShiftColor
     };
-    setShiftTypes(prev => {
-      const noneShift = prev.find(s => s.id === 'none') || { id: 'none', label: '未定', color: 'bg-gray-100 text-gray-500 border-gray-200' };
-      const filtered = prev.filter(s => s.id !== 'none');
-      return [...filtered, newShift, noneShift];
-    });
+    const noneShift = shiftTypes.find(s => s.id === 'none') || { id: 'none', label: '未定', color: 'bg-gray-100 text-gray-500 border-gray-200' };
+    const filtered = shiftTypes.filter(s => s.id !== 'none');
+    updateShiftTypes([...filtered, newShift, noneShift]);
     setNewShiftLabel('');
     setShowAddShiftForm(false);
   };
@@ -536,28 +550,28 @@ const SettingsView = ({ shiftTypes, setShiftTypes, users, setUsers, currentUserU
       return;
     }
     if (window.confirm('このシフトを削除してもよろしいですか？')) {
-      setShiftTypes(prev => prev.filter(s => s.id !== shiftId));
+      updateShiftTypes(shiftTypes.filter(s => s.id !== shiftId));
     }
   };
   
   const handleRoleNameChange = (roleKey, newName) => {
-    setRoleNames(prev => ({
-      ...prev,
+    updateRoleNames({
+      ...roleNames,
       [roleKey]: newName
-    }));
+    });
   };
 
   const handleAddRole = () => {
     if (!newRoleName.trim()) return;
     const roleKey = `role_${Date.now()}`;
-    setRoles(prev => ({
-      ...prev,
+    updateRoles({
+      ...roles,
       [roleKey]: { level: Number(newRoleLevel), name: newRoleName.trim() }
-    }));
-    setRoleNames(prev => ({
-      ...prev,
+    });
+    updateRoleNames({
+      ...roleNames,
       [roleKey]: newRoleName.trim()
-    }));
+    });
     setNewRoleName('');
     setNewRoleLevel(10);
     setShowAddRoleForm(false);
@@ -571,41 +585,36 @@ const SettingsView = ({ shiftTypes, setShiftTypes, users, setUsers, currentUserU
     }
 
     if (window.confirm('この役職を削除してもよろしいですか？')) {
-      setRoles(prev => {
-        const next = { ...prev };
-        delete next[roleKey];
-        return next;
-      });
-      setRoleNames(prev => {
-        const next = { ...prev };
-        delete next[roleKey];
-        return next;
-      });
+      const nextRoles = { ...roles };
+      delete nextRoles[roleKey];
+      updateRoles(nextRoles);
+
+      const nextRoleNames = { ...roleNames };
+      delete nextRoleNames[roleKey];
+      updateRoleNames(nextRoleNames);
     }
   };
 
   const handleRoleChange = (uid, newRole) => {
-    setUsers(prev => ({
-      ...prev,
-      [uid]: { ...prev[uid], role: newRole }
-    }));
+    updateUsers({
+      ...users,
+      [uid]: { ...users[uid], role: newRole }
+    });
   };
 
   const handleToggleShiftAuth = (uid) => {
-    setUsers(prev => ({
-      ...prev,
-      [uid]: { ...prev[uid], canManageShift: !prev[uid].canManageShift }
-    }));
+    updateUsers({
+      ...users,
+      [uid]: { ...users[uid], canManageShift: !users[uid].canManageShift }
+    });
   };
 
   const handleDeleteUser = (uid) => {
     if(uid === currentUserUid) return;
     if(window.confirm(`${users[uid].name}さんを削除してもよろしいですか？`)) {
-       setUsers(prev => {
-        const newUsers = { ...prev };
-        delete newUsers[uid];
-        return newUsers;
-      });
+      const newUsers = { ...users };
+      delete newUsers[uid];
+      updateUsers(newUsers);
     }
   };
 
@@ -613,10 +622,10 @@ const SettingsView = ({ shiftTypes, setShiftTypes, users, setUsers, currentUserU
     if(!newUserName.trim()) return;
     const newId = `u${Date.now()}`;
     const defaultRole = Object.keys(roles)[0] || 'staff';
-    setUsers(prev => ({
-      ...prev,
+    updateUsers({
+      ...users,
       [newId]: { id: newId, name: newUserName.trim(), role: newUserRole || defaultRole, canManageShift: false }
-    }));
+    });
     setNewUserName('');
     setNewUserRole(defaultRole);
     setShowAddForm(false);
@@ -629,10 +638,10 @@ const SettingsView = ({ shiftTypes, setShiftTypes, users, setUsers, currentUserU
 
   const handleSaveName = (uid) => {
     if (!editingName.trim()) return;
-    setUsers(prev => ({
-      ...prev,
-      [uid]: { ...prev[uid], name: editingName.trim() }
-    }));
+    updateUsers({
+      ...users,
+      [uid]: { ...users[uid], name: editingName.trim() }
+    });
     setEditingUserId(null);
   };
 
@@ -987,82 +996,47 @@ export default function App() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(formatDate(new Date()));
   
-  // localStorage からシフト種類を復元（なければ初期値）
-  const [shiftTypes, setShiftTypes] = useState(() => {
-    const saved = localStorage.getItem('app_shift_types');
-    return saved ? JSON.parse(saved) : DEFAULT_SHIFT_TYPES;
-  });
-
-  // localStorage から役職情報を復元
-  const [roles, setRoles] = useState(() => {
-    const saved = localStorage.getItem('app_roles');
-    return saved ? JSON.parse(saved) : INITIAL_ROLES;
-  });
-
-  const [roleNames, setRoleNames] = useState(() => {
-    const saved = localStorage.getItem('app_role_names');
-    return saved ? JSON.parse(saved) : DEFAULT_ROLE_NAMES;
-  });
-
+  const [shiftTypes, setShiftTypes] = useState(DEFAULT_SHIFT_TYPES);
+  const [roles, setRoles] = useState(INITIAL_ROLES);
+  const [roleNames, setRoleNames] = useState(DEFAULT_ROLE_NAMES);
   const [users, setUsers] = useState({});
-  
-  // localStorage からシフト・タスクデータを復元
-  const [teamData, setTeamData] = useState(() => {
-    const saved = localStorage.getItem('app_team_data');
-    return saved ? JSON.parse(saved) : { shifts: {}, tasks: {} };
-  });
-
+  const [teamData, setTeamData] = useState({ shifts: {}, tasks: {} });
   const [isLoaded, setIsLoaded] = useState(false);
 
+  // Firestore Realtime Listener
   useEffect(() => {
+    const docRef = doc(db, 'app_data', 'shared_state');
+    const unsubscribe = onSnapshot(docRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        if (data.teamData) setTeamData(data.teamData);
+        if (data.shiftTypes) setShiftTypes(data.shiftTypes);
+        if (data.roles) setRoles(data.roles);
+        if (data.roleNames) setRoleNames(data.roleNames);
+        if (data.users) setUsers(data.users);
+      }
+      setIsLoaded(true);
+    }, (error) => {
+      console.error("Firestore Listen Error:", error);
+      setIsLoaded(true);
+    });
+
     const savedUser = localStorage.getItem('google_user');
-    const savedUsersList = localStorage.getItem('app_users');
-    
-    let currentUsersMap = {};
-    if (savedUsersList) {
-      currentUsersMap = JSON.parse(savedUsersList);
+    if (savedUser) {
+      setCurrentUser(JSON.parse(savedUser));
     }
 
-    if (savedUser) {
-      const parsedUser = JSON.parse(savedUser);
-      setCurrentUser(parsedUser);
-      if (!currentUsersMap[parsedUser.id]) {
-        currentUsersMap[parsedUser.id] = parsedUser;
-      }
-    }
-    
-    setUsers(currentUsersMap);
-    setIsLoaded(true);
+    return () => unsubscribe();
   }, []);
 
-  // シフト・タスクデータの変更時に自動保存
-  useEffect(() => {
-    if (isLoaded) {
-      localStorage.setItem('app_team_data', JSON.stringify(teamData));
+  const saveToFirestore = async (updates) => {
+    try {
+      const docRef = doc(db, 'app_data', 'shared_state');
+      await setDoc(docRef, updates, { merge: true });
+    } catch (error) {
+      console.error("Firestore Save Error:", error);
     }
-  }, [teamData, isLoaded]);
-
-  // シフト種類設定の自動保存
-  useEffect(() => {
-    if (isLoaded) {
-      localStorage.setItem('app_shift_types', JSON.stringify(shiftTypes));
-    }
-  }, [shiftTypes, isLoaded]);
-
-  // 役職設定の自動保存
-  useEffect(() => {
-    if (isLoaded) {
-      localStorage.setItem('app_roles', JSON.stringify(roles));
-      localStorage.setItem('app_role_names', JSON.stringify(roleNames));
-    }
-  }, [roles, roleNames, isLoaded]);
-
-  // ユーザー設定の自動保存
-  useEffect(() => {
-    if (isLoaded) {
-      localStorage.setItem('app_users', JSON.stringify(users));
-    }
-  }, [users, isLoaded]);
+  };
 
   const handleGoogleLoginSuccess = (credentialResponse) => {
     const decoded = jwtDecode(credentialResponse.credential);
@@ -1079,10 +1053,9 @@ export default function App() {
     setCurrentUser(newUser);
     localStorage.setItem('google_user', JSON.stringify(newUser));
 
-    setUsers(prev => {
-      const updated = { ...prev, [newUser.id]: newUser };
-      return updated;
-    });
+    const updatedUsers = { ...users, [newUser.id]: newUser };
+    setUsers(updatedUsers);
+    saveToFirestore({ users: updatedUsers });
   };
 
   const handleLogout = () => {
@@ -1139,19 +1112,28 @@ export default function App() {
                 roles={roles} 
                 shiftTypes={shiftTypes} 
                 teamData={teamData} 
-                updateUserShift={(dateStr, targetUid, shiftId) => setTeamData(prev => ({
-                  ...prev,
-                  shifts: { ...prev.shifts, [dateStr]: { ...(prev.shifts[dateStr] || {}), [targetUid]: shiftId } }
-                }))} 
+                updateUserShift={(dateStr, targetUid, shiftId) => {
+                  const updatedTeamData = {
+                    ...teamData,
+                    shifts: { ...teamData.shifts, [dateStr]: { ...(teamData.shifts[dateStr] || {}), [targetUid]: shiftId } }
+                  };
+                  setTeamData(updatedTeamData);
+                  saveToFirestore({ teamData: updatedTeamData });
+                }} 
                 users={users}
               />
             ) : activeTab === 'daily' ? (
               <DailyDetailView 
-                addTask={(dateStr, targetUid, text) => setTeamData(prev => {
-                  const dayTasks = prev.tasks[dateStr] || {};
+                addTask={(dateStr, targetUid, text) => {
+                  const dayTasks = teamData.tasks[dateStr] || {};
                   const userTasks = dayTasks[targetUid] || [];
-                  return { ...prev, tasks: { ...prev.tasks, [dateStr]: { ...dayTasks, [targetUid]: [...userTasks, { id: Date.now().toString(), text, completed: false }] } } };
-                })} 
+                  const updatedTeamData = {
+                    ...teamData,
+                    tasks: { ...teamData.tasks, [dateStr]: { ...dayTasks, [targetUid]: [...userTasks, { id: Date.now().toString(), text, completed: false }] } }
+                  };
+                  setTeamData(updatedTeamData);
+                  saveToFirestore({ teamData: updatedTeamData });
+                }} 
                 changeDay={(offset) => {
                   const d = new Date(selectedDate);
                   d.setDate(d.getDate() + offset);
@@ -1160,23 +1142,35 @@ export default function App() {
                   setCurrentDate(new Date(d.getFullYear(), d.getMonth(), 1));
                 }} 
                 currentUserUid={currentUser.id} 
-                deleteTask={(dateStr, targetUid, taskId) => setTeamData(prev => ({
-                  ...prev,
-                  tasks: { ...prev.tasks, [dateStr]: { ...(prev.tasks[dateStr] || {}), [targetUid]: (prev.tasks[dateStr]?.[targetUid] || []).filter(t => t.id !== taskId) } }
-                }))} 
+                deleteTask={(dateStr, targetUid, taskId) => {
+                  const updatedTeamData = {
+                    ...teamData,
+                    tasks: { ...teamData.tasks, [dateStr]: { ...(teamData.tasks[dateStr] || {}), [targetUid]: (teamData.tasks[dateStr]?.[targetUid] || []).filter(t => t.id !== taskId) } }
+                  };
+                  setTeamData(updatedTeamData);
+                  saveToFirestore({ teamData: updatedTeamData });
+                }} 
                 roleNames={roleNames} 
                 roles={roles} 
                 selectedDate={selectedDate} 
                 shiftTypes={shiftTypes} 
                 teamData={teamData} 
-                toggleTask={(dateStr, targetUid, taskId) => setTeamData(prev => ({
-                  ...prev,
-                  tasks: { ...prev.tasks, [dateStr]: { ...(prev.tasks[dateStr] || {}), [targetUid]: (prev.tasks[dateStr]?.[targetUid] || []).map(t => t.id === taskId ? { ...t, completed: !t.completed } : t) } }
-                }))} 
-                updateTaskText={(dateStr, targetUid, taskId, newText) => setTeamData(prev => ({
-                  ...prev,
-                  tasks: { ...prev.tasks, [dateStr]: { ...(prev.tasks[dateStr] || {}), [targetUid]: (prev.tasks[dateStr]?.[targetUid] || []).map(t => t.id === taskId ? { ...t, text: newText } : t) } }
-                }))} 
+                toggleTask={(dateStr, targetUid, taskId) => {
+                  const updatedTeamData = {
+                    ...teamData,
+                    tasks: { ...teamData.tasks, [dateStr]: { ...(teamData.tasks[dateStr] || {}), [targetUid]: (teamData.tasks[dateStr]?.[targetUid] || []).map(t => t.id === taskId ? { ...t, completed: !t.completed } : t) } }
+                  };
+                  setTeamData(updatedTeamData);
+                  saveToFirestore({ teamData: updatedTeamData });
+                }} 
+                updateTaskText={(dateStr, targetUid, taskId, newText) => {
+                  const updatedTeamData = {
+                    ...teamData,
+                    tasks: { ...teamData.tasks, [dateStr]: { ...(teamData.tasks[dateStr] || {}), [targetUid]: (teamData.tasks[dateStr]?.[targetUid] || []).map(t => t.id === taskId ? { ...t, text: newText } : t) } }
+                  };
+                  setTeamData(updatedTeamData);
+                  saveToFirestore({ teamData: updatedTeamData });
+                }} 
                 users={users}
               />
             ) : (
@@ -1184,10 +1178,22 @@ export default function App() {
                 currentUserUid={currentUser.id} 
                 roleNames={roleNames} 
                 roles={roles} 
-                setRoleNames={setRoleNames} 
-                setRoles={setRoles} 
-                setShiftTypes={setShiftTypes} 
-                setUsers={setUsers} 
+                updateRoleNames={(newRoleNames) => {
+                  setRoleNames(newRoleNames);
+                  saveToFirestore({ roleNames: newRoleNames });
+                }} 
+                updateRoles={(newRoles) => {
+                  setRoles(newRoles);
+                  saveToFirestore({ roles: newRoles });
+                }} 
+                updateShiftTypes={(newShiftTypes) => {
+                  setShiftTypes(newShiftTypes);
+                  saveToFirestore({ shiftTypes: newShiftTypes });
+                }} 
+                updateUsers={(newUsers) => {
+                  setUsers(newUsers);
+                  saveToFirestore({ users: newUsers });
+                }} 
                 shiftTypes={shiftTypes} 
                 users={users}
               />
