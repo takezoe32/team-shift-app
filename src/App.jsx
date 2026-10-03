@@ -211,71 +211,12 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
   const handleImportExecute = () => {
     if (!importText.trim()) return;
 
-    const rawLines = importText.replace(/\r\n?/g, '\n').split('\n');
-    const newShifts = { ...teamData.shifts };
+    const rawLines = importText.trim().split('\n');
+    let newShifts = { ...teamData.shifts };
     let newShiftTypes = [...shiftTypes];
-    const importedUsers = [];
-    const errors = [];
-    const importedUserIds = new Set();
-
-    // 名前比較用。全角/半角スペース、改行などをすべて無視する。
-    const normalizeName = (value) =>
-      String(value ?? '').replace(/[\s\u3000]+/g, '').trim();
-
-    const cleanCell = (value) =>
-      String(value ?? '')
-        .replace(/<br\s*\/?>/gi, '')
-        .replace(/`/g, '')
-        .trim();
-
-    const normalizeSymbol = (value) => cleanCell(value);
-
-    const findUserByCell = (cell) => {
-      const target = normalizeName(cell);
-      if (!target) return null;
-      return sortedUsers.find(u => normalizeName(u.name) === target) || null;
-    };
-
-    // Markdown表、タブ区切り、通常の空白区切りを同じ形式にする。
-    const parseLine = (line) => {
-      const text = line.trim();
-      if (!text) return null;
-
-      if (text.includes('|')) {
-        let cells = text.split('|').map(cleanCell);
-        if (cells.length && cells[0] === '') cells.shift();
-        if (cells.length && cells[cells.length - 1] === '') cells.pop();
-        return cells;
-      }
-
-      if (text.includes('\t')) {
-        return text.split('\t').map(cleanCell);
-      }
-
-      // 最後の保険：登録済みメンバー名を先頭部分から探し、残りをシフト列として扱う。
-      const candidates = sortedUsers
-        .slice()
-        .sort((a, b) => normalizeName(b.name).length - normalizeName(a.name).length);
-      for (const user of candidates) {
-        const name = String(user.name || '').trim();
-        if (!name) continue;
-        const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/[\\s\\u3000]+/g, '[\\s\\u3000]*');
-        const match = text.match(new RegExp('^\\s*' + escaped + '(?:\\s+|$)', 'i'));
-        if (match) {
-          const rest = text.slice(match[0].length).trim();
-          return [name, ...rest.split(/[\s\u3000]+/).filter(Boolean)];
-        }
-      }
-      return null;
-    };
-
-    const isShiftToken = (value) => {
-      const sym = normalizeSymbol(value);
-      return ['A', '／', '/', '夏休', '有', '有休', '有給', '冬休', '講習', '出勤', '休み', '有給', '冬休', '講習'].includes(sym);
-    };
 
     const findOrCreateShiftId = (symbol) => {
-      const sym = normalizeSymbol(symbol);
+      let sym = (symbol || '').trim();
       if (!sym) return 'none';
 
       let targetLabel = sym;
@@ -288,11 +229,11 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
 
       let matched = newShiftTypes.find(s => s.label === targetLabel);
       if (!matched && targetLabel === '出勤') {
-        matched = newShiftTypes.find(s => s.id === 'work' || s.id === 'early' || s.label === '早番');
+        matched = newShiftTypes.find(s => s.label === '早番' || s.id === 'work' || s.id === 'early');
       }
       if (matched) return matched.id;
 
-      const newId = `shift_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      const newId = `shift_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
       const colors = [
         'bg-green-100 text-green-700 border-green-200',
         'bg-teal-100 text-teal-700 border-teal-200',
@@ -300,77 +241,59 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
         'bg-amber-100 text-amber-700 border-amber-200',
         'bg-purple-100 text-purple-700 border-purple-200'
       ];
-      const noneShift = newShiftTypes.find(s => s.id === 'none') || {
-        id: 'none', label: '未定', color: 'bg-gray-100 text-gray-500 border-gray-200'
+      const newShiftObj = {
+        id: newId,
+        label: targetLabel,
+        color: colors[newShiftTypes.length % colors.length]
       };
+
+      const noneShift = newShiftTypes.find(s => s.id === 'none') || { id: 'none', label: '未定', color: 'bg-gray-100 text-gray-500 border-gray-200' };
       const filtered = newShiftTypes.filter(s => s.id !== 'none');
-      newShiftTypes = [
-        ...filtered,
-        { id: newId, label: targetLabel, color: colors[filtered.length % colors.length] },
-        noneShift
-      ];
+      newShiftTypes = [...filtered, newShiftObj, noneShift];
       return newId;
     };
 
-    rawLines.forEach((rawLine, lineIndex) => {
-      const cells = parseLine(rawLine);
-      if (!cells || cells.length === 0) return;
+    rawLines.forEach(lineStr => {
+      // タブおよび任意の空白文字でトークン化して空要素を除去
+      const tokens = lineStr.split(/[\t\s]+/).filter(Boolean);
+      if (tokens.length < 2) return;
 
-      // 日付見出し・曜日行・Markdown区切り行などはメンバー名がないので無視。
-      const userIndex = cells.findIndex(cell => !!findUserByCell(cell));
-      if (userIndex < 0) return;
+      let matchedUser = null;
+      let userTokenIndex = -1;
 
-      const matchedUser = findUserByCell(cells[userIndex]);
-
-      // コピー元によっては、名前の直後に空列や補助列が入ることがある。
-      // 最初の「実際のシフト記号」を1日目として、そこから月末までを取得する。
-      // A / 有 / 夏休 / 冬休 / 講習など、シフトとして認識できる値だけを起点にする。
-      const afterName = cells.slice(userIndex + 1).map(cleanCell);
-      const firstShiftIndex = afterName.findIndex(isShiftToken);
-      if (firstShiftIndex < 0) {
-        errors.push(`${lineIndex + 1}行目 ${matchedUser.name}: シフト開始位置を見つけられません`);
-        return;
-      }
-      const shiftValues = afterName.slice(firstShiftIndex);
-
-      if (importedUserIds.has(matchedUser.id)) {
-        errors.push(`${lineIndex + 1}行目 ${matchedUser.name}: 同じメンバーが複数行あります`);
-        return;
+      // 行の中からメンバー名を特定
+      for (let i = 0; i < tokens.length; i++) {
+        const tokenClean = tokens[i].replace(/[\s ]+/g, '');
+        const found = sortedUsers.find(u => u.name.replace(/[\s ]+/g, '') === tokenClean);
+        if (found) {
+          matchedUser = found;
+          userTokenIndex = i;
+          break;
+        }
       }
 
-      if (shiftValues.length < daysInMonth) {
-        errors.push(`${lineIndex + 1}行目 ${matchedUser.name}: シフトが${shiftValues.length}個しかありません（${daysInMonth}個必要）`);
-        return;
-      }
+      if (!matchedUser || userTokenIndex === -1) return;
 
-      importedUserIds.add(matchedUser.id);
-      importedUsers.push(matchedUser);
+      // 名前の直後のトークン群を1日〜31日目としてダイレクトに読み込み
+      const shiftTokens = tokens.slice(userTokenIndex + 1);
 
       for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
-        const val = shiftValues[dayNum - 1];
+        const val = shiftTokens[dayNum - 1];
+        if (!val) break;
+
         const dateStr = formatDate(new Date(year, month, dayNum));
         const shiftId = findOrCreateShiftId(val);
+
         if (!newShifts[dateStr]) newShifts[dateStr] = {};
         newShifts[dateStr][matchedUser.id] = shiftId;
       }
     });
 
-    if (errors.length > 0) {
-      alert(`一括取り込みを中止しました。\n\n${errors.join('\n')}`);
-      return;
-    }
-
-    if (importedUsers.length === 0) {
-      alert('取り込めるメンバー行が見つかりませんでした。\n名前と1日〜31日のシフトが入った表をそのまま貼り付けてください。');
-      return;
-    }
-
-    // 今月の対象メンバーについて31日分を確定保存する。
-    // shiftTypesとteamDataを同じFirestore更新で保存するため、途中状態を作らない。
-    bulkImportShifts(newShifts, newShiftTypes);
+    updateShiftTypes(newShiftTypes);
+    bulkImportShifts(newShifts);
     setShowImportModal(false);
     setImportText('');
-    alert(`${importedUsers.length}人 × ${daysInMonth}日分のシフトを取り込みました。\n\n${importedUsers.map(u => u.name).join('、')}`);
+    alert('シフトデータを取り込みました！');
   };
 
   return (
@@ -845,6 +768,16 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
       alert('名前とメールアドレスの両方を入力してください。');
       return;
     }
+
+    const normalizedEmail = newUserEmail.trim().toLowerCase();
+    const duplicate = Object.values(users).find(
+      u => (u.email || '').trim().toLowerCase() === normalizedEmail
+    );
+    if (duplicate) {
+      alert(`このメールアドレスはすでに「${duplicate.name}」さんに登録されています。\n同じメールアドレスを重複登録することはできません。`);
+      return;
+    }
+
     const newId = `u_${Date.now()}`;
     const defaultRole = Object.keys(roles)[0] || 'staff';
     
@@ -853,7 +786,7 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
       [newId]: { 
         id: newId, 
         name: newUserName.trim(), 
-        email: newUserEmail.trim().toLowerCase(),
+        email: normalizedEmail,
         role: newUserRole || defaultRole, 
         canManageShift: false 
       }
@@ -1300,77 +1233,107 @@ export default function App() {
     const unsubscribe = onSnapshot(docRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data();
-        let currentUsers = data.users || {};
-        let currentShifts = data.teamData?.shifts || {};
-        let currentTasks = data.teamData?.tasks || {};
+        let currentUsers = { ...(data.users || {}) };
+        let currentShifts = { ...(data.teamData?.shifts || {}) };
+        let currentTasks = { ...(data.teamData?.tasks || {}) };
+        let currentUserOrder = [...(data.userOrder || [])];
 
-        // 同じメールアドレスの重複ユーザーは、リアルタイム監視中にはFirestoreへ書き戻さない。
-        // 一括取り込み直後に古い重複ユーザーのデータを保存すると、
-        // 新しく取り込んだシフトを古いデータで上書きする競合が起きるため。
-        // 画面上だけは重複を整理し、正式ID側に既に値がある場合はそれを優先する。
+        // 同じメールアドレスの重複ユーザーを自動統合する。
+        // 正規ユーザーは userOrder に入っているIDを最優先し、
+        // それがなければ Google のID（u_ で始まらない旧形式）を優先する。
         const emailMap = {};
+        let needsCleanup = false;
 
         Object.values(currentUsers).forEach(u => {
-          if (u.email) {
-            const em = u.email.toLowerCase();
-            if (!emailMap[em]) emailMap[em] = [];
-            emailMap[em].push(u);
-          }
+          const em = (u.email || '').trim().toLowerCase();
+          if (!em) return;
+          if (!emailMap[em]) emailMap[em] = [];
+          emailMap[em].push(u);
         });
 
-        Object.values(emailMap).forEach(list => {
+        Object.keys(emailMap).forEach(em => {
+          const list = emailMap[em];
           if (list.length <= 1) return;
 
-          // Googleログイン由来の数値IDを正式IDとして優先。
-          // それがなければ userOrder に含まれるID、最後に先頭を使用。
-          const realUser =
-            list.find(u => /^\d+$/.test(String(u.id))) ||
-            list.find(u => data.userOrder?.includes(u.id)) ||
-            list[0];
-
+          needsCleanup = true;
+          const orderedUser = currentUserOrder
+            .map(id => list.find(u => u.id === id))
+            .find(Boolean);
+          const googleIdUser = list.find(u => !u.id.startsWith('u_'));
+          const realUser = orderedUser || googleIdUser || list[0];
           const duplicateUsers = list.filter(u => u.id !== realUser.id);
 
           duplicateUsers.forEach(dUser => {
             Object.keys(currentShifts).forEach(dStr => {
-              const duplicateValue = currentShifts[dStr]?.[dUser.id];
-              const realValue = currentShifts[dStr]?.[realUser.id];
-              // 正式ID側に値がある場合は必ずそちらを優先する。
-              if (duplicateValue !== undefined && realValue === undefined) {
-                currentShifts[dStr][realUser.id] = duplicateValue;
-              }
-              if (currentShifts[dStr]) delete currentShifts[dStr][dUser.id];
+              const day = currentShifts[dStr];
+              if (!day?.[dUser.id]) return;
+              // 正規ユーザー側に既に値があれば、それを優先して上書きしない。
+              if (!day[realUser.id]) day[realUser.id] = day[dUser.id];
+              delete day[dUser.id];
             });
 
             Object.keys(currentTasks).forEach(dStr => {
-              const duplicateTasks = currentTasks[dStr]?.[dUser.id];
-              if (duplicateTasks) {
-                const realTasks = currentTasks[dStr][realUser.id] || [];
-                currentTasks[dStr][realUser.id] = [...realTasks, ...duplicateTasks];
-                delete currentTasks[dStr][dUser.id];
-              }
+              const day = currentTasks[dStr];
+              if (!day?.[dUser.id]) return;
+              day[realUser.id] = [
+                ...(day[realUser.id] || []),
+                ...day[dUser.id]
+              ];
+              delete day[dUser.id];
             });
 
+            currentUserOrder = currentUserOrder.filter(id => id !== dUser.id);
             delete currentUsers[dUser.id];
           });
         });
 
+        // userOrder に存在しないユーザーは末尾に追加して表示対象から漏れないようにする。
+        Object.keys(currentUsers).forEach(id => {
+          if (!currentUserOrder.includes(id)) currentUserOrder.push(id);
+        });
+
+        if (needsCleanup) {
+          const updatedTeamData = { shifts: currentShifts, tasks: currentTasks };
+          saveToFirestore({
+            users: currentUsers,
+            userOrder: currentUserOrder,
+            teamData: updatedTeamData
+          });
+        }
+
         setUsers(currentUsers);
-        if (data.userOrder) setUserOrder(data.userOrder);
-        if (data.teamData) setTeamData({ shifts: currentShifts, tasks: currentTasks });
+        setUserOrder(currentUserOrder);
+        if (data.teamData || needsCleanup) setTeamData({ shifts: currentShifts, tasks: currentTasks });
         if (data.shiftTypes) setShiftTypes(data.shiftTypes);
         if (data.roles) setRoles(data.roles);
         if (data.roleNames) setRoleNames(data.roleNames);
+
+        // Firestoreの読み込み後にだけ保存済みログインを復元する。
+        // 重複IDが残っていた場合も、正規ユーザーへ自動的に付け替える。
+        const savedUserRaw = localStorage.getItem('google_user');
+        if (savedUserRaw) {
+          try {
+            const savedUser = JSON.parse(savedUserRaw);
+            const savedEmail = (savedUser.email || '').trim().toLowerCase();
+            const restoredUser = Object.values(currentUsers).find(
+              u => (u.email || '').trim().toLowerCase() === savedEmail
+            );
+            if (restoredUser) {
+              setCurrentUser(restoredUser);
+              localStorage.setItem('google_user', JSON.stringify(restoredUser));
+            } else {
+              localStorage.removeItem('google_user');
+            }
+          } catch {
+            localStorage.removeItem('google_user');
+          }
+        }
       }
       setIsLoaded(true);
     }, (error) => {
       console.error("Firestore Listen Error:", error);
       setIsLoaded(true);
     });
-
-    const savedUser = localStorage.getItem('google_user');
-    if (savedUser) {
-      setCurrentUser(JSON.parse(savedUser));
-    }
 
     return () => unsubscribe();
   }, []);
@@ -1405,15 +1368,28 @@ export default function App() {
 
   const handleGoogleLoginSuccess = (credentialResponse) => {
     setAuthError('');
+
+    if (!isLoaded) {
+      setAuthError('メンバー情報を読み込み中です。少し待ってからもう一度ログインしてください。');
+      return;
+    }
+
     const decoded = jwtDecode(credentialResponse.credential);
-    const loginEmail = (decoded.email || '').toLowerCase();
+    const loginEmail = (decoded.email || '').trim().toLowerCase();
+
+    if (!loginEmail) {
+      setAuthError('Googleアカウントのメールアドレスを取得できませんでした。');
+      return;
+    }
 
     const userList = Object.values(users);
+    const matchedUsers = userList.filter(
+      u => (u.email || '').trim().toLowerCase() === loginEmail
+    );
+
     const isFirstUser = userList.length === 0;
 
-    const matchedUser = userList.find(u => (u.email || '').toLowerCase() === loginEmail);
-
-    if (!isFirstUser && !matchedUser) {
+    if (!isFirstUser && matchedUsers.length === 0) {
       setAuthError(`メールアドレス (${loginEmail}) は登録されていません。管理者に登録を依頼してください。`);
       return;
     }
@@ -1435,13 +1411,19 @@ export default function App() {
       setUserOrder(updatedOrder);
       saveToFirestore({ users: updatedUsers, userOrder: updatedOrder });
     } else {
+      // 同じメールが複数残っていても、userOrderに登録されているIDを優先。
+      // これにより古い重複IDで新しいシフトが作られるのを防ぐ。
+      const matchedUser =
+        matchedUsers.find(u => userOrder.includes(u.id)) ||
+        matchedUsers.find(u => !u.id.startsWith('u_')) ||
+        matchedUsers[0];
+
       loggedInUser = {
         ...matchedUser,
         picture: decoded.picture
       };
-      
-      const updatedUsers = { ...users, [matchedUser.id]: loggedInUser };
 
+      const updatedUsers = { ...users, [matchedUser.id]: loggedInUser };
       setUsers(updatedUsers);
       saveToFirestore({ users: updatedUsers });
     }
@@ -1528,15 +1510,10 @@ export default function App() {
                   saveToFirestore({ teamData: updatedTeamData });
                 }} 
                 sortedUsers={sortedUsers}
-                bulkImportShifts={(newShifts, newShiftTypes) => {
+                bulkImportShifts={(newShifts) => {
                   const updatedTeamData = { ...teamData, shifts: newShifts };
                   setTeamData(updatedTeamData);
-                  if (newShiftTypes) {
-                    setShiftTypes(newShiftTypes);
-                    saveToFirestore({ teamData: updatedTeamData, shiftTypes: newShiftTypes });
-                  } else {
-                    saveToFirestore({ teamData: updatedTeamData });
-                  }
+                  saveToFirestore({ teamData: updatedTeamData });
                 }}
                 updateShiftTypes={(newShiftTypes) => {
                   setShiftTypes(newShiftTypes);
