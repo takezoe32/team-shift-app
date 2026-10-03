@@ -210,7 +210,7 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
   const handleImportExecute = () => {
     if (!importText.trim()) return;
 
-    const lines = importText.trim().split('\n').map(l => l.split('\t'));
+    const rawLines = importText.trim().split('\n');
     let newShifts = { ...teamData.shifts };
     let newShiftTypes = [...shiftTypes];
 
@@ -246,17 +246,21 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
       return newId;
     };
 
-    lines.forEach(line => {
-      if (line.length < 2) return;
-      const rawName = line[0].replace(/[\s ]+/g, '');
-      if (!rawName || rawName === '1' || rawName === '木' || rawName.includes('月')) return;
+    rawLines.forEach(lineStr => {
+      const cells = lineStr.split('\t').map(c => c.trim());
+      
+      // 名前のセル位置（空セルを除いた最初の文字列）を特定
+      const nameIndex = cells.findIndex(c => c.length > 0 && !['1','2','3','4','5','6','7','8','9','10','日','月','火','水','木','金','土'].includes(c));
+      if (nameIndex === -1) return;
 
+      const rawName = cells[nameIndex].replace(/[\s ]+/g, '');
       const targetUser = sortedUsers.find(u => u.name.replace(/[\s ]+/g, '') === rawName);
       if (!targetUser) return;
 
-      const shiftValues = line.slice(1);
-      shiftValues.forEach((val, index) => {
-        const dayNum = index + 1;
+      // 名前の直後のセルから日付順に読み込み
+      const shiftValues = cells.slice(nameIndex + 1);
+      shiftValues.forEach((val, idx) => {
+        const dayNum = idx + 1;
         if (dayNum > daysInMonth) return;
 
         const dateStr = formatDate(new Date(year, month, dayNum));
@@ -271,7 +275,7 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
     bulkImportShifts(newShifts);
     setShowImportModal(false);
     setImportText('');
-    alert('シフトデータを取り込みました！');
+    alert('シフトデータを正しく取り込みました！');
   };
 
   return (
