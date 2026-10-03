@@ -1122,19 +1122,13 @@ export default function App() {
       setUsers(updatedUsers);
       saveToFirestore({ users: updatedUsers });
     } else {
-      // 既存の許可リストユーザーとIDを紐づけて更新
+      // 既存ユーザーID（シフトデータ等に繋がっているID）をそのまま維持
       loggedInUser = {
         ...matchedUser,
-        id: decoded.sub,
-        email: loginEmail,
         picture: decoded.picture
       };
       
-      const updatedUsers = { ...users };
-      if (matchedUser.id !== decoded.sub) {
-        delete updatedUsers[matchedUser.id];
-      }
-      updatedUsers[decoded.sub] = loggedInUser;
+      const updatedUsers = { ...users, [matchedUser.id]: loggedInUser };
 
       setUsers(updatedUsers);
       saveToFirestore({ users: updatedUsers });
