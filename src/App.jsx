@@ -214,22 +214,33 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
     const rawLines = importText.replace(/\r\n?/g, '\n').split('\n');
     let newShifts = { ...teamData.shifts };
     let newShiftTypes = [...shiftTypes];
+    const importedUsers = [];
+    const errors = [];
 
     const normalizeName = (value) =>
       String(value || '').replace(/[\s　]+/g, '').trim();
 
-    const findUserInCells = (cells) => {
-      for (let i = 0; i < cells.length; i++) {
-        const cellName = normalizeName(cells[i]);
-        if (!cellName) continue;
-        const found = sortedUsers.find(u => normalizeName(u.name) === cellName);
-        if (found) return { user: found, nameCellIndex: i };
-      }
-      return null;
+    const normalizeSymbol = (value) => String(value ?? '').trim();
+
+    const isMarkdownSeparator = (cells) =>
+      cells.length > 0 && cells.every(cell => /^:?-{3,}:?$/.test(String(cell).trim()));
+
+    const findUserByCell = (cell) => {
+      const target = normalizeName(cell);
+      if (!target) return null;
+      return sortedUsers.find(u => normalizeName(u.name) === target) || null;
+    };
+
+    const findUserInPlainLine = (line) => {
+      const compact = normalizeName(line);
+      return sortedUsers
+        .slice()
+        .sort((a, b) => normalizeName(b.name).length - normalizeName(a.name).length)
+        .find(u => compact.includes(normalizeName(u.name))) || null;
     };
 
     const findOrCreateShiftId = (symbol) => {
-      const sym = String(symbol || '').trim();
+      const sym = normalizeSymbol(symbol);
       if (!sym) return 'none';
 
       let targetLabel = sym;
@@ -241,12 +252,14 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
       else if (sym === '講習') targetLabel = '講習';
 
       let matched = newShiftTypes.find(s => s.label === targetLabel);
-      if (!matched && targetLabel === '出勤') {
-        matched = newShiftTypes.find(s => s.label === '早番' || s.id === 'work' || s.id === 'early');
-      }
       if (matched) return matched.id;
 
-      const newId = `shift_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+      if (targetLabel === '出勤') {
+        matched = newShiftTypes.find(s => s.id === 'work' || s.id === 'early' || s.label === '早番');
+        if (matched) return matched.id;
+      }
+
+      const newId = `shift_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
       const colors = [
         'bg-green-100 text-green-700 border-green-200',
         'bg-teal-100 text-teal-700 border-teal-200',
@@ -254,77 +267,88 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
         'bg-amber-100 text-amber-700 border-amber-200',
         'bg-purple-100 text-purple-700 border-purple-200'
       ];
-      const newShiftObj = {
-        id: newId,
-        label: targetLabel,
-        color: colors[newShiftTypes.length % colors.length]
-      };
-
       const noneShift = newShiftTypes.find(s => s.id === 'none') || {
-        id: 'none',
-        label: '未定',
-        color: 'bg-gray-100 text-gray-500 border-gray-200'
+        id: 'none', label: '未定', color: 'bg-gray-100 text-gray-500 border-gray-200'
       };
       const filtered = newShiftTypes.filter(s => s.id !== 'none');
-      newShiftTypes = [...filtered, newShiftObj, noneShift];
+      newShiftTypes = [
+        ...filtered,
+        { id: newId, label: targetLabel, color: colors[filtered.length % colors.length] },
+        noneShift
+      ];
       return newId;
     };
 
-    rawLines.forEach(lineStr => {
-      const line = lineStr.trim();
+    rawLines.forEach((rawLine, lineIndex) => {
+      const line = rawLine.trim();
       if (!line) return;
 
-      let cells;
-      let isMarkdownTable = line.includes('|');
+      let cells = null;
 
-      if (isMarkdownTable) {
-        // Markdown表: | 名前 | A | ／ | ... |
+      // Markdown table: | 名前 | A | ／ | ... |
+      if (line.includes('|')) {
         cells = line.split('|').map(cell => cell.trim());
-        // 先頭・末尾の空セルを除去
-        if (cells[0] === '') cells.shift();
-        if (cells[cells.length - 1] === '') cells.pop();
-
-        // Markdownの区切り行（| ----- | :-: | ... |）は無視
-        if (cells.length === 0 || cells.every(cell => /^:?-{3,}:?$/.test(cell))) return;
-      } else if (line.includes('\t')) {
-        // Excel / スプレッドシートのタブ区切り
+        while (cells.length && cells[0] === '') cells.shift();
+        while (cells.length && cells[cells.length - 1] === '') cells.pop();
+        if (!cells.length || isMarkdownSeparator(cells)) return;
+      }
+      // Excel / Google Sheets: tab separated
+      else if (line.includes('\t')) {
         cells = line.split('\t').map(cell => cell.trim());
-      } else {
-        // 名前に空白が入る可能性があるため、登録済みメンバー名を先に探す
-        const normalizedLine = normalizeName(line);
-        const foundUser = sortedUsers.find(u => normalizedLine.includes(normalizeName(u.name)));
+      }
+      // Plain text fallback. Do not split the registered name itself.
+      else {
+        const foundUser = findUserInPlainLine(line);
         if (!foundUser) return;
-
         const namePattern = String(foundUser.name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const nameMatch = line.match(new RegExp(namePattern));
         if (!nameMatch) return;
-
         const rest = line.slice(nameMatch.index + nameMatch[0].length).trim();
         cells = [foundUser.name, ...rest.split(/\s+/).filter(Boolean)];
       }
 
-      const match = findUserInCells(cells);
-      if (!match) return;
+      // Ignore header rows such as: | 木 | 金 | ... |
+      const matchIndex = cells.findIndex(cell => !!findUserByCell(cell));
+      if (matchIndex < 0) return;
 
-      const shiftValues = cells.slice(match.nameCellIndex + 1);
+      const matchedUser = findUserByCell(cells[matchIndex]);
+      const shiftValues = cells.slice(matchIndex + 1);
 
-      for (let dayNum = 1; dayNum <= daysInMonth && dayNum <= shiftValues.length; dayNum++) {
-        const val = shiftValues[dayNum - 1];
-        if (!String(val || '').trim()) continue;
+      // For October 2026 this must be exactly 31 values. Do not silently import
+      // a partially parsed row, because that leaves the old schedule in place.
+      if (shiftValues.length < daysInMonth) {
+        errors.push(`${lineIndex + 1}行目 ${matchedUser.name}: シフトが${shiftValues.length}個しかありません（${daysInMonth}個必要）`);
+        return;
+      }
 
+      const imported = { user: matchedUser, values: shiftValues.slice(0, daysInMonth) };
+      importedUsers.push(imported);
+
+      for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
+        const val = normalizeSymbol(imported.values[dayNum - 1]);
         const dateStr = formatDate(new Date(year, month, dayNum));
         const shiftId = findOrCreateShiftId(val);
-
         if (!newShifts[dateStr]) newShifts[dateStr] = {};
-        newShifts[dateStr][match.user.id] = shiftId;
+        newShifts[dateStr][matchedUser.id] = shiftId;
       }
     });
 
-    updateShiftTypes(newShiftTypes);
-    bulkImportShifts(newShifts);
+    if (errors.length > 0) {
+      alert(`一括取り込みを中止しました。\n\n${errors.join('\n')}`);
+      return;
+    }
+
+    if (importedUsers.length === 0) {
+      alert('取り込めるメンバー行が見つかりませんでした。\n名前と1日〜31日のシフトが入った表をそのまま貼り付けてください。');
+      return;
+    }
+
+    // One Firestore write for both shiftTypes and shifts prevents the realtime
+    // listener from briefly applying one half of the import over the other.
+    bulkImportShifts(newShifts, newShiftTypes);
     setShowImportModal(false);
     setImportText('');
-    alert('シフトデータを取り込みました！');
+    alert(`${importedUsers.length}人 × ${daysInMonth}日分のシフトを取り込みました。`);
   };
 
   return (
@@ -1476,10 +1500,15 @@ export default function App() {
                   saveToFirestore({ teamData: updatedTeamData });
                 }} 
                 sortedUsers={sortedUsers}
-                bulkImportShifts={(newShifts) => {
+                bulkImportShifts={(newShifts, newShiftTypes) => {
                   const updatedTeamData = { ...teamData, shifts: newShifts };
                   setTeamData(updatedTeamData);
-                  saveToFirestore({ teamData: updatedTeamData });
+                  if (newShiftTypes) {
+                    setShiftTypes(newShiftTypes);
+                    saveToFirestore({ teamData: updatedTeamData, shiftTypes: newShiftTypes });
+                  } else {
+                    saveToFirestore({ teamData: updatedTeamData });
+                  }
                 }}
                 updateShiftTypes={(newShiftTypes) => {
                   setShiftTypes(newShiftTypes);
