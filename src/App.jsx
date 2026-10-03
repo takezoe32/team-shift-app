@@ -254,11 +254,11 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
     };
 
     rawLines.forEach(lineStr => {
-      // タブまたはスペースで分解し空要素を除去
+      // タブおよび空白で分割
       const tokens = lineStr.split(/[\t\s]+/).filter(Boolean);
       if (tokens.length < 2) return;
 
-      // メンバーの判定（スペースを除去した名前でマッチング）
+      // 行内に登録メンバーの名前が存在するか検索
       let matchedUser = null;
       let userTokenIndex = -1;
 
@@ -274,7 +274,7 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
 
       if (!matchedUser || userTokenIndex === -1) return;
 
-      // 名前の直後から最大31日分を取得
+      // 名前の直後にあるトークンから順に「1日〜31日」分を取得
       const shiftTokens = tokens.slice(userTokenIndex + 1);
 
       for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
