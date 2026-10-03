@@ -215,7 +215,7 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
     let newShiftTypes = [...shiftTypes];
 
     const findOrCreateShiftId = (symbol) => {
-      const sym = symbol.trim();
+      let sym = symbol.trim();
       if (!sym) return 'none';
       if (sym === '／') return 'off';
       if (sym === 'A') {
@@ -227,7 +227,6 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
       let matched = newShiftTypes.find(s => s.label === sym);
       if (matched) return matched.id;
 
-      // 未登録の記号（夏休など）は自動生成
       const newId = `shift_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
       const colors = [
         'bg-green-100 text-green-700 border-green-200',
@@ -249,10 +248,9 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
 
     lines.forEach(line => {
       if (line.length < 2) return;
-      const rawName = line[0].replace(/[\s ]+/g, ''); // 空白除去
+      const rawName = line[0].replace(/[\s ]+/g, '');
       if (!rawName || rawName === '1' || rawName === '木' || rawName.includes('月')) return;
 
-      // 登録済みメンバーから名前が一致する人を検索
       const targetUser = sortedUsers.find(u => u.name.replace(/[\s ]+/g, '') === rawName);
       if (!targetUser) return;
 
@@ -280,6 +278,7 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
     <div className="flex-1 flex flex-col bg-gray-50 pb-[68px] overflow-hidden relative">
       <div className="bg-white px-4 py-3 flex items-center justify-between sticky top-0 z-20 border-b border-gray-100 shadow-sm">
         <button onClick={() => changeMonth(-1)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors active:scale-95"><ChevronLeft className="w-5 h-5"/></button>
+        
         <div className="flex items-center gap-3">
           <h2 className="text-base font-bold text-purple-700 flex items-center">
             <Table className="w-5 h-5 mr-1.5"/>
@@ -287,12 +286,13 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
           </h2>
           <button 
             onClick={() => setShowImportModal(true)}
-            className="bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 active:scale-95 transition-all border border-purple-200"
+            className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 active:scale-95 transition-all shadow-sm shrink-0"
           >
-            <FileSpreadsheet size={15}/>
+            <FileSpreadsheet size={16}/>
             一括取り込み
           </button>
         </div>
+
         <button onClick={() => changeMonth(1)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors active:scale-95"><ChevronRight className="w-5 h-5"/></button>
       </div>
       
