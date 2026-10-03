@@ -254,39 +254,38 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
     };
 
     rawLines.forEach(lineStr => {
-      const rawCells = lineStr.split('\t');
-      
-      let foundUser = null;
-      let nameCellIndex = -1;
+      // タブまたはスペースで分解し空要素を除去
+      const tokens = lineStr.split(/[\t\s]+/).filter(Boolean);
+      if (tokens.length < 2) return;
 
-      for (let i = 0; i < rawCells.length; i++) {
-        const cellClean = rawCells[i].replace(/[\s ]+/g, '');
-        if (!cellClean) continue;
+      // メンバーの判定（スペースを除去した名前でマッチング）
+      let matchedUser = null;
+      let userTokenIndex = -1;
 
-        const matched = sortedUsers.find(u => u.name.replace(/[\s ]+/g, '') === cellClean);
-        if (matched) {
-          foundUser = matched;
-          nameCellIndex = i;
+      for (let i = 0; i < tokens.length; i++) {
+        const tokenClean = tokens[i].replace(/[\s ]+/g, '');
+        const found = sortedUsers.find(u => u.name.replace(/[\s ]+/g, '') === tokenClean);
+        if (found) {
+          matchedUser = found;
+          userTokenIndex = i;
           break;
         }
       }
 
-      if (!foundUser || nameCellIndex === -1) return;
+      if (!matchedUser || userTokenIndex === -1) return;
 
-      const shiftValues = rawCells.slice(nameCellIndex + 1);
+      // 名前の直後から最大31日分を取得
+      const shiftTokens = tokens.slice(userTokenIndex + 1);
 
-      let dayCounter = 1;
-      for (let j = 0; j < shiftValues.length; j++) {
-        if (dayCounter > daysInMonth) break;
+      for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
+        const val = shiftTokens[dayNum - 1];
+        if (!val) break;
 
-        const val = shiftValues[j];
-        const dateStr = formatDate(new Date(year, month, dayCounter));
+        const dateStr = formatDate(new Date(year, month, dayNum));
         const shiftId = findOrCreateShiftId(val);
 
         if (!newShifts[dateStr]) newShifts[dateStr] = {};
-        newShifts[dateStr][foundUser.id] = shiftId;
-
-        dayCounter++;
+        newShifts[dateStr][matchedUser.id] = shiftId;
       }
     });
 
@@ -294,7 +293,7 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
     bulkImportShifts(newShifts);
     setShowImportModal(false);
     setImportText('');
-    alert('シフトデータを取り込みました！');
+    alert('シフトデータを正しく取り込みました！');
   };
 
   return (
