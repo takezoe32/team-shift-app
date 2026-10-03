@@ -12,7 +12,6 @@ import {
   Users, 
   Edit2, 
   Save, 
-  LogIn, 
   LogOut, 
   ClipboardList, 
   Settings, 
@@ -987,12 +986,32 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('calendar');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(formatDate(new Date()));
-  const [shiftTypes, setShiftTypes] = useState(DEFAULT_SHIFT_TYPES);
-  const [roles, setRoles] = useState(INITIAL_ROLES);
-  const [roleNames, setRoleNames] = useState(DEFAULT_ROLE_NAMES);
+  
+  // localStorage からシフト種類を復元（なければ初期値）
+  const [shiftTypes, setShiftTypes] = useState(() => {
+    const saved = localStorage.getItem('app_shift_types');
+    return saved ? JSON.parse(saved) : DEFAULT_SHIFT_TYPES;
+  });
+
+  // localStorage から役職情報を復元
+  const [roles, setRoles] = useState(() => {
+    const saved = localStorage.getItem('app_roles');
+    return saved ? JSON.parse(saved) : INITIAL_ROLES;
+  });
+
+  const [roleNames, setRoleNames] = useState(() => {
+    const saved = localStorage.getItem('app_role_names');
+    return saved ? JSON.parse(saved) : DEFAULT_ROLE_NAMES;
+  });
+
   const [users, setUsers] = useState({});
   
-  const [teamData, setTeamData] = useState({ shifts: {}, tasks: {} });
+  // localStorage からシフト・タスクデータを復元
+  const [teamData, setTeamData] = useState(() => {
+    const saved = localStorage.getItem('app_team_data');
+    return saved ? JSON.parse(saved) : { shifts: {}, tasks: {} };
+  });
+
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
@@ -1013,14 +1032,37 @@ export default function App() {
     }
     
     setUsers(currentUsersMap);
-
-    const today = formatDate(new Date());
-    setTeamData({
-      shifts: { [today]: {} },
-      tasks: { [today]: {} }
-    });
     setIsLoaded(true);
   }, []);
+
+  // シフト・タスクデータの変更時に自動保存
+  useEffect(() => {
+    if (isLoaded) {
+      localStorage.setItem('app_team_data', JSON.stringify(teamData));
+    }
+  }, [teamData, isLoaded]);
+
+  // シフト種類設定の自動保存
+  useEffect(() => {
+    if (isLoaded) {
+      localStorage.setItem('app_shift_types', JSON.stringify(shiftTypes));
+    }
+  }, [shiftTypes, isLoaded]);
+
+  // 役職設定の自動保存
+  useEffect(() => {
+    if (isLoaded) {
+      localStorage.setItem('app_roles', JSON.stringify(roles));
+      localStorage.setItem('app_role_names', JSON.stringify(roleNames));
+    }
+  }, [roles, roleNames, isLoaded]);
+
+  // ユーザー設定の自動保存
+  useEffect(() => {
+    if (isLoaded) {
+      localStorage.setItem('app_users', JSON.stringify(users));
+    }
+  }, [users, isLoaded]);
 
   const handleGoogleLoginSuccess = (credentialResponse) => {
     const decoded = jwtDecode(credentialResponse.credential);
@@ -1030,7 +1072,7 @@ export default function App() {
       name: decoded.name,
       email: decoded.email,
       picture: decoded.picture,
-      role: 'admin', // 初回ログインユーザーを管理者権限にする場合
+      role: 'admin',
       canManageShift: true
     };
 
@@ -1039,7 +1081,6 @@ export default function App() {
 
     setUsers(prev => {
       const updated = { ...prev, [newUser.id]: newUser };
-      localStorage.setItem('app_users', JSON.stringify(updated));
       return updated;
     });
   };
