@@ -219,7 +219,6 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
       let sym = symbol.trim();
       if (!sym) return 'none';
 
-      // 記号から確定ラベルへのマッピング
       let targetLabel = sym;
       if (sym === 'A') targetLabel = '出勤';
       else if (sym === '／' || sym === '/') targetLabel = '休み';
@@ -228,14 +227,12 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
       else if (sym === '冬休') targetLabel = '冬休';
       else if (sym === '講習') targetLabel = '講習';
 
-      // 既存シフト区分から検索 (「出勤」または以前の「早番」なども救済)
       let matched = newShiftTypes.find(s => s.label === targetLabel);
       if (!matched && targetLabel === '出勤') {
         matched = newShiftTypes.find(s => s.label === '早番' || s.id === 'work' || s.id === 'early');
       }
       if (matched) return matched.id;
 
-      // 未登録の場合は自動生成
       const newId = `shift_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
       const colors = [
         'bg-green-100 text-green-700 border-green-200',
@@ -257,26 +254,43 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
     };
 
     rawLines.forEach(lineStr => {
-      const cells = lineStr.split('\t').map(c => c.trim());
+      // タブ区切りで分割
+      const rawCells = lineStr.split('\t');
       
-      const nameIndex = cells.findIndex(c => c.length > 0 && !['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20','21','22','23','24','25','26','27','28','29','30','31','日','月','火','水','木','金','土'].includes(c));
-      if (nameIndex === -1) return;
+      // 名前の行かどうかの判定：登録されているメンバーの名前が含まれているセルを検索
+      let foundUser = null;
+      let nameCellIndex = -1;
 
-      const rawName = cells[nameIndex].replace(/[\s ]+/g, '');
-      const targetUser = sortedUsers.find(u => u.name.replace(/[\s ]+/g, '') === rawName);
-      if (!targetUser) return;
+      for (let i = 0; i < rawCells.length; i++) {
+        const cellCleanIndex = rawCells[i].replace(/[\s ]+/g, '');
+        if (!cellCleanIndex) continue;
 
-      const shiftValues = cells.slice(nameIndex + 1);
-      shiftValues.forEach((val, idx) => {
-        const dayNum = idx + 1;
-        if (dayNum > daysInMonth) return;
+        const matched = sortedUsers.find(u => u.name.replace(/[\s ]+/g, '') === cellCleanIndex);
+        if (matched) {
+          foundUser = matched;
+          nameCellIndex = i;
+          break;
+        }
+      }
 
-        const dateStr = formatDate(new Date(year, month, dayNum));
+      if (!foundUser || nameCellIndex === -1) return;
+
+      // 名前の「直後のセル」から順番に1日〜31日分として取得（空白の先頭列を完全スキップ）
+      const shiftValues = rawCells.slice(nameCellIndex + 1);
+
+      let dayCounter = 1;
+      for (let j = 0; j < shiftValues.length; j++) {
+        if (dayCounter > daysInMonth) break;
+
+        const val = shiftValues[j];
+        const dateStr = formatDate(new Date(year, month, dayCounter));
         const shiftId = findOrCreateShiftId(val);
 
         if (!newShifts[dateStr]) newShifts[dateStr] = {};
-        newShifts[dateStr][targetUser.id] = shiftId;
-      });
+        newShifts[dateStr][foundUser.id] = shiftId;
+
+        dayCounter++;
+      }
     });
 
     updateShiftTypes(newShiftTypes);
