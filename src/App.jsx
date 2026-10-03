@@ -269,6 +269,11 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
       return null;
     };
 
+    const isShiftToken = (value) => {
+      const sym = normalizeSymbol(value);
+      return ['A', '／', '/', '夏休', '有', '有休', '有給', '冬休', '講習', '出勤', '休み', '有給', '冬休', '講習'].includes(sym);
+    };
+
     const findOrCreateShiftId = (symbol) => {
       const sym = normalizeSymbol(symbol);
       if (!sym) return 'none';
@@ -316,7 +321,17 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
       if (userIndex < 0) return;
 
       const matchedUser = findUserByCell(cells[userIndex]);
-      const shiftValues = cells.slice(userIndex + 1).map(cleanCell);
+
+      // コピー元によっては、名前の直後に空列や補助列が入ることがある。
+      // 最初の「実際のシフト記号」を1日目として、そこから月末までを取得する。
+      // A / 有 / 夏休 / 冬休 / 講習など、シフトとして認識できる値だけを起点にする。
+      const afterName = cells.slice(userIndex + 1).map(cleanCell);
+      const firstShiftIndex = afterName.findIndex(isShiftToken);
+      if (firstShiftIndex < 0) {
+        errors.push(`${lineIndex + 1}行目 ${matchedUser.name}: シフト開始位置を見つけられません`);
+        return;
+      }
+      const shiftValues = afterName.slice(firstShiftIndex);
 
       if (importedUserIds.has(matchedUser.id)) {
         errors.push(`${lineIndex + 1}行目 ${matchedUser.name}: 同じメンバーが複数行あります`);
