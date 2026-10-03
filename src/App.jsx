@@ -268,8 +268,13 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
           .split('|')
           .map(token => token.trim())
           .filter(Boolean);
+      } else if (lineStr.includes('\t')) {
+        // Excel/スプレッドシートからの貼り付けはタブを列境界として扱い、
+        // 「竹添　三剛」のような名前内部のスペースは保持する。
+        tokens = lineStr.split('\t').map(token => token.trim()).filter(Boolean);
       } else {
-        tokens = lineStr.split(/[\t\s]+/).filter(Boolean);
+        // タブがない旧形式にも対応。
+        tokens = lineStr.split(/[\s]+/).filter(Boolean);
       }
 
       // Markdownの見出し・区切り行は無視
