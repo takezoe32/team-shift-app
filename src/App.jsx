@@ -10,6 +10,8 @@ import {
   Trash2, 
   ChevronLeft, 
   ChevronRight, 
+  ChevronUp,
+  ChevronDown,
   X, 
   Users, 
   Edit2, 
@@ -189,7 +191,7 @@ const CalendarView = ({ currentDate, changeMonth, teamData, onDateClick, current
   );
 };
 
-const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateUserShift, users, roleNames, roles }) => {
+const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateUserShift, sortedUsers, roleNames, roles }) => {
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
   const daysInMonth = getDaysInMonth(year, month);
@@ -201,12 +203,6 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
      const d = new Date(year, month, i);
      days.push({ day: i, dateStr: formatDate(d), weekDay: DAYS_OF_WEEK[d.getDay()] });
   }
-
-  const sortedUsers = Object.values(users).sort((a,b) => {
-    const levelA = roles[a.role]?.level || 0;
-    const levelB = roles[b.role]?.level || 0;
-    return levelB - levelA || a.id.localeCompare(b.id);
-  });
 
   return (
     <div className="flex-1 flex flex-col bg-gray-50 pb-[68px] overflow-hidden relative">
@@ -300,7 +296,7 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
 
 const DailyDetailView = ({ 
   selectedDate, changeDay, teamData, currentUserUid, shiftTypes,
-  addTask, toggleTask, deleteTask, updateTaskText, users, roles
+  addTask, toggleTask, deleteTask, updateTaskText, users, roles, sortedUsers
 }) => {
   const [newTaskText, setNewTaskText] = useState('');
   const [selectedUserUid, setSelectedUserUid] = useState(currentUserUid);
@@ -314,21 +310,6 @@ const DailyDetailView = ({
   const selectedDateTasks = teamData.tasks[selectedDate]?.[selectedUserUid] || [];
   const selectedDateShifts = teamData.shifts[selectedDate] || {};
   const myCurrentShift = selectedDateShifts[currentUserUid] || 'none';
-
-  const shiftOrder = ['early', 'day', 'late', 'night', 'off', 'none'];
-  const teamMembers = Object.values(users).sort((a, b) => {
-    const shiftA = selectedDateShifts[a.id] || 'none';
-    const shiftB = selectedDateShifts[b.id] || 'none';
-    const orderA = shiftOrder.indexOf(shiftA) !== -1 ? shiftOrder.indexOf(shiftA) : 99;
-    const orderB = shiftOrder.indexOf(shiftB) !== -1 ? shiftOrder.indexOf(shiftB) : 99;
-    
-    if(orderA === orderB) {
-      const levelA = roles[a.role]?.level || 0;
-      const levelB = roles[b.role]?.level || 0;
-      return levelB - levelA || a.id.localeCompare(b.id);
-    }
-    return orderA - orderB;
-  });
 
   const handleAddTask = () => {
     if (newTaskText.trim()) {
@@ -458,7 +439,7 @@ const DailyDetailView = ({
 
         <div className="bg-white px-3 py-2 border-b border-gray-200 flex overflow-x-auto gap-2 no-scrollbar shadow-sm shrink-0 items-center min-h-[56px] sticky top-[53px] z-10">
           <div className="flex items-center gap-2 pr-4">
-            {teamMembers.map(member => {
+            {sortedUsers.map(member => {
               const isSelected = selectedUserUid === member.id;
               const shiftId = selectedDateShifts[member.id] || 'none';
               const shiftObj = shiftTypes.find(s => s.id === shiftId) || shiftTypes.find(s => s.id === 'none');
@@ -523,7 +504,7 @@ const DailyDetailView = ({
   );
 };
 
-const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, currentUserUid, roleNames, updateRoleNames, roles, updateRoles, deleteUserCompletely }) => {
+const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, currentUserUid, roleNames, updateRoleNames, roles, updateRoles, deleteUserCompletely, sortedUsers, userOrder, updateUserOrder }) => {
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserRole, setNewUserRole] = useState(Object.keys(roles)[0] || 'staff');
@@ -539,6 +520,19 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
   const [showAddShiftForm, setShowAddShiftForm] = useState(false);
   const [newShiftLabel, setNewShiftLabel] = useState('');
   const [newShiftColor, setNewShiftColor] = useState(COLOR_PRESETS[0]);
+
+  const moveUserOrder = (index, direction) => {
+    const newOrderedList = [...sortedUsers];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= newOrderedList.length) return;
+
+    const temp = newOrderedList[index];
+    newOrderedList[index] = newOrderedList[targetIndex];
+    newOrderedList[targetIndex] = temp;
+
+    const newOrder = newOrderedList.map(u => u.id);
+    updateUserOrder(newOrder);
+  };
 
   const handleLabelChange = (id, newLabel) => {
     updateShiftTypes(shiftTypes.map(s => s.id === id ? { ...s, label: newLabel } : s));
@@ -637,7 +631,8 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
     }
     const newId = `u_${Date.now()}`;
     const defaultRole = Object.keys(roles)[0] || 'staff';
-    updateUsers({
+    
+    const newUsers = {
       ...users,
       [newId]: { 
         id: newId, 
@@ -646,7 +641,11 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
         role: newUserRole || defaultRole, 
         canManageShift: false 
       }
-    });
+    };
+
+    updateUsers(newUsers);
+    updateUserOrder([...userOrder, newId]);
+
     setNewUserName('');
     setNewUserEmail('');
     setNewUserRole(defaultRole);
@@ -673,12 +672,6 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
   };
 
   const sortedRoleKeys = Object.keys(roles).sort((a,b) => roles[b].level - roles[a].level);
-
-  const sortedUsers = Object.values(users).sort((a,b) => {
-    const levelA = roles[a.role]?.level || 0;
-    const levelB = roles[b.role]?.level || 0;
-    return levelB - levelA || a.id.localeCompare(b.id);
-  });
 
   return (
     <div className="flex-1 bg-gray-50 overflow-y-auto pb-[68px]">
@@ -837,7 +830,7 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
               <h3 className="font-bold text-gray-700 text-sm flex items-center">
                 メンバー管理（ログイン許可リスト）
               </h3>
-              <p className="text-[11px] text-gray-400 mt-0.5">ここに登録されたメールアドレスのみがログインできます</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">▲/▼ ボタンで全体の表示順を変更できます</p>
             </div>
             <button 
               onClick={() => setShowAddForm(!showAddForm)}
@@ -888,7 +881,7 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
           )}
 
           <div className="space-y-2">
-            {sortedUsers.map(u => {
+            {sortedUsers.map((u, idx) => {
               const isMe = u.id === currentUserUid;
               const isEditingThisUser = editingUserId === u.id;
               const userRoleObj = roles[u.role] || { level: 10, name: '' };
@@ -896,56 +889,78 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
 
               return (
                 <div key={u.id} className="flex flex-col md:flex-row md:items-center justify-between p-3 hover:bg-gray-50 rounded-xl border border-gray-100 gap-2">
-                  <div className="flex-1 min-w-0 font-bold text-sm text-gray-800">
-                    {isEditingThisUser ? (
-                      <div className="space-y-1.5">
-                        <input
-                          type="text"
-                          value={editingName}
-                          onChange={(e) => setEditingName(e.target.value)}
-                          className="w-full border border-blue-400 bg-blue-50/50 rounded-md px-2 py-1 text-xs outline-none"
-                          placeholder="名前"
-                          autoFocus
-                        />
-                        <div className="flex gap-1">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    {/* 上下並び替えボタン */}
+                    <div className="flex flex-col gap-0.5 shrink-0">
+                      <button
+                        onClick={() => moveUserOrder(idx, 'up')}
+                        disabled={idx === 0}
+                        className="p-1 hover:bg-gray-200 text-gray-500 disabled:opacity-20 rounded"
+                        title="上に移動"
+                      >
+                        <ChevronUp size={14}/>
+                      </button>
+                      <button
+                        onClick={() => moveUserOrder(idx, 'down')}
+                        disabled={idx === sortedUsers.length - 1}
+                        className="p-1 hover:bg-gray-200 text-gray-500 disabled:opacity-20 rounded"
+                        title="下に移動"
+                      >
+                        <ChevronDown size={14}/>
+                      </button>
+                    </div>
+
+                    <div className="flex-1 min-w-0 font-bold text-sm text-gray-800">
+                      {isEditingThisUser ? (
+                        <div className="space-y-1.5">
                           <input
-                            type="email"
-                            value={editingEmail}
-                            onChange={(e) => setEditingEmail(e.target.value)}
-                            className="flex-1 border border-blue-400 bg-blue-50/50 rounded-md px-2 py-1 text-xs outline-none"
-                            placeholder="Googleメールアドレス"
+                            type="text"
+                            value={editingName}
+                            onChange={(e) => setEditingName(e.target.value)}
+                            className="w-full border border-blue-400 bg-blue-50/50 rounded-md px-2 py-1 text-xs outline-none"
+                            placeholder="名前"
+                            autoFocus
                           />
-                          <button
-                            onClick={() => handleSaveName(u.id)}
-                            className="p-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 shrink-0"
-                          >
-                            <Save size={14}/>
-                          </button>
+                          <div className="flex gap-1">
+                            <input
+                              type="email"
+                              value={editingEmail}
+                              onChange={(e) => setEditingEmail(e.target.value)}
+                              className="flex-1 border border-blue-400 bg-blue-50/50 rounded-md px-2 py-1 text-xs outline-none"
+                              placeholder="Googleメールアドレス"
+                            />
+                            <button
+                              onClick={() => handleSaveName(u.id)}
+                              className="p-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 shrink-0"
+                            >
+                              <Save size={14}/>
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="truncate">{u.name}</span>
-                          {isMe && (
-                            <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.2 rounded shrink-0 font-normal">あなた</span>
-                          )}
-                          <button
-                            onClick={() => handleStartRename(u)}
-                            className="p-1 text-gray-400 hover:text-blue-600 rounded-md transition-colors shrink-0"
-                            title="編集"
-                          >
-                            <Edit2 size={13}/>
-                          </button>
+                      ) : (
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="truncate">{u.name}</span>
+                            {isMe && (
+                              <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.2 rounded shrink-0 font-normal">あなた</span>
+                            )}
+                            <button
+                              onClick={() => handleStartRename(u)}
+                              className="p-1 text-gray-400 hover:text-blue-600 rounded-md transition-colors shrink-0"
+                              title="編集"
+                            >
+                              <Edit2 size={13}/>
+                            </button>
+                          </div>
+                          <div className="text-xs text-gray-400 font-normal truncate mt-0.5">
+                            {u.email || 'メールアドレス未設定'}
+                          </div>
                         </div>
-                        <div className="text-xs text-gray-400 font-normal truncate mt-0.5">
-                          {u.email || 'メールアドレス未設定'}
-                        </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                   
-                  <div className="flex items-center gap-2 shrink-0 justify-end border-t md:border-t-0 pt-2 md:pt-0 border-gray-100">
+                  <div className="flex items-center gap-2 shrink-0 justify-end border-t md:border-t-0 pt-2 md:pt-0 border-gray-100 pl-6 md:pl-0">
                     {roleLevel < 40 && (
                       <label className="flex items-center gap-1 cursor-pointer" title="管理者以外のユーザーにシフト操作権限を付与">
                         <input 
@@ -1050,6 +1065,7 @@ export default function App() {
   const [roles, setRoles] = useState(INITIAL_ROLES);
   const [roleNames, setRoleNames] = useState(DEFAULT_ROLE_NAMES);
   const [users, setUsers] = useState({});
+  const [userOrder, setUserOrder] = useState([]);
   const [teamData, setTeamData] = useState({ shifts: {}, tasks: {} });
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -1062,7 +1078,7 @@ export default function App() {
     }
   };
 
-  // Firestore Realtime Listener & メールアドレス重複自動統合クリーナー
+  // Firestore Realtime Listener
   useEffect(() => {
     const docRef = doc(db, 'app_data', 'shared_state');
     const unsubscribe = onSnapshot(docRef, (snapshot) => {
@@ -1086,7 +1102,6 @@ export default function App() {
           }
         });
 
-        // 重複があった場合、ダミー枠（IDがu_から始まる）から正式GoogleID枠へシフトを引き継いで統合
         Object.keys(emailMap).forEach(em => {
           const list = emailMap[em];
           if (list.length > 1) {
@@ -1095,21 +1110,18 @@ export default function App() {
             const dummyUsers = list.filter(u => u.id !== realUser.id);
 
             dummyUsers.forEach(dUser => {
-              // シフトデータの移行
               Object.keys(currentShifts).forEach(dStr => {
                 if (currentShifts[dStr]?.[dUser.id]) {
                   currentShifts[dStr][realUser.id] = currentShifts[dStr][dUser.id];
                   delete currentShifts[dStr][dUser.id];
                 }
               });
-              // タスクデータの移行
               Object.keys(currentTasks).forEach(dStr => {
                 if (currentTasks[dStr]?.[dUser.id]) {
                   currentTasks[dStr][realUser.id] = [...(currentTasks[dStr][realUser.id] || []), ...currentTasks[dStr][dUser.id]];
                   delete currentTasks[dStr][dUser.id];
                 }
               });
-              // ダミーユーザー削除
               delete currentUsers[dUser.id];
             });
           }
@@ -1121,6 +1133,7 @@ export default function App() {
         }
 
         setUsers(currentUsers);
+        if (data.userOrder) setUserOrder(data.userOrder);
         if (data.teamData) setTeamData({ shifts: currentShifts, tasks: currentTasks });
         if (data.shiftTypes) setShiftTypes(data.shiftTypes);
         if (data.roles) setRoles(data.roles);
@@ -1144,6 +1157,8 @@ export default function App() {
     const updatedUsers = { ...users };
     delete updatedUsers[uid];
 
+    const updatedOrder = userOrder.filter(id => id !== uid);
+
     const updatedShifts = { ...teamData.shifts };
     Object.keys(updatedShifts).forEach(dateStr => {
       if (updatedShifts[dateStr] && updatedShifts[dateStr][uid]) {
@@ -1161,8 +1176,9 @@ export default function App() {
     const updatedTeamData = { shifts: updatedShifts, tasks: updatedTasks };
 
     setUsers(updatedUsers);
+    setUserOrder(updatedOrder);
     setTeamData(updatedTeamData);
-    saveToFirestore({ users: updatedUsers, teamData: updatedTeamData });
+    saveToFirestore({ users: updatedUsers, userOrder: updatedOrder, teamData: updatedTeamData });
   };
 
   const handleGoogleLoginSuccess = (credentialResponse) => {
@@ -1192,8 +1208,10 @@ export default function App() {
         canManageShift: true
       };
       const updatedUsers = { [loggedInUser.id]: loggedInUser };
+      const updatedOrder = [loggedInUser.id];
       setUsers(updatedUsers);
-      saveToFirestore({ users: updatedUsers });
+      setUserOrder(updatedOrder);
+      saveToFirestore({ users: updatedUsers, userOrder: updatedOrder });
     } else {
       loggedInUser = {
         ...matchedUser,
@@ -1216,6 +1234,21 @@ export default function App() {
     setAuthError('');
     localStorage.removeItem('google_user');
   };
+
+  // 指定されたカスタム順序（userOrder）に基づいてユーザー一覧を並べ替え
+  const allUserKeys = Object.keys(users);
+  const sortedUsers = [...allUserKeys].sort((a, b) => {
+    const indexA = userOrder.indexOf(a);
+    const indexB = userOrder.indexOf(b);
+
+    if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+    if (indexA !== -1) return -1;
+    if (indexB !== -1) return 1;
+
+    const levelA = roles[users[a]?.role]?.level || 0;
+    const levelB = roles[users[b]?.role]?.level || 0;
+    return levelB - levelA || a.localeCompare(b);
+  }).map(id => users[id]).filter(Boolean);
 
   if (!isLoaded) return <div className="flex-1 bg-gray-50 flex items-center justify-center min-h-screen">Loading...</div>;
 
@@ -1273,7 +1306,7 @@ export default function App() {
                   setTeamData(updatedTeamData);
                   saveToFirestore({ teamData: updatedTeamData });
                 }} 
-                users={users}
+                sortedUsers={sortedUsers}
               />
             ) : activeTab === 'daily' ? (
               <DailyDetailView 
@@ -1325,6 +1358,7 @@ export default function App() {
                   saveToFirestore({ teamData: updatedTeamData });
                 }} 
                 users={users}
+                sortedUsers={sortedUsers}
               />
             ) : (
               <SettingsView 
@@ -1350,6 +1384,12 @@ export default function App() {
                 }} 
                 shiftTypes={shiftTypes} 
                 users={users}
+                sortedUsers={sortedUsers}
+                userOrder={userOrder}
+                updateUserOrder={(newOrder) => {
+                  setUserOrder(newOrder);
+                  saveToFirestore({ userOrder: newOrder });
+                }}
               />
             )}
 
