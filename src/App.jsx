@@ -254,14 +254,14 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
     };
 
     rawLines.forEach(lineStr => {
-      // タブおよび空白で分割
+      // タブおよび任意の空白文字でトークン化して空要素を除去
       const tokens = lineStr.split(/[\t\s]+/).filter(Boolean);
       if (tokens.length < 2) return;
 
-      // 行内に登録メンバーの名前が存在するか検索
       let matchedUser = null;
       let userTokenIndex = -1;
 
+      // 行の中からメンバー名を特定
       for (let i = 0; i < tokens.length; i++) {
         const tokenClean = tokens[i].replace(/[\s ]+/g, '');
         const found = sortedUsers.find(u => u.name.replace(/[\s ]+/g, '') === tokenClean);
@@ -274,7 +274,7 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
 
       if (!matchedUser || userTokenIndex === -1) return;
 
-      // 名前の直後にあるトークンから順に「1日〜31日」分を取得
+      // 名前の直後のトークン群を1日〜31日目としてダイレクトに読み込み
       const shiftTokens = tokens.slice(userTokenIndex + 1);
 
       for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
@@ -293,7 +293,7 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
     bulkImportShifts(newShifts);
     setShowImportModal(false);
     setImportText('');
-    alert('シフトデータを正しく取り込みました！');
+    alert('シフトデータを取り込みました！');
   };
 
   return (
