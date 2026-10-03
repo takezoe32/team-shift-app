@@ -18,7 +18,8 @@ import {
   ClipboardList, 
   Settings, 
   Table, 
-  UserPlus 
+  UserPlus,
+  ShieldAlert
 } from 'lucide-react';
 
 // Google OAuth Client ID
@@ -88,7 +89,7 @@ const checkCanManageShift = (user, roles) => {
   return level >= 40 || !!user.canManageShift;
 };
 
-const LoginScreen = ({ onGoogleLoginSuccess }) => (
+const LoginScreen = ({ onGoogleLoginSuccess, authError }) => (
   <div className="flex-1 flex flex-col items-center justify-center bg-gray-50 p-6 min-h-screen">
     <div className="w-full max-w-sm bg-white p-8 rounded-2xl shadow-lg text-center space-y-6">
       <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto">
@@ -98,7 +99,18 @@ const LoginScreen = ({ onGoogleLoginSuccess }) => (
         <h1 className="text-xl font-bold text-gray-800">TeamShift App</h1>
         <p className="text-sm text-gray-500 mt-2">Google アカウントでログインしてください</p>
       </div>
-      <div className="pt-4 flex justify-center">
+
+      {authError && (
+        <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-xl text-xs flex items-center gap-2 text-left">
+          <ShieldAlert size={20} className="shrink-0 text-red-500"/>
+          <div>
+            <p className="font-bold">アクセスが拒否されました</p>
+            <p className="mt-0.5">{authError}</p>
+          </div>
+        </div>
+      )}
+
+      <div className="pt-2 flex justify-center">
         <GoogleLogin
           onSuccess={onGoogleLoginSuccess}
           onError={() => alert('Google ログインに失敗しました')}
@@ -513,10 +525,12 @@ const DailyDetailView = ({
 
 const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, currentUserUid, roleNames, updateRoleNames, roles, updateRoles }) => {
   const [newUserName, setNewUserName] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserRole, setNewUserRole] = useState(Object.keys(roles)[0] || 'staff');
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingUserId, setEditingUserId] = useState(null);
   const [editingName, setEditingName] = useState('');
+  const [editingEmail, setEditingEmail] = useState('');
 
   const [showAddRoleForm, setShowAddRoleForm] = useState(false);
   const [newRoleName, setNewRoleName] = useState('');
@@ -619,14 +633,24 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
   };
 
   const handleAddUser = () => {
-    if(!newUserName.trim()) return;
-    const newId = `u${Date.now()}`;
+    if(!newUserName.trim() || !newUserEmail.trim()) {
+      alert('名前とメールアドレスの両方を入力してください。');
+      return;
+    }
+    const newId = `u_${Date.now()}`;
     const defaultRole = Object.keys(roles)[0] || 'staff';
     updateUsers({
       ...users,
-      [newId]: { id: newId, name: newUserName.trim(), role: newUserRole || defaultRole, canManageShift: false }
+      [newId]: { 
+        id: newId, 
+        name: newUserName.trim(), 
+        email: newUserEmail.trim().toLowerCase(),
+        role: newUserRole || defaultRole, 
+        canManageShift: false 
+      }
     });
     setNewUserName('');
+    setNewUserEmail('');
     setNewUserRole(defaultRole);
     setShowAddForm(false);
   };
@@ -634,13 +658,18 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
   const handleStartRename = (u) => {
     setEditingUserId(u.id);
     setEditingName(u.name);
+    setEditingEmail(u.email || '');
   };
 
   const handleSaveName = (uid) => {
     if (!editingName.trim()) return;
     updateUsers({
       ...users,
-      [uid]: { ...users[uid], name: editingName.trim() }
+      [uid]: { 
+        ...users[uid], 
+        name: editingName.trim(),
+        email: editingEmail.trim().toLowerCase()
+      }
     });
     setEditingUserId(null);
   };
@@ -806,9 +835,12 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
 
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 mb-6">
           <div className="flex justify-between items-center border-b pb-2 mb-4">
-            <h3 className="font-bold text-gray-700 text-sm flex items-center">
-              メンバー管理
-            </h3>
+            <div>
+              <h3 className="font-bold text-gray-700 text-sm flex items-center">
+                メンバー管理（ログイン許可リスト）
+              </h3>
+              <p className="text-[11px] text-gray-400 mt-0.5">ここに登録されたメールアドレスのみがログインできます</p>
+            </div>
             <button 
               onClick={() => setShowAddForm(!showAddForm)}
               className="text-xs flex items-center text-blue-600 font-bold bg-blue-50 px-2 py-1 rounded-md active:scale-95"
@@ -825,7 +857,14 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
                   type="text" 
                   value={newUserName}
                   onChange={(e) => setNewUserName(e.target.value)}
-                  placeholder="名前"
+                  placeholder="名前 (例: 山田太郎)"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+                <input 
+                  type="email" 
+                  value={newUserEmail}
+                  onChange={(e) => setNewUserEmail(e.target.value)}
+                  placeholder="Googleメールアドレス (例: example@gmail.com)"
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                 />
                 <div className="flex gap-2">
@@ -840,8 +879,8 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
                   </select>
                   <button 
                     onClick={handleAddUser}
-                    disabled={!newUserName.trim()}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold"
+                    disabled={!newUserName.trim() || !newUserEmail.trim()}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50"
                   >
                     保存
                   </button>
@@ -858,46 +897,57 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
               const roleLevel = userRoleObj.level;
 
               return (
-                <div key={u.id} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded-lg border border-transparent gap-2">
+                <div key={u.id} className="flex flex-col md:flex-row md:items-center justify-between p-3 hover:bg-gray-50 rounded-xl border border-gray-100 gap-2">
                   <div className="flex-1 min-w-0 font-bold text-sm text-gray-800">
                     {isEditingThisUser ? (
-                      <div className="flex items-center gap-1">
+                      <div className="space-y-1.5">
                         <input
                           type="text"
                           value={editingName}
                           onChange={(e) => setEditingName(e.target.value)}
                           className="w-full border border-blue-400 bg-blue-50/50 rounded-md px-2 py-1 text-xs outline-none"
+                          placeholder="名前"
                           autoFocus
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleSaveName(u.id);
-                          }}
                         />
-                        <button
-                          onClick={() => handleSaveName(u.id)}
-                          className="p-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 shrink-0"
-                        >
-                          <Save size={14}/>
-                        </button>
+                        <div className="flex gap-1">
+                          <input
+                            type="email"
+                            value={editingEmail}
+                            onChange={(e) => setEditingEmail(e.target.value)}
+                            className="flex-1 border border-blue-400 bg-blue-50/50 rounded-md px-2 py-1 text-xs outline-none"
+                            placeholder="Googleメールアドレス"
+                          />
+                          <button
+                            onClick={() => handleSaveName(u.id)}
+                            className="p-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 shrink-0"
+                          >
+                            <Save size={14}/>
+                          </button>
+                        </div>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-1.5">
-                        <span className="truncate">{u.name}</span>
-                        {isMe && (
-                          <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.2 rounded shrink-0 font-normal">あなた</span>
-                        )}
-                        <button
-                          onClick={() => handleStartRename(u)}
-                          className="p-1 text-gray-400 hover:text-blue-600 rounded-md transition-colors shrink-0"
-                          title="名前を変更"
-                        >
-                          <Edit2 size={13}/>
-                        </button>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="truncate">{u.name}</span>
+                          {isMe && (
+                            <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.2 rounded shrink-0 font-normal">あなた</span>
+                          )}
+                          <button
+                            onClick={() => handleStartRename(u)}
+                            className="p-1 text-gray-400 hover:text-blue-600 rounded-md transition-colors shrink-0"
+                            title="編集"
+                          >
+                            <Edit2 size={13}/>
+                          </button>
+                        </div>
+                        <div className="text-xs text-gray-400 font-normal truncate mt-0.5">
+                          {u.email || 'メールアドレス未設定'}
+                        </div>
                       </div>
                     )}
                   </div>
                   
-                  <div className="flex items-center gap-2 shrink-0">
-                    {/* 最上位の管理者(Lv.40)以外の全メンバーに管理チェックボックスを表示 */}
+                  <div className="flex items-center gap-2 shrink-0 justify-end border-t md:border-t-0 pt-2 md:pt-0 border-gray-100">
                     {roleLevel < 40 && (
                       <label className="flex items-center gap-1 cursor-pointer" title="管理者以外のユーザーにシフト操作権限を付与">
                         <input 
@@ -996,6 +1046,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('calendar');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(formatDate(new Date()));
+  const [authError, setAuthError] = useState('');
   
   const [shiftTypes, setShiftTypes] = useState(DEFAULT_SHIFT_TYPES);
   const [roles, setRoles] = useState(INITIAL_ROLES);
@@ -1040,28 +1091,63 @@ export default function App() {
   };
 
   const handleGoogleLoginSuccess = (credentialResponse) => {
+    setAuthError('');
     const decoded = jwtDecode(credentialResponse.credential);
-    
-    const newUser = {
-      id: decoded.sub,
-      name: decoded.name,
-      email: decoded.email,
-      picture: decoded.picture,
-      role: 'admin',
-      canManageShift: true
-    };
+    const loginEmail = (decoded.email || '').toLowerCase();
 
-    setCurrentUser(newUser);
-    localStorage.setItem('google_user', JSON.stringify(newUser));
+    const userList = Object.values(users);
+    const isFirstUser = userList.length === 0;
 
-    const updatedUsers = { ...users, [newUser.id]: newUser };
-    setUsers(updatedUsers);
-    saveToFirestore({ users: updatedUsers });
+    // ホワイトリスト判定: 登録済みユーザーの中に一致するメールアドレスがあるか検索
+    const matchedUser = userList.find(u => (u.email || '').toLowerCase() === loginEmail);
+
+    if (!isFirstUser && !matchedUser) {
+      setAuthError(`メールアドレス (${loginEmail}) は登録されていません。管理者に登録を依頼してください。`);
+      return;
+    }
+
+    let loggedInUser;
+
+    if (isFirstUser) {
+      // 最初のユーザーは自動で管理者登録
+      loggedInUser = {
+        id: decoded.sub,
+        name: decoded.name,
+        email: loginEmail,
+        picture: decoded.picture,
+        role: 'admin',
+        canManageShift: true
+      };
+      const updatedUsers = { [loggedInUser.id]: loggedInUser };
+      setUsers(updatedUsers);
+      saveToFirestore({ users: updatedUsers });
+    } else {
+      // 既存の許可リストユーザーとIDを紐づけて更新
+      loggedInUser = {
+        ...matchedUser,
+        id: decoded.sub,
+        email: loginEmail,
+        picture: decoded.picture
+      };
+      
+      const updatedUsers = { ...users };
+      if (matchedUser.id !== decoded.sub) {
+        delete updatedUsers[matchedUser.id];
+      }
+      updatedUsers[decoded.sub] = loggedInUser;
+
+      setUsers(updatedUsers);
+      saveToFirestore({ users: updatedUsers });
+    }
+
+    setCurrentUser(loggedInUser);
+    localStorage.setItem('google_user', JSON.stringify(loggedInUser));
   };
 
   const handleLogout = () => {
     googleLogout();
     setCurrentUser(null);
+    setAuthError('');
     localStorage.removeItem('google_user');
   };
 
@@ -1070,7 +1156,7 @@ export default function App() {
   return (
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
       {!currentUser ? (
-        <LoginScreen onGoogleLoginSuccess={handleGoogleLoginSuccess} />
+        <LoginScreen onGoogleLoginSuccess={handleGoogleLoginSuccess} authError={authError} />
       ) : (
         <div className="min-h-screen bg-gray-100 flex flex-col w-full">
           <div className="w-full flex-1 flex flex-col bg-white min-h-screen relative overflow-hidden font-sans">
