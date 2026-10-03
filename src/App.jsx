@@ -49,11 +49,12 @@ const INITIAL_ROLES = {
 };
 
 const DEFAULT_SHIFT_TYPES = [
-  { id: 'early', label: '早番', color: 'bg-orange-100 text-orange-700 border-orange-200' },
-  { id: 'day', label: '日勤', color: 'bg-blue-100 text-blue-700 border-blue-200' },
-  { id: 'late', label: '遅番', color: 'bg-purple-100 text-purple-700 border-purple-200' },
-  { id: 'night', label: '夜勤', color: 'bg-indigo-100 text-indigo-700 border-indigo-200' },
+  { id: 'work', label: '出勤', color: 'bg-orange-100 text-orange-700 border-orange-200' },
   { id: 'off', label: '休み', color: 'bg-red-50 text-red-600 border-red-100' },
+  { id: 'summer', label: '夏休', color: 'bg-blue-100 text-blue-700 border-blue-200' },
+  { id: 'paid', label: '有給', color: 'bg-green-100 text-green-700 border-green-200' },
+  { id: 'winter', label: '冬休', color: 'bg-purple-100 text-purple-700 border-purple-200' },
+  { id: 'course', label: '講習', color: 'bg-teal-100 text-teal-700 border-teal-200' },
   { id: 'none', label: '未定', color: 'bg-gray-100 text-gray-500 border-gray-200' }
 ];
 
@@ -217,26 +218,35 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
     const findOrCreateShiftId = (symbol) => {
       let sym = symbol.trim();
       if (!sym) return 'none';
-      if (sym === '／') return 'off';
-      if (sym === 'A') {
-        const early = newShiftTypes.find(s => s.label === '早番' || s.id === 'early');
-        return early ? early.id : 'early';
-      }
-      if (sym === '有') sym = '有休';
 
-      let matched = newShiftTypes.find(s => s.label === sym);
+      // 記号から確定ラベルへのマッピング
+      let targetLabel = sym;
+      if (sym === 'A') targetLabel = '出勤';
+      else if (sym === '／' || sym === '/') targetLabel = '休み';
+      else if (sym === '夏休') targetLabel = '夏休';
+      else if (sym === '有' || sym === '有休' || sym === '有給') targetLabel = '有給';
+      else if (sym === '冬休') targetLabel = '冬休';
+      else if (sym === '講習') targetLabel = '講習';
+
+      // 既存シフト区分から検索 (「出勤」または以前の「早番」なども救済)
+      let matched = newShiftTypes.find(s => s.label === targetLabel);
+      if (!matched && targetLabel === '出勤') {
+        matched = newShiftTypes.find(s => s.label === '早番' || s.id === 'work' || s.id === 'early');
+      }
       if (matched) return matched.id;
 
+      // 未登録の場合は自動生成
       const newId = `shift_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
       const colors = [
         'bg-green-100 text-green-700 border-green-200',
         'bg-teal-100 text-teal-700 border-teal-200',
         'bg-pink-100 text-pink-700 border-pink-200',
-        'bg-amber-100 text-amber-700 border-amber-200'
+        'bg-amber-100 text-amber-700 border-amber-200',
+        'bg-purple-100 text-purple-700 border-purple-200'
       ];
       const newShiftObj = {
         id: newId,
-        label: sym,
+        label: targetLabel,
         color: colors[newShiftTypes.length % colors.length]
       };
 
@@ -249,15 +259,13 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
     rawLines.forEach(lineStr => {
       const cells = lineStr.split('\t').map(c => c.trim());
       
-      // 名前のセル位置（空セルを除いた最初の文字列）を特定
-      const nameIndex = cells.findIndex(c => c.length > 0 && !['1','2','3','4','5','6','7','8','9','10','日','月','火','水','木','金','土'].includes(c));
+      const nameIndex = cells.findIndex(c => c.length > 0 && !['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20','21','22','23','24','25','26','27','28','29','30','31','日','月','火','水','木','金','土'].includes(c));
       if (nameIndex === -1) return;
 
       const rawName = cells[nameIndex].replace(/[\s ]+/g, '');
       const targetUser = sortedUsers.find(u => u.name.replace(/[\s ]+/g, '') === rawName);
       if (!targetUser) return;
 
-      // 名前の直後のセルから日付順に読み込み
       const shiftValues = cells.slice(nameIndex + 1);
       shiftValues.forEach((val, idx) => {
         const dayNum = idx + 1;
@@ -275,7 +283,7 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
     bulkImportShifts(newShifts);
     setShowImportModal(false);
     setImportText('');
-    alert('シフトデータを正しく取り込みました！');
+    alert('シフトデータを取り込みました！');
   };
 
   return (
@@ -1356,7 +1364,6 @@ export default function App() {
     localStorage.removeItem('google_user');
   };
 
-  // 指定されたカスタム順序（userOrder）に基づいてユーザー一覧を並べ替え
   const allUserKeys = Object.keys(users);
   const sortedUsers = [...allUserKeys].sort((a, b) => {
     const indexA = userOrder.indexOf(a);
