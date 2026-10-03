@@ -21,7 +21,8 @@ import {
   Settings, 
   Table, 
   UserPlus,
-  ShieldAlert
+  ShieldAlert,
+  FileSpreadsheet
 } from 'lucide-react';
 
 // Google OAuth Client ID
@@ -191,12 +192,14 @@ const CalendarView = ({ currentDate, changeMonth, teamData, onDateClick, current
   );
 };
 
-const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateUserShift, sortedUsers, roleNames, roles }) => {
+const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateUserShift, sortedUsers, roleNames, roles, bulkImportShifts, updateShiftTypes }) => {
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
   const daysInMonth = getDaysInMonth(year, month);
   
   const [editingCell, setEditingCell] = useState(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importText, setImportText] = useState('');
 
   const days = [];
   for(let i=1; i<=daysInMonth; i++) {
@@ -204,14 +207,92 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
      days.push({ day: i, dateStr: formatDate(d), weekDay: DAYS_OF_WEEK[d.getDay()] });
   }
 
+  const handleImportExecute = () => {
+    if (!importText.trim()) return;
+
+    const lines = importText.trim().split('\n').map(l => l.split('\t'));
+    let newShifts = { ...teamData.shifts };
+    let newShiftTypes = [...shiftTypes];
+
+    const findOrCreateShiftId = (symbol) => {
+      const sym = symbol.trim();
+      if (!sym) return 'none';
+      if (sym === '／') return 'off';
+      if (sym === 'A') {
+        const early = newShiftTypes.find(s => s.label === '早番' || s.id === 'early');
+        return early ? early.id : 'early';
+      }
+      if (sym === '有') sym = '有休';
+
+      let matched = newShiftTypes.find(s => s.label === sym);
+      if (matched) return matched.id;
+
+      // 未登録の記号（夏休など）は自動生成
+      const newId = `shift_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+      const colors = [
+        'bg-green-100 text-green-700 border-green-200',
+        'bg-teal-100 text-teal-700 border-teal-200',
+        'bg-pink-100 text-pink-700 border-pink-200',
+        'bg-amber-100 text-amber-700 border-amber-200'
+      ];
+      const newShiftObj = {
+        id: newId,
+        label: sym,
+        color: colors[newShiftTypes.length % colors.length]
+      };
+
+      const noneShift = newShiftTypes.find(s => s.id === 'none') || { id: 'none', label: '未定', color: 'bg-gray-100 text-gray-500 border-gray-200' };
+      const filtered = newShiftTypes.filter(s => s.id !== 'none');
+      newShiftTypes = [...filtered, newShiftObj, noneShift];
+      return newId;
+    };
+
+    lines.forEach(line => {
+      if (line.length < 2) return;
+      const rawName = line[0].replace(/[\s ]+/g, ''); // 空白除去
+      if (!rawName || rawName === '1' || rawName === '木' || rawName.includes('月')) return;
+
+      // 登録済みメンバーから名前が一致する人を検索
+      const targetUser = sortedUsers.find(u => u.name.replace(/[\s ]+/g, '') === rawName);
+      if (!targetUser) return;
+
+      const shiftValues = line.slice(1);
+      shiftValues.forEach((val, index) => {
+        const dayNum = index + 1;
+        if (dayNum > daysInMonth) return;
+
+        const dateStr = formatDate(new Date(year, month, dayNum));
+        const shiftId = findOrCreateShiftId(val);
+
+        if (!newShifts[dateStr]) newShifts[dateStr] = {};
+        newShifts[dateStr][targetUser.id] = shiftId;
+      });
+    });
+
+    updateShiftTypes(newShiftTypes);
+    bulkImportShifts(newShifts);
+    setShowImportModal(false);
+    setImportText('');
+    alert('シフトデータを取り込みました！');
+  };
+
   return (
     <div className="flex-1 flex flex-col bg-gray-50 pb-[68px] overflow-hidden relative">
       <div className="bg-white px-4 py-3 flex items-center justify-between sticky top-0 z-20 border-b border-gray-100 shadow-sm">
         <button onClick={() => changeMonth(-1)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors active:scale-95"><ChevronLeft className="w-5 h-5"/></button>
-        <h2 className="text-base font-bold text-purple-700 flex items-center">
-          <Table className="w-5 h-5 mr-1.5"/>
-          シフト管理 ({year}年{month + 1}月)
-        </h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-base font-bold text-purple-700 flex items-center">
+            <Table className="w-5 h-5 mr-1.5"/>
+            シフト管理 ({year}年{month + 1}月)
+          </h2>
+          <button 
+            onClick={() => setShowImportModal(true)}
+            className="bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 active:scale-95 transition-all border border-purple-200"
+          >
+            <FileSpreadsheet size={15}/>
+            一括取り込み
+          </button>
+        </div>
         <button onClick={() => changeMonth(1)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors active:scale-95"><ChevronRight className="w-5 h-5"/></button>
       </div>
       
@@ -286,6 +367,42 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
                   {s.label}
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white w-full max-w-2xl rounded-2xl p-6 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-bold text-gray-800 text-base flex items-center gap-2">
+                <FileSpreadsheet className="text-purple-600"/>
+                シフトデータ一括貼り付け ({year}年{month + 1}月分)
+              </h3>
+              <button onClick={() => setShowImportModal(false)} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-full"><X size={20}/></button>
+            </div>
+
+            <p className="text-xs text-gray-500">
+              Excelやスプレッドシートから、名前と1日〜31日のシフト記号をそのままコピーして下に貼り付けてください。
+            </p>
+
+            <textarea
+              value={importText}
+              onChange={(e) => setImportText(e.target.value)}
+              placeholder={`竹添 三剛\tA\t／\tA\tA...\n高橋 信次\tA\t／\t／\tA...`}
+              className="w-full h-48 border border-gray-300 rounded-xl p-3 text-xs font-mono focus:ring-2 focus:ring-purple-500 outline-none resize-none bg-gray-50"
+            />
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button onClick={() => setShowImportModal(false)} className="px-4 py-2 text-xs font-bold text-gray-500 hover:bg-gray-100 rounded-xl">キャンセル</button>
+              <button 
+                onClick={handleImportExecute}
+                disabled={!importText.trim()}
+                className="px-5 py-2 text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-xl shadow-md disabled:opacity-50 active:scale-95 transition-all"
+              >
+                一括取り込みを実行
+              </button>
             </div>
           </div>
         </div>
@@ -1307,6 +1424,15 @@ export default function App() {
                   saveToFirestore({ teamData: updatedTeamData });
                 }} 
                 sortedUsers={sortedUsers}
+                bulkImportShifts={(newShifts) => {
+                  const updatedTeamData = { ...teamData, shifts: newShifts };
+                  setTeamData(updatedTeamData);
+                  saveToFirestore({ teamData: updatedTeamData });
+                }}
+                updateShiftTypes={(newShiftTypes) => {
+                  setShiftTypes(newShiftTypes);
+                  saveToFirestore({ shiftTypes: newShiftTypes });
+                }}
               />
             ) : activeTab === 'daily' ? (
               <DailyDetailView 
