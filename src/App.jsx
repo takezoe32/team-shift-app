@@ -1053,17 +1053,78 @@ export default function App() {
   const [teamData, setTeamData] = useState({ shifts: {}, tasks: {} });
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Firestore Realtime Listener
+  const saveToFirestore = async (updates) => {
+    try {
+      const docRef = doc(db, 'app_data', 'shared_state');
+      await setDoc(docRef, updates, { merge: true });
+    } catch (error) {
+      console.error("Firestore Save Error:", error);
+    }
+  };
+
+  // Firestore Realtime Listener & メールアドレス重複自動統合クリーナー
   useEffect(() => {
     const docRef = doc(db, 'app_data', 'shared_state');
     const unsubscribe = onSnapshot(docRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data();
-        if (data.teamData) setTeamData(data.teamData);
+        let currentUsers = data.users || {};
+        let currentShifts = data.teamData?.shifts || {};
+        let currentTasks = data.teamData?.tasks || {};
+
+        // メールアドレスが重複している同一人物を自動検出して統合
+        const emailMap = {};
+        let needsCleanup = false;
+
+        Object.values(currentUsers).forEach(u => {
+          if (u.email) {
+            const em = u.email.toLowerCase();
+            if (!emailMap[em]) {
+              emailMap[em] = [];
+            }
+            emailMap[em].push(u);
+          }
+        });
+
+        // 重複があった場合、ダミー枠（IDがu_から始まる）から正式GoogleID枠へシフトを引き継いで統合
+        Object.keys(emailMap).forEach(em => {
+          const list = emailMap[em];
+          if (list.length > 1) {
+            needsCleanup = true;
+            const realUser = list.find(u => !u.id.startsWith('u_')) || list[0];
+            const dummyUsers = list.filter(u => u.id !== realUser.id);
+
+            dummyUsers.forEach(dUser => {
+              // シフトデータの移行
+              Object.keys(currentShifts).forEach(dStr => {
+                if (currentShifts[dStr]?.[dUser.id]) {
+                  currentShifts[dStr][realUser.id] = currentShifts[dStr][dUser.id];
+                  delete currentShifts[dStr][dUser.id];
+                }
+              });
+              // タスクデータの移行
+              Object.keys(currentTasks).forEach(dStr => {
+                if (currentTasks[dStr]?.[dUser.id]) {
+                  currentTasks[dStr][realUser.id] = [...(currentTasks[dStr][realUser.id] || []), ...currentTasks[dStr][dUser.id]];
+                  delete currentTasks[dStr][dUser.id];
+                }
+              });
+              // ダミーユーザー削除
+              delete currentUsers[dUser.id];
+            });
+          }
+        });
+
+        if (needsCleanup) {
+          const updatedTeamData = { shifts: currentShifts, tasks: currentTasks };
+          saveToFirestore({ users: currentUsers, teamData: updatedTeamData });
+        }
+
+        setUsers(currentUsers);
+        if (data.teamData) setTeamData({ shifts: currentShifts, tasks: currentTasks });
         if (data.shiftTypes) setShiftTypes(data.shiftTypes);
         if (data.roles) setRoles(data.roles);
         if (data.roleNames) setRoleNames(data.roleNames);
-        if (data.users) setUsers(data.users);
       }
       setIsLoaded(true);
     }, (error) => {
@@ -1079,20 +1140,10 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  const saveToFirestore = async (updates) => {
-    try {
-      const docRef = doc(db, 'app_data', 'shared_state');
-      await setDoc(docRef, updates, { merge: true });
-    } catch (error) {
-      console.error("Firestore Save Error:", error);
-    }
-  };
-
   const deleteUserCompletely = (uid) => {
     const updatedUsers = { ...users };
     delete updatedUsers[uid];
 
-    // 各日付のシフトから対象ユーザーを完全消去
     const updatedShifts = { ...teamData.shifts };
     Object.keys(updatedShifts).forEach(dateStr => {
       if (updatedShifts[dateStr] && updatedShifts[dateStr][uid]) {
@@ -1100,7 +1151,6 @@ export default function App() {
       }
     });
 
-    // 各日付のタスクから対象ユーザーを完全消去
     const updatedTasks = { ...teamData.tasks };
     Object.keys(updatedTasks).forEach(dateStr => {
       if (updatedTasks[dateStr] && updatedTasks[dateStr][uid]) {
@@ -1123,7 +1173,6 @@ export default function App() {
     const userList = Object.values(users);
     const isFirstUser = userList.length === 0;
 
-    // ホワイトリスト判定
     const matchedUser = userList.find(u => (u.email || '').toLowerCase() === loginEmail);
 
     if (!isFirstUser && !matchedUser) {
