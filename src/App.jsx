@@ -211,12 +211,25 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
   const handleImportExecute = () => {
     if (!importText.trim()) return;
 
-    const rawLines = importText.trim().split('\n');
+    const rawLines = importText.replace(/\r\n?/g, '\n').split('\n');
     let newShifts = { ...teamData.shifts };
     let newShiftTypes = [...shiftTypes];
 
+    const normalizeName = (value) =>
+      String(value || '').replace(/[\s　]+/g, '').trim();
+
+    const findUserInCells = (cells) => {
+      for (let i = 0; i < cells.length; i++) {
+        const cellName = normalizeName(cells[i]);
+        if (!cellName) continue;
+        const found = sortedUsers.find(u => normalizeName(u.name) === cellName);
+        if (found) return { user: found, nameCellIndex: i };
+      }
+      return null;
+    };
+
     const findOrCreateShiftId = (symbol) => {
-      let sym = (symbol || '').trim();
+      const sym = String(symbol || '').trim();
       if (!sym) return 'none';
 
       let targetLabel = sym;
@@ -247,67 +260,63 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
         color: colors[newShiftTypes.length % colors.length]
       };
 
-      const noneShift = newShiftTypes.find(s => s.id === 'none') || { id: 'none', label: '未定', color: 'bg-gray-100 text-gray-500 border-gray-200' };
+      const noneShift = newShiftTypes.find(s => s.id === 'none') || {
+        id: 'none',
+        label: '未定',
+        color: 'bg-gray-100 text-gray-500 border-gray-200'
+      };
       const filtered = newShiftTypes.filter(s => s.id !== 'none');
       newShiftTypes = [...filtered, newShiftObj, noneShift];
       return newId;
     };
 
     rawLines.forEach(lineStr => {
-      // Markdown表（| 名前 | A | ／ | ... |）にも対応
-      // 外側の | を除去し、| を区切りとして扱う。
-      // 通常のExcel/スプレッドシート貼り付け（タブ区切り）も従来どおり対応。
-      const isMarkdownTableRow = lineStr.trim().startsWith('|') && lineStr.trim().endsWith('|');
-      let tokens;
+      const line = lineStr.trim();
+      if (!line) return;
 
-      if (isMarkdownTableRow) {
-        tokens = lineStr
-          .trim()
-          .replace(/^\|/, '')
-          .replace(/\|$/, '')
-          .split('|')
-          .map(token => token.trim())
-          .filter(Boolean);
-      } else if (lineStr.includes('\t')) {
-        // Excel/スプレッドシートからの貼り付けはタブを列境界として扱い、
-        // 「竹添　三剛」のような名前内部のスペースは保持する。
-        tokens = lineStr.split('\t').map(token => token.trim()).filter(Boolean);
+      let cells;
+      let isMarkdownTable = line.includes('|');
+
+      if (isMarkdownTable) {
+        // Markdown表: | 名前 | A | ／ | ... |
+        cells = line.split('|').map(cell => cell.trim());
+        // 先頭・末尾の空セルを除去
+        if (cells[0] === '') cells.shift();
+        if (cells[cells.length - 1] === '') cells.pop();
+
+        // Markdownの区切り行（| ----- | :-: | ... |）は無視
+        if (cells.length === 0 || cells.every(cell => /^:?-{3,}:?$/.test(cell))) return;
+      } else if (line.includes('\t')) {
+        // Excel / スプレッドシートのタブ区切り
+        cells = line.split('\t').map(cell => cell.trim());
       } else {
-        // タブがない旧形式にも対応。
-        tokens = lineStr.split(/[\s]+/).filter(Boolean);
+        // 名前に空白が入る可能性があるため、登録済みメンバー名を先に探す
+        const normalizedLine = normalizeName(line);
+        const foundUser = sortedUsers.find(u => normalizedLine.includes(normalizeName(u.name)));
+        if (!foundUser) return;
+
+        const namePattern = String(foundUser.name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const nameMatch = line.match(new RegExp(namePattern));
+        if (!nameMatch) return;
+
+        const rest = line.slice(nameMatch.index + nameMatch[0].length).trim();
+        cells = [foundUser.name, ...rest.split(/\s+/).filter(Boolean)];
       }
 
-      // Markdownの見出し・区切り行は無視
-      if (tokens.length < 2 || tokens.every(token => /^:?-{3,}:?$/.test(token))) return;
+      const match = findUserInCells(cells);
+      if (!match) return;
 
-      let matchedUser = null;
-      let userTokenIndex = -1;
+      const shiftValues = cells.slice(match.nameCellIndex + 1);
 
-      // 行の中からメンバー名を特定
-      for (let i = 0; i < tokens.length; i++) {
-        const tokenClean = tokens[i].replace(/[\s ]+/g, '');
-        const found = sortedUsers.find(u => u.name.replace(/[\s ]+/g, '') === tokenClean);
-        if (found) {
-          matchedUser = found;
-          userTokenIndex = i;
-          break;
-        }
-      }
-
-      if (!matchedUser || userTokenIndex === -1) return;
-
-      // 名前の直後のトークン群を1日〜31日目としてダイレクトに読み込み
-      const shiftTokens = tokens.slice(userTokenIndex + 1);
-
-      for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
-        const val = shiftTokens[dayNum - 1];
-        if (!val) break;
+      for (let dayNum = 1; dayNum <= daysInMonth && dayNum <= shiftValues.length; dayNum++) {
+        const val = shiftValues[dayNum - 1];
+        if (!String(val || '').trim()) continue;
 
         const dateStr = formatDate(new Date(year, month, dayNum));
         const shiftId = findOrCreateShiftId(val);
 
         if (!newShifts[dateStr]) newShifts[dateStr] = {};
-        newShifts[dateStr][matchedUser.id] = shiftId;
+        newShifts[dateStr][match.user.id] = shiftId;
       }
     });
 
