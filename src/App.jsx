@@ -523,7 +523,7 @@ const DailyDetailView = ({
   );
 };
 
-const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, currentUserUid, roleNames, updateRoleNames, roles, updateRoles }) => {
+const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, currentUserUid, roleNames, updateRoleNames, roles, updateRoles, deleteUserCompletely }) => {
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserRole, setNewUserRole] = useState(Object.keys(roles)[0] || 'staff');
@@ -625,10 +625,8 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
 
   const handleDeleteUser = (uid) => {
     if(uid === currentUserUid) return;
-    if(window.confirm(`${users[uid].name}さんを削除してもよろしいですか？`)) {
-      const newUsers = { ...users };
-      delete newUsers[uid];
-      updateUsers(newUsers);
+    if(window.confirm(`${users[uid].name}さんを完全に削除してもよろしいですか？`)) {
+      deleteUserCompletely(uid);
     }
   };
 
@@ -1090,6 +1088,33 @@ export default function App() {
     }
   };
 
+  const deleteUserCompletely = (uid) => {
+    const updatedUsers = { ...users };
+    delete updatedUsers[uid];
+
+    // 各日付のシフトから対象ユーザーを完全消去
+    const updatedShifts = { ...teamData.shifts };
+    Object.keys(updatedShifts).forEach(dateStr => {
+      if (updatedShifts[dateStr] && updatedShifts[dateStr][uid]) {
+        delete updatedShifts[dateStr][uid];
+      }
+    });
+
+    // 各日付のタスクから対象ユーザーを完全消去
+    const updatedTasks = { ...teamData.tasks };
+    Object.keys(updatedTasks).forEach(dateStr => {
+      if (updatedTasks[dateStr] && updatedTasks[dateStr][uid]) {
+        delete updatedTasks[dateStr][uid];
+      }
+    });
+
+    const updatedTeamData = { shifts: updatedShifts, tasks: updatedTasks };
+
+    setUsers(updatedUsers);
+    setTeamData(updatedTeamData);
+    saveToFirestore({ users: updatedUsers, teamData: updatedTeamData });
+  };
+
   const handleGoogleLoginSuccess = (credentialResponse) => {
     setAuthError('');
     const decoded = jwtDecode(credentialResponse.credential);
@@ -1098,7 +1123,7 @@ export default function App() {
     const userList = Object.values(users);
     const isFirstUser = userList.length === 0;
 
-    // ホワイトリスト判定: 登録済みユーザーの中に一致するメールアドレスがあるか検索
+    // ホワイトリスト判定
     const matchedUser = userList.find(u => (u.email || '').toLowerCase() === loginEmail);
 
     if (!isFirstUser && !matchedUser) {
@@ -1109,7 +1134,6 @@ export default function App() {
     let loggedInUser;
 
     if (isFirstUser) {
-      // 最初のユーザーは自動で管理者登録
       loggedInUser = {
         id: decoded.sub,
         name: decoded.name,
@@ -1122,7 +1146,6 @@ export default function App() {
       setUsers(updatedUsers);
       saveToFirestore({ users: updatedUsers });
     } else {
-      // 既存ユーザーID（シフトデータ等に繋がっているID）をそのまま維持
       loggedInUser = {
         ...matchedUser,
         picture: decoded.picture
@@ -1259,6 +1282,7 @@ export default function App() {
                 currentUserUid={currentUser.id} 
                 roleNames={roleNames} 
                 roles={roles} 
+                deleteUserCompletely={deleteUserCompletely}
                 updateRoleNames={(newRoleNames) => {
                   setRoleNames(newRoleNames);
                   saveToFirestore({ roleNames: newRoleNames });
