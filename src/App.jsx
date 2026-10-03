@@ -85,7 +85,7 @@ const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
 const checkCanManageShift = (user, roles) => {
   if (!user || !roles[user.role]) return false;
   const level = roles[user.role].level || 0;
-  return level >= 30 || !!user.canManageShift;
+  return level >= 40 || !!user.canManageShift;
 };
 
 const LoginScreen = ({ onGoogleLoginSuccess }) => (
@@ -440,7 +440,7 @@ const DailyDetailView = ({
             {myCurrentShift === 'none' && <span className="text-xs text-gray-400">未定</span>}
           </div>
           {!canManageShift && (
-            <p className="text-[10px] text-gray-400 mt-1">※シフトの編集は管理者・エリアMおよび権限を付与されたメンバーのみ可能です</p>
+            <p className="text-[10px] text-gray-400 mt-1">※シフトの編集は管理者および権限を付与されたメンバーのみ可能です</p>
           )}
         </div>
 
@@ -897,8 +897,9 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
                   </div>
                   
                   <div className="flex items-center gap-2 shrink-0">
-                    {roleLevel < 30 && (
-                      <label className="flex items-center gap-1 cursor-pointer" title="管理者・エリアM以外のユーザーにシフト操作権限を付与">
+                    {/* 最上位の管理者(Lv.40)以外の全メンバーに管理チェックボックスを表示 */}
+                    {roleLevel < 40 && (
+                      <label className="flex items-center gap-1 cursor-pointer" title="管理者以外のユーザーにシフト操作権限を付与">
                         <input 
                           type="checkbox" 
                           checked={u.canManageShift || false}
@@ -1072,7 +1073,6 @@ export default function App() {
         <LoginScreen onGoogleLoginSuccess={handleGoogleLoginSuccess} />
       ) : (
         <div className="min-h-screen bg-gray-100 flex flex-col w-full">
-          {/* PCでは画面横幅全体（100%）に広がるコンテナ */}
           <div className="w-full flex-1 flex flex-col bg-white min-h-screen relative overflow-hidden font-sans">
             
             <div className="bg-white border-b border-gray-100 pt-safe px-6 py-3 flex justify-between items-center z-20 shrink-0 shadow-sm">
