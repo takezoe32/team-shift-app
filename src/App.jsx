@@ -273,7 +273,6 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
 
       if (!foundUser || nameCellIndex === -1) return;
 
-      // 名前の直後にあるセルから、空文字セルも含めて1日〜31日として順番に割り当てる（ズレ完全排除）
       const shiftValues = rawCells.slice(nameCellIndex + 1);
 
       let dayCounter = 1;
