@@ -216,7 +216,7 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
     let newShiftTypes = [...shiftTypes];
 
     const findOrCreateShiftId = (symbol) => {
-      let sym = symbol.trim();
+      let sym = (symbol || '').trim();
       if (!sym) return 'none';
 
       let targetLabel = sym;
@@ -254,18 +254,16 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
     };
 
     rawLines.forEach(lineStr => {
-      // タブ区切りで分割
       const rawCells = lineStr.split('\t');
       
-      // 名前の行かどうかの判定：登録されているメンバーの名前が含まれているセルを検索
       let foundUser = null;
       let nameCellIndex = -1;
 
       for (let i = 0; i < rawCells.length; i++) {
-        const cellCleanIndex = rawCells[i].replace(/[\s ]+/g, '');
-        if (!cellCleanIndex) continue;
+        const cellClean = rawCells[i].replace(/[\s ]+/g, '');
+        if (!cellClean) continue;
 
-        const matched = sortedUsers.find(u => u.name.replace(/[\s ]+/g, '') === cellCleanIndex);
+        const matched = sortedUsers.find(u => u.name.replace(/[\s ]+/g, '') === cellClean);
         if (matched) {
           foundUser = matched;
           nameCellIndex = i;
@@ -275,7 +273,7 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
 
       if (!foundUser || nameCellIndex === -1) return;
 
-      // 名前の「直後のセル」から順番に1日〜31日分として取得（空白の先頭列を完全スキップ）
+      // 名前の直後にあるセルから、空文字セルも含めて1日〜31日として順番に割り当てる（ズレ完全排除）
       const shiftValues = rawCells.slice(nameCellIndex + 1);
 
       let dayCounter = 1;
