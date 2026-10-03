@@ -211,11 +211,11 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
         <table className="w-full text-xs border-collapse">
           <thead className="sticky top-0 z-10 bg-gray-50 shadow-sm">
             <tr>
-              <th className="sticky left-0 bg-gray-50 z-20 min-w-[80px] p-2 border-r border-b border-gray-200 text-left font-bold text-gray-600 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+              <th className="sticky left-0 bg-gray-50 z-20 min-w-[100px] p-2 border-r border-b border-gray-200 text-left font-bold text-gray-600 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                 メンバー
               </th>
               {days.map(d => (
-                <th key={d.day} className={`min-w-[40px] p-1.5 border-r border-b border-gray-200 text-center font-medium ${d.weekDay === '日' ? 'text-red-500' : d.weekDay === '土' ? 'text-blue-500' : 'text-gray-500'}`}>
+                <th key={d.day} className={`min-w-[48px] p-1.5 border-r border-b border-gray-200 text-center font-medium ${d.weekDay === '日' ? 'text-red-500' : d.weekDay === '土' ? 'text-blue-500' : 'text-gray-500'}`}>
                   {d.day}<br/>
                   <span className="text-[10px]">{d.weekDay}</span>
                 </th>
@@ -256,8 +256,8 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
       </div>
       
       {editingCell && (
-        <div className="absolute inset-0 z-30 flex flex-col justify-end bg-black/30 backdrop-blur-[1px]">
-          <div className="bg-white rounded-t-3xl p-5 shadow-[0_-10px_40px_rgba(0,0,0,0.1)] transition-transform animate-in slide-in-from-bottom-full duration-200">
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40 backdrop-blur-[1px] p-0 md:p-4">
+          <div className="bg-white w-full md:max-w-md rounded-t-3xl md:rounded-2xl p-5 shadow-2xl transition-transform animate-in slide-in-from-bottom duration-200">
             <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-3">
               <div>
                 <h3 className="font-bold text-gray-800 text-sm">{editingCell.userName} のシフト</h3>
@@ -473,7 +473,7 @@ const DailyDetailView = ({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 relative">
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 relative max-w-3xl mx-auto w-full">
           {selectedDateTasks.length === 0 ? (
             <div className="text-center py-10">
               <ClipboardList className="mx-auto text-gray-300 mb-3" size={48}/>
@@ -488,7 +488,7 @@ const DailyDetailView = ({
       </div>
 
       <div className="bg-white p-3 border-t border-gray-200 shrink-0 sticky bottom-0 z-10 pb-safe shadow-[0_-4px_10px_rgba(0,0,0,0.03)]">
-        <div className="flex gap-2">
+        <div className="flex gap-2 max-w-3xl mx-auto">
           <textarea
             value={newTaskText}
             onChange={(e) => setNewTaskText(e.target.value)}
@@ -661,7 +661,7 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
           設定
         </h2>
       </div>
-      <div className="p-4 space-y-6">
+      <div className="p-4 space-y-6 max-w-3xl mx-auto">
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
           <div className="flex justify-between items-center border-b pb-2 mb-4">
             <h3 className="font-bold text-gray-700 text-sm flex items-center">
@@ -944,8 +944,8 @@ const BottomNav = ({ activeTab, setActiveTab, currentUser, roles }) => {
   const canManageSettings = userRoleObj.level >= 30;
 
   return (
-    <div className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-200 pb-safe z-20 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
-      <div className="flex h-[68px]">
+    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 pb-safe z-20 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+      <div className="flex h-[68px] w-full max-w-full">
         <button 
           onClick={() => setActiveTab('calendar')}
           className={`flex-1 flex flex-col items-center justify-center space-y-1.5 relative ${activeTab === 'calendar' ? 'text-blue-600' : 'text-gray-400'}`}
@@ -1064,32 +1064,33 @@ export default function App() {
     localStorage.removeItem('google_user');
   };
 
-  if (!isLoaded) return <div className="flex-1 bg-gray-50 flex items-center justify-center">Loading...</div>;
+  if (!isLoaded) return <div className="flex-1 bg-gray-50 flex items-center justify-center min-h-screen">Loading...</div>;
 
   return (
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
       {!currentUser ? (
         <LoginScreen onGoogleLoginSuccess={handleGoogleLoginSuccess} />
       ) : (
-        <div className="flex justify-center bg-gray-900 min-h-screen">
-          <div className="w-full max-w-md bg-white h-screen flex flex-col shadow-2xl relative overflow-hidden font-sans">
+        <div className="min-h-screen bg-gray-100 flex flex-col w-full">
+          {/* PCでは画面横幅全体（100%）に広がるコンテナ */}
+          <div className="w-full flex-1 flex flex-col bg-white min-h-screen relative overflow-hidden font-sans">
             
-            <div className="bg-white border-b border-gray-100 pt-safe px-4 py-3 flex justify-between items-center z-20 shrink-0">
+            <div className="bg-white border-b border-gray-100 pt-safe px-6 py-3 flex justify-between items-center z-20 shrink-0 shadow-sm">
               <div>
-                <h1 className="text-lg font-black text-gray-900 tracking-tight flex items-center">
-                  TeamShift <span className="text-blue-600 ml-1">App</span>
+                <h1 className="text-xl font-black text-gray-900 tracking-tight flex items-center">
+                  TeamShift <span className="text-blue-600 ml-1.5">App</span>
                 </h1>
               </div>
               <button 
                 onClick={handleLogout}
-                className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-full transition-colors active:scale-95"
+                className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 px-3.5 py-1.5 rounded-full transition-colors active:scale-95"
               >
-                <img src={currentUser.picture} alt="Avatar" className="w-5 h-5 rounded-full" />
+                <img src={currentUser.picture} alt="Avatar" className="w-6 h-6 rounded-full" />
                 <div className="text-right flex items-center">
-                  <span className="text-[10px] font-bold text-gray-500 mr-1">{roleNames[currentUser.role] || roles[currentUser.role]?.name || '管理者'}</span>
+                  <span className="text-xs font-bold text-gray-500 mr-1.5">{roleNames[currentUser.role] || roles[currentUser.role]?.name || '管理者'}</span>
                   <span className="text-xs font-bold text-gray-800">{currentUser.name.split(' ')[0]}</span>
                 </div>
-                <LogOut className="text-gray-500" size={14}/>
+                <LogOut className="text-gray-500 ml-1" size={15}/>
               </button>
             </div>
 
