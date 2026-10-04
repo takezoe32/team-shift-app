@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { GoogleOAuthProvider, GoogleLogin, googleLogout } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode';
 import { initializeApp } from 'firebase/app';
@@ -1619,6 +1619,18 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
   const [editingPartnerName, setEditingPartnerName] = useState(null);
   const [editingPartnerNameValue, setEditingPartnerNameValue] = useState('');
   const [editingItemId, setEditingItemId] = useState(null);
+  const partnerPageRef = useRef(null);
+
+  // iPhone Safariでは、DOMレイアウト変更と同時にwindow.scrollTo()を実行すると
+  // 画面が一瞬白くなるWebKitの既知問題があるため、編集開始後に
+  // パートナーページ自身のスクロール位置を直接戻す。
+  useEffect(() => {
+    if (!editingItemId) return;
+    const frame = requestAnimationFrame(() => {
+      if (partnerPageRef.current) partnerPageRef.current.scrollTop = 0;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [editingItemId]);
 
   const handleStartEditPartnerName = (name) => {
     setEditingPartnerName(name);
@@ -1705,7 +1717,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
   });
 
   return (
-    <div className="flex-1 bg-gray-50 pb-[68px] overflow-y-auto">
+    <div ref={partnerPageRef} className="flex-1 bg-gray-50 pb-[68px] overflow-y-auto">
       <div className="bg-white px-4 py-3 border-b border-gray-100 shadow-sm">
         <h2 className="text-base font-bold text-gray-800">パートナー</h2>
         <p className="text-[10px] text-gray-400 mt-0.5">日付・時間・内容を登録できます</p>
@@ -1941,7 +1953,6 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
                     setContent(item.content || '');
                     setNewPartnerImage(null);
                     setNewPartnerImagePreview('');
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
                   }} className="p-1 text-gray-300 hover:text-blue-500 rounded-md" title="編集"><Edit2 size={14}/></button>
                   <button type="button" onClick={() => deletePartnerItem(item.id)}
                     className="p-1 text-gray-300 hover:text-red-500 rounded-md" title="削除"><Trash2 size={14}/></button>
