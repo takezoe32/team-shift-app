@@ -147,6 +147,7 @@ const LoginScreen = ({ onGoogleLoginSuccess, authError }) => (
 
 const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, onDateClick, currentUserUid, shiftTypes, sortedUsers, updateTaskAssignees }) => {
   const [detailTask, setDetailTask] = useState(null);
+  const [detailPartner, setDetailPartner] = useState(null);
   const [selectedAssigneeIds, setSelectedAssigneeIds] = useState([]);
   const [isUpdatingAssignees, setIsUpdatingAssignees] = useState(false);
   const [assigneeUpdateMessage, setAssigneeUpdateMessage] = useState('');
@@ -231,12 +232,12 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, onDate
               ) : (
                 <div className="space-y-1.5">
                   {activePartnerItems.map(item => (
-                    <div key={item.id} className="w-full bg-white border border-blue-100 rounded-md px-2 py-1.5 flex items-center gap-2 min-w-0">
+                    <button type="button" key={item.id} onClick={() => setDetailPartner(item)} className="w-full bg-white border border-blue-100 rounded-md px-2 py-1.5 flex items-center gap-2 min-w-0 text-left hover:border-blue-300 active:bg-blue-50">
                       <span className="shrink-0 text-[8px] font-bold text-blue-600 whitespace-nowrap">{item.date ? item.date.replace(/-/g, '/') : '日付なし'}</span>
                       <span className="shrink-0 text-[8px] text-gray-500 whitespace-nowrap">{item.time || '--:--'}</span>
                       <span className="shrink-0 max-w-24 text-[9px] font-bold text-purple-600 truncate">{item.partnerName || 'パートナー未設定'}</span>
-                      <span className="min-w-0 flex-1 text-[10px] text-gray-700 truncate" title={item.content || ''}>{item.content || ''}</span>
-                    </div>
+                      <span className="min-w-0 flex-1 text-[10px] text-gray-700 truncate" title={item.content || ''}>{(item.content || '').split(/\r?\n/)[0] || ''}</span>
+                    </button>
                   ))}
                 </div>
               )}
@@ -303,6 +304,29 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, onDate
             </div>
           );
         })()}
+        {detailPartner && (
+          <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={() => setDetailPartner(null)}>
+            <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="px-4 py-3 border-b flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-bold text-gray-800">パートナータスク詳細</div>
+                  <div className="text-[10px] text-gray-400">{detailPartner.date?.replace(/-/g, '/')} {detailPartner.time || '--:--'}</div>
+                </div>
+                <button onClick={() => setDetailPartner(null)} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-full"><X size={18}/></button>
+              </div>
+              <div className="p-4 space-y-3">
+                <div className="text-xs font-bold text-purple-600">{detailPartner.partnerName || 'パートナー未設定'}</div>
+                <div className="text-sm text-gray-700 whitespace-pre-wrap break-words">{detailPartner.content || ''}</div>
+                {detailPartner.imageUrl && (
+                  <img src={detailPartner.imageUrl} alt={detailPartner.imageName || '添付画像'} className="max-h-72 w-auto max-w-full rounded-lg border object-contain mx-auto" />
+                )}
+                {detailPartner.completedAt && (
+                  <div className="text-[10px] text-green-600 bg-green-50 rounded-lg p-2">終了 {new Date(detailPartner.completedAt).toLocaleString('ja-JP')}</div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
         {detailTask && (
           <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={() => setDetailTask(null)}>
             <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
@@ -1531,6 +1555,8 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
   const [partnerName, setPartnerName] = useState('');
   const [content, setContent] = useState('');
   const [newPartnerName, setNewPartnerName] = useState('');
+  const [newPartnerImage, setNewPartnerImage] = useState(null);
+  const [newPartnerImagePreview, setNewPartnerImagePreview] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isAddingName, setIsAddingName] = useState(false);
   const [editingItemId, setEditingItemId] = useState(null);
@@ -1543,7 +1569,18 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
 
     setIsSaving(true);
     try {
-      const itemData = { partnerName, date, time, content: content.trim() };
+      let imageUrl = editingItemId ? ((partnerItems || []).find(item => item.id === editingItemId)?.imageUrl || '') : '';
+      let imageName = editingItemId ? ((partnerItems || []).find(item => item.id === editingItemId)?.imageName || '') : '';
+      let imagePublicId = editingItemId ? ((partnerItems || []).find(item => item.id === editingItemId)?.imagePublicId || '') : '';
+      let imageBytes = editingItemId ? Number((partnerItems || []).find(item => item.id === editingItemId)?.imageBytes || 0) : 0;
+      if (newPartnerImage) {
+        const result = await uploadTaskImageToCloudinary(newPartnerImage);
+        imageUrl = result.secure_url || result.url || '';
+        imageName = newPartnerImage.name;
+        imagePublicId = result.public_id || '';
+        imageBytes = Number(result.bytes || newPartnerImage.size || 0);
+      }
+      const itemData = { partnerName, date, time, content: content.trim(), ...(imageUrl ? { imageUrl, imageName, imagePublicId, imageBytes, imageUploadedAt: new Date().toISOString() } : {}) };
       if (editingItemId) {
         await updatePartnerItem(editingItemId, itemData);
         setEditingItemId(null);
@@ -1559,6 +1596,8 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
       setContent('');
       setTime('');
       setPartnerName('');
+      setNewPartnerImage(null);
+      setNewPartnerImagePreview('');
     } catch (error) {
       console.error('パートナー予定の保存に失敗しました:', error);
       alert('保存に失敗しました。もう一度お試しください。');
@@ -1680,6 +1719,24 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
           </div>
 
           <label className="block">
+            <span className="text-[10px] font-bold text-gray-500">画像</span>
+            <div className="mt-1 flex items-center gap-2">
+              <input type="file" accept="image/*" capture="environment" onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                if (!file.type.startsWith('image/')) { alert('画像ファイルを選択してください。'); return; }
+                if (file.size > 10 * 1024 * 1024) { alert('画像は10MB以下にしてください。'); return; }
+                setNewPartnerImage(file);
+                setNewPartnerImagePreview(URL.createObjectURL(file));
+              }} className="block w-full text-xs text-gray-500" />
+            </div>
+            {newPartnerImagePreview && <img src={newPartnerImagePreview} alt="添付画像プレビュー" className="mt-2 h-24 w-auto rounded-lg object-cover border border-gray-200" />}
+            {!newPartnerImagePreview && editingItemId && (partnerItems || []).find(item => item.id === editingItemId)?.imageUrl && (
+              <p className="text-[9px] text-gray-400 mt-1">保存済み画像があります。新しい画像を選ぶと差し替えます。</p>
+            )}
+          </label>
+
+          <label className="block">
             <span className="text-[10px] font-bold text-gray-500">内容</span>
             <textarea
               value={content}
@@ -1728,6 +1785,8 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
                     setDate(item.date || formatDate(new Date()));
                     setTime(item.time || '');
                     setContent(item.content || '');
+                    setNewPartnerImage(null);
+                    setNewPartnerImagePreview('');
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }} className="p-1 text-gray-300 hover:text-blue-500 rounded-md" title="編集"><Edit2 size={14}/></button>
                   <button type="button" onClick={() => deletePartnerItem(item.id)}
