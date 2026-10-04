@@ -120,7 +120,7 @@ const LoginScreen = ({ onGoogleLoginSuccess, authError }) => (
         <Users size={32}/>
       </div>
       <div>
-        <h1 className="text-xl font-bold text-gray-800">管理課App</h1>
+        <h1 className="text-sm sm:text-base font-black text-gray-800 tracking-tight whitespace-nowrap">LUIGANS OPERATIONS CREW <span className="text-blue-600">App</span></h1>
         <p className="text-sm text-gray-500 mt-2">Google アカウントでログインしてください</p>
       </div>
 
