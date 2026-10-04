@@ -1559,6 +1559,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
   const [newPartnerImagePreview, setNewPartnerImagePreview] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isAddingName, setIsAddingName] = useState(false);
+  const [showPartnerNameMenu, setShowPartnerNameMenu] = useState(false);
   const [editingPartnerName, setEditingPartnerName] = useState(null);
   const [editingPartnerNameValue, setEditingPartnerNameValue] = useState('');
   const [editingItemId, setEditingItemId] = useState(null);
@@ -1566,6 +1567,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
   const handleStartEditPartnerName = (name) => {
     setEditingPartnerName(name);
     setEditingPartnerNameValue(name);
+    setShowPartnerNameMenu(true);
   };
 
   const handleSavePartnerName = async () => {
@@ -1581,6 +1583,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
     if (partnerName === oldName) setPartnerName(newName);
     setEditingPartnerName(null);
     setEditingPartnerNameValue('');
+    setShowPartnerNameMenu(false);
   };
 
   const handleDeletePartnerName = async (name) => {
@@ -1591,6 +1594,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
       setEditingPartnerName(null);
       setEditingPartnerNameValue('');
     }
+    setShowPartnerNameMenu(false);
   };
 
   const handleSave = async () => {
@@ -1741,22 +1745,58 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
             )}
           </div>
 
-          <label className="block">
+          <div className="block">
             <span className="text-[10px] font-bold text-gray-500">パートナー名</span>
-            <select
-              value={partnerName}
-              onChange={(e) => setPartnerName(e.target.value)}
-              className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-400"
-            >
-              <option value="">パートナー名を選択</option>
-              {(partnerNames || []).map(name => (
-                <option key={name} value={name}>{name}</option>
-              ))}
-            </select>
-            {(partnerNames || []).length === 0 && (
-              <p className="text-[9px] text-gray-400 mt-1">上の欄からパートナー名を追加してください。</p>
-            )}
-          </label>
+            <div className="relative mt-1">
+              <button
+                type="button"
+                onClick={() => setShowPartnerNameMenu(v => !v)}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-400 text-left flex items-center justify-between"
+              >
+                <span className={partnerName ? 'text-gray-800' : 'text-gray-400'}>
+                  {partnerName || 'パートナー名を選択'}
+                </span>
+                <ChevronDown size={16} className="text-gray-400" />
+              </button>
+              {showPartnerNameMenu && (
+                <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                  {(partnerNames || []).length === 0 ? (
+                    <div className="px-3 py-3 text-[9px] text-gray-400">上の欄からパートナー名を追加してください。</div>
+                  ) : (
+                    <div className="max-h-56 overflow-y-auto">
+                      {(partnerNames || []).map(name => (
+                        <div key={name} className="flex items-center gap-1 border-b border-gray-100 last:border-b-0">
+                          <button
+                            type="button"
+                            onClick={() => { setPartnerName(name); setShowPartnerNameMenu(false); }}
+                            className="min-w-0 flex-1 text-left px-3 py-2.5 text-sm text-gray-700 hover:bg-blue-50 truncate"
+                          >
+                            {name}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleStartEditPartnerName(name)}
+                            className="shrink-0 p-2 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-md"
+                            title="パートナー名を編集"
+                          >
+                            <Edit2 size={14}/>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeletePartnerName(name)}
+                            className="shrink-0 p-2 mr-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-md"
+                            title="パートナー名を削除"
+                          >
+                            <Trash2 size={14}/>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
 
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
