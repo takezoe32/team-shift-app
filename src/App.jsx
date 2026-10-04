@@ -496,7 +496,7 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
 
       <div className="bg-white border-t border-gray-200 px-4 py-3 shrink-0">
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-bold text-gray-700">シフト変更ログ（${month + 1}月分）</h3>
+          <h3 className="text-sm font-bold text-gray-700">シフト変更ログ（{month + 1}月分）</h3>
           <span className="text-[10px] text-gray-400">{monthLogs.length}件</span>
         </div>
         {monthLogs.length === 0 ? (
