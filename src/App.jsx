@@ -315,7 +315,7 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, onDate
                       key={`${task.taskDate}-${task.ownerUid}-${task.id}`}
                       onClick={() => { setDetailTask(task); setSelectedAssigneeIds(task.assigneeIds); setAssigneeUpdateMessage(''); }}
                       className="w-full text-left bg-white border rounded-md px-2 py-1.5 flex items-center gap-2 min-w-0 hover:border-purple-300 active:bg-purple-50">
-                      {task.taskDate !== formatDate(new Date()) && <span className="shrink-0 text-[8px] font-bold text-red-500 whitespace-nowrap">対象日 {task.taskDate.replace(/-/g, '/')}</span>}
+                      {task.taskDate < formatDate(new Date()) && <span className="shrink-0 text-[8px] font-bold text-red-500 whitespace-nowrap">対象日 {task.taskDate.replace(/-/g, '/')}</span>}
                       <span className="min-w-0 flex-1 text-[10px] truncate text-gray-700" title={task.text || '画像タスク'}>{task.text || '📷 画像タスク'}</span>
                       <span className="shrink-0 max-w-32 text-[8px] text-purple-600 truncate" title={task.assigneeIds.map(id => sortedUsers.find(u => u.id === id)?.name || '').filter(Boolean).join('・')}>担当: {task.assigneeIds.map(id => sortedUsers.find(u => u.id === id)?.name?.split(' ')[0] || '').filter(Boolean).join('・')}</span>
                       <span className="shrink-0 text-[8px] text-gray-400 whitespace-nowrap">開始 {task.createdAt ? new Date(task.createdAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '--:--'}</span>
