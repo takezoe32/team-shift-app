@@ -158,6 +158,9 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, onDate
   const [selectedAssigneeIds, setSelectedAssigneeIds] = useState([]);
   const [isUpdatingAssignees, setIsUpdatingAssignees] = useState(false);
   const [assigneeUpdateMessage, setAssigneeUpdateMessage] = useState('');
+  // カレンダー上で選択した日付。日付を押しても日別タスク画面へ移動せず、
+  // カレンダー下のタスク一覧だけを切り替える。
+  const [selectedCalendarTaskDate, setSelectedCalendarTaskDate] = useState(formatDate(new Date()));
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
   const daysInMonth = getDaysInMonth(year, month);
@@ -179,7 +182,7 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, onDate
     days.push(
       <div 
         key={i} 
-        onClick={() => onDateClick(dateStr)}
+        onClick={() => setSelectedCalendarTaskDate(dateStr)}
         className="p-1 border-b border-r border-gray-100 min-h-[80px] cursor-pointer active:bg-gray-50 flex flex-col transition-colors"
       >
         <div className="flex justify-between items-start p-1">
@@ -256,53 +259,37 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, onDate
           );
         })()}
         {(() => {
-          const todayStr = formatDate(new Date());
-          const activeTodayTasks = (sortedUsers || []).flatMap(member =>
-            ((teamData.tasks[todayStr] || {})[member.id] || [])
+          // 選択した日付の未終了タスクだけを表示する。
+          const selectedTasks = (sortedUsers || []).flatMap(member =>
+            ((teamData.tasks[selectedCalendarTaskDate] || {})[member.id] || [])
               .filter(task => !task.completed)
               .map(task => ({
                 ...task,
                 ownerUid: member.id,
                 member,
-                taskDate: todayStr,
+                taskDate: selectedCalendarTaskDate,
                 assigneeIds: Array.isArray(task.assigneeIds) && task.assigneeIds.length ? task.assigneeIds : [member.id]
               }))
           );
 
-          const overdueTasks = Object.keys(teamData.tasks || {})
-            .filter(dateStr => dateStr < todayStr)
-            .sort()
-            .flatMap(dateStr =>
-              (sortedUsers || []).flatMap(member =>
-                ((teamData.tasks[dateStr] || {})[member.id] || [])
-                  .filter(task => !task.completed)
-                  .map(task => ({
-                    ...task,
-                    ownerUid: member.id,
-                    member,
-                    taskDate: dateStr,
-                    assigneeIds: Array.isArray(task.assigneeIds) && task.assigneeIds.length ? task.assigneeIds : [member.id]
-                  }))
-              )
-            );
-
-          const allTodayTasks = [...overdueTasks, ...activeTodayTasks];
+          const selectedDateLabel = selectedCalendarTaskDate.replace(/-/g, '/');
 
           return (
             <div className="border-t border-gray-200 bg-gray-50 px-3 py-2">
               <div className="flex items-center justify-between mb-1.5">
                 <h3 className="text-[11px] font-bold text-gray-600">本日のタスク（全員）</h3>
-                <span className="text-[9px] text-gray-400">{todayStr.replace(/-/g, '/')}・{allTodayTasks.length}件</span>
+                <span className="text-[9px] text-gray-400">{selectedDateLabel}・{selectedTasks.length}件</span>
               </div>
-              {allTodayTasks.length === 0 ? (
-                <p className="text-[10px] text-gray-400 py-1">現在のタスクはありません</p>
+              {selectedTasks.length === 0 ? (
+                <p className="text-[10px] text-gray-400 py-1">この日の未終了タスクはありません</p>
               ) : (
                 <div className="space-y-1.5">
-                  {allTodayTasks.map(task => (
+                  {selectedTasks.map(task => (
                     <button type="button"
+                      key={`${task.taskDate}-${task.ownerUid}-${task.id}`}
                       onClick={() => { setDetailTask(task); setSelectedAssigneeIds(task.assigneeIds); setAssigneeUpdateMessage(''); }}
                       className="w-full text-left bg-white border rounded-md px-2 py-1.5 flex items-center gap-2 min-w-0 hover:border-purple-300 active:bg-purple-50">
-                      {task.taskDate !== todayStr && <span className="shrink-0 text-[8px] font-bold text-red-500 whitespace-nowrap">未終了 {task.taskDate.replace(/-/g, '/')}</span>}
+                      {task.taskDate !== formatDate(new Date()) && <span className="shrink-0 text-[8px] font-bold text-red-500 whitespace-nowrap">対象日 {task.taskDate.replace(/-/g, '/')}</span>}
                       <span className="min-w-0 flex-1 text-[10px] truncate text-gray-700" title={task.text || '画像タスク'}>{task.text || '📷 画像タスク'}</span>
                       <span className="shrink-0 max-w-32 text-[8px] text-purple-600 truncate" title={task.assigneeIds.map(id => sortedUsers.find(u => u.id === id)?.name || '').filter(Boolean).join('・')}>担当: {task.assigneeIds.map(id => sortedUsers.find(u => u.id === id)?.name?.split(' ')[0] || '').filter(Boolean).join('・')}</span>
                       <span className="shrink-0 text-[8px] text-gray-400 whitespace-nowrap">開始 {task.createdAt ? new Date(task.createdAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '--:--'}</span>
