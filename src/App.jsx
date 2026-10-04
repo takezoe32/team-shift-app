@@ -1699,7 +1699,9 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
       }
       const itemData = { partnerName, date, time, content: content.trim(), ...(imageUrl ? { imageUrl, imageName, imagePublicId, imageBytes, imageUploadedAt: new Date().toISOString() } : {}) };
       if (editingItemId) {
-        await updatePartnerItem(editingItemId, itemData);
+        const savedItemId = editingItemId;
+        await updatePartnerItem(savedItemId, itemData);
+        // 保存が成功してから編集状態を解除する。
         setEditingItemId(null);
       } else {
         await addPartnerItem({
@@ -1742,7 +1744,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
             <div className="flex items-center justify-between bg-blue-50 border border-blue-100 rounded-xl px-3 py-2">
               <span className="text-[10px] font-bold text-blue-700">パートナー予定を編集中</span>
               <button type="button" onClick={() => {
-                setEditingItemId(null); setPartnerName(''); setDate(formatDate(new Date())); setTime(''); setContent('');
+                setEditingItemId(null); setPartnerName(''); setDate(formatDate(new Date())); setTimeHour(''); setTimeMinute(''); setContent(''); setNewPartnerImage(null); setNewPartnerImagePreview('');
               }} className="text-[10px] font-bold text-gray-500 hover:text-gray-800">キャンセル</button>
             </div>
           )}
@@ -2464,9 +2466,21 @@ export default function App() {
                 partnerItems={partnerItems}
                 partnerNames={partnerNames}
                 updatePartnerItem={async (itemId, changes) => {
-                  const updatedItems = partnerItems.map(item => item.id === itemId ? { ...item, ...changes } : item);
+                  const currentItem = (partnerItems || []).find(item => item.id === itemId);
+                  if (!currentItem) throw new Error('対象のパートナー予定が見つかりません。');
+
+                  const updatedItem = { ...currentItem, ...changes };
+                  const updatedItems = (partnerItems || []).map(item =>
+                    item.id === itemId ? updatedItem : item
+                  );
+
+                  // パートナー予定の編集はpartnerItems全体を読み直して保存せず、
+                  // 現在の配列を1回だけ更新する。別PCの古いsnapshotによる
+                  // 上書きや、編集直後の再描画競合を減らす。
                   setPartnerItems(updatedItems);
-                  await saveToFirestore({ partnerItems: updatedItems });
+                  await updateDoc(doc(db, 'app_data', 'shared_state'), {
+                    partnerItems: updatedItems
+                  });
                 }}
                 togglePartnerItem={async (itemId) => {
                   const now = new Date().toISOString();
