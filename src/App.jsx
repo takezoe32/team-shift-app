@@ -245,10 +245,37 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, onDate
         })()}
         {(() => {
           const todayStr = formatDate(new Date());
-          const todayTasksByUser = teamData.tasks[todayStr] || {};
-          const allTodayTasks = (sortedUsers || []).flatMap(member =>
-            (todayTasksByUser[member.id] || []).map(task => ({ ...task, ownerUid: member.id, member, assigneeIds: Array.isArray(task.assigneeIds) && task.assigneeIds.length ? task.assigneeIds : [member.id] }))
+          const activeTodayTasks = (sortedUsers || []).flatMap(member =>
+            ((teamData.tasks[todayStr] || {})[member.id] || [])
+              .filter(task => !task.completed)
+              .map(task => ({
+                ...task,
+                ownerUid: member.id,
+                member,
+                taskDate: todayStr,
+                assigneeIds: Array.isArray(task.assigneeIds) && task.assigneeIds.length ? task.assigneeIds : [member.id]
+              }))
           );
+
+          const overdueTasks = Object.keys(teamData.tasks || {})
+            .filter(dateStr => dateStr < todayStr)
+            .sort()
+            .flatMap(dateStr =>
+              (sortedUsers || []).flatMap(member =>
+                ((teamData.tasks[dateStr] || {})[member.id] || [])
+                  .filter(task => !task.completed)
+                  .map(task => ({
+                    ...task,
+                    ownerUid: member.id,
+                    member,
+                    taskDate: dateStr,
+                    assigneeIds: Array.isArray(task.assigneeIds) && task.assigneeIds.length ? task.assigneeIds : [member.id]
+                  }))
+              )
+            );
+
+          const allTodayTasks = [...overdueTasks, ...activeTodayTasks];
+
           return (
             <div className="border-t border-gray-200 bg-gray-50 px-3 py-2">
               <div className="flex items-center justify-between mb-1.5">
@@ -263,12 +290,14 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, onDate
                     <button type="button"
                       onClick={() => { setDetailTask(task); setSelectedAssigneeIds(task.assigneeIds); setAssigneeUpdateMessage(''); }}
                       className="w-full text-left bg-white border rounded-md px-2 py-1.5 flex items-center gap-2 min-w-0 hover:border-purple-300 active:bg-purple-50">
-<span className={`min-w-0 flex-1 text-[10px] truncate ${task.completed ? 'text-gray-400 line-through' : 'text-gray-700'}`} title={task.text || '画像タスク'}>{task.text || '📷 画像タスク'}</span>
+                      {task.taskDate !== todayStr && <span className="shrink-0 text-[8px] font-bold text-red-500 whitespace-nowrap">未終了 {task.taskDate.replace(/-/g, '/')}</span>}
+                      <span className="min-w-0 flex-1 text-[10px] truncate text-gray-700" title={task.text || '画像タスク'}>{task.text || '📷 画像タスク'}</span>
                       <span className="shrink-0 max-w-32 text-[8px] text-purple-600 truncate" title={task.assigneeIds.map(id => sortedUsers.find(u => u.id === id)?.name || '').filter(Boolean).join('・')}>担当: {task.assigneeIds.map(id => sortedUsers.find(u => u.id === id)?.name?.split(' ')[0] || '').filter(Boolean).join('・')}</span>
                       <span className="shrink-0 text-[8px] text-gray-400 whitespace-nowrap">開始 {task.createdAt ? new Date(task.createdAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '--:--'}</span>
-                      <span className={`shrink-0 text-[8px] whitespace-nowrap ${task.completedAt ? 'text-green-600' : 'text-gray-300'}`}>終了 {task.completedAt ? new Date(task.completedAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '--:--'}</span>
-                      <span className={`shrink-0 w-1.5 h-1.5 rounded-full ${task.completed ? 'bg-green-500' : 'bg-orange-400'}`} />
-                    </button>                  ))}
+                      <span className="shrink-0 text-[8px] text-gray-300 whitespace-nowrap">終了 --:--</span>
+                      <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-orange-400" />
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
@@ -303,7 +332,7 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, onDate
                     setIsUpdatingAssignees(true);
                     setAssigneeUpdateMessage('');
                     try {
-                      await updateTaskAssignees(detailTask.ownerUid, formatDate(new Date()), detailTask.id, selectedAssigneeIds);
+                      await updateTaskAssignees(detailTask.ownerUid, detailTask.taskDate || formatDate(new Date()), detailTask.id, selectedAssigneeIds);
                       setDetailTask(prev => prev ? { ...prev, assigneeIds: [...selectedAssigneeIds] } : prev);
                       setAssigneeUpdateMessage('担当者を更新しました');
                     } catch (error) {
