@@ -607,6 +607,7 @@ const DailyDetailView = ({
   const currentUser = users[currentUserUid];
   const viewUser = users[selectedUserUid] || currentUser;
   const canManageShift = checkCanManageShift(currentUser, roles);
+  const isAdmin = !!currentUser && !!roles[currentUser.role] && (roles[currentUser.role].level || 0) >= 40;
   const selectedDateTasks = Object.entries(teamData.tasks[selectedDate] || {}).flatMap(([ownerUid, tasks]) => (tasks || []).filter(task => { const assignees = Array.isArray(task.assigneeIds) && task.assigneeIds.length ? task.assigneeIds : [ownerUid]; return assignees.includes(selectedUserUid); }).map(task => ({ ...task, ownerUid, taskDate: selectedDate })));
   const unfinishedPastTasks = Object.keys(teamData.tasks || {})
     .filter(dateStr => dateStr < selectedDate)
@@ -680,6 +681,7 @@ const DailyDetailView = ({
     const [isUpdatingAssignees, setIsUpdatingAssignees] = useState(false);
     const [assigneeUpdateMessage, setAssigneeUpdateMessage] = useState('');
     const isSelected = selectedTaskId === task.id;
+    const canEditTask = isAdmin || task.ownerUid === currentUserUid;
 
     const handleAssigneeChange = (uid) => {
       setSelectedAssigneeIds(prev =>
@@ -749,6 +751,7 @@ const DailyDetailView = ({
       >
         <button
           type="button"
+          disabled={!canEditTask}
           aria-label={task.completed ? 'タスクを未完了に戻す' : 'タスクを完了にする'}
           onPointerDown={(e) => e.stopPropagation()}
           onClick={async (e) => {
@@ -2761,19 +2764,45 @@ export default function App() {
                 selectedDate={selectedDate} 
                 shiftTypes={shiftTypes} 
                 teamData={teamData} 
-                toggleTask={(dateStr, targetUid, taskId) => {
+                toggleTask={async (dateStr, targetUid, taskId) => {
+                  const dayTasks = teamData.tasks[dateStr] || {};
+                  const ownerTasks = dayTasks[targetUid] || [];
+                  const targetTask = ownerTasks.find(t => t.id === taskId);
+                  if (!targetTask) return;
+
+                  const targetUserRole = roles[currentUser.role];
+                  const isAdmin = !!targetUserRole && (targetUserRole.level || 0) >= 40;
+                  if (!isAdmin && targetUid !== currentUser.id) {
+                    alert('他のメンバーが担当するタスクは操作できません。');
+                    return;
+                  }
+
+                  const nextCompleted = !targetTask.completed;
+                  const updatedOwnerTasks = ownerTasks.map(t =>
+                    t.id === taskId
+                      ? { ...t, completed: nextCompleted, completedAt: nextCompleted ? new Date().toISOString() : null }
+                      : t
+                  );
                   const updatedTeamData = {
                     ...teamData,
-                    tasks: { ...teamData.tasks, [dateStr]: { ...(teamData.tasks[dateStr] || {}), [targetUid]: (teamData.tasks[dateStr]?.[targetUid] || []).map(t => t.id === taskId
-                            ? {
-                                ...t,
-                                completed: !t.completed,
-                                completedAt: !t.completed ? new Date().toISOString() : null
-                              }
-                            : t) } }
+                    tasks: {
+                      ...teamData.tasks,
+                      [dateStr]: {
+                        ...dayTasks,
+                        [targetUid]: updatedOwnerTasks
+                      }
+                    }
                   };
                   setTeamData(updatedTeamData);
-                  saveToFirestore({ teamData: updatedTeamData });
+                  try {
+                    await updateDoc(doc(db, 'app_data', 'shared_state'), {
+                      ['teamData.tasks.' + dateStr + '.' + targetUid]: updatedOwnerTasks
+                    });
+                  } catch (error) {
+                    console.error('タスク完了状態の保存に失敗しました:', error);
+                    setTeamData(teamData);
+                    alert('タスクの完了状態を保存できませんでした。もう一度お試しください。');
+                  }
                 }} 
                 updateTaskText={(dateStr, targetUid, taskId, newText) => {
                   const updatedTeamData = {
