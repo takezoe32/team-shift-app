@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { GoogleOAuthProvider, GoogleLogin, googleLogout } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { getFirestore, doc, onSnapshot, setDoc, updateDoc, deleteField } from 'firebase/firestore';
 
 import { 
   Calendar as CalendarIcon, 
@@ -2068,6 +2068,9 @@ export default function App() {
   const [partnerItems, setPartnerItems] = useState([]);
   const [partnerNames, setPartnerNames] = useState([]);
   const [isLoaded, setIsLoaded] = useState(false);
+  // Firestoreから古いsnapshotが返ってきても、直前に設定画面で変更した
+  // ユーザー名を一瞬でも古い名前へ戻さないためのローカル上書き。
+  const pendingUserOverridesRef = useRef({});
 
   const saveToFirestore = async (updates) => {
     try {
@@ -2075,6 +2078,38 @@ export default function App() {
       await setDoc(docRef, updates, { merge: true });
     } catch (error) {
       console.error("Firestore Save Error:", error);
+    }
+  };
+
+  // ユーザー情報はusers全体を一括保存しない。
+  // ログイン情報や設定変更が古いusers全体をFirestoreへ書き戻して
+  // 設定した名前を元に戻してしまう競合を防ぐため、変更されたユーザーだけを更新する。
+  const saveUsersToFirestore = async (nextUsers, previousUsers = users) => {
+    try {
+      const docRef = doc(db, 'app_data', 'shared_state');
+      const updates = {};
+      const ids = new Set([
+        ...Object.keys(previousUsers || {}),
+        ...Object.keys(nextUsers || {})
+      ]);
+
+      ids.forEach(id => {
+        const before = previousUsers?.[id];
+        const after = nextUsers?.[id];
+        if (!after) {
+          if (before) updates[`users.${id}`] = deleteField();
+          return;
+        }
+        if (JSON.stringify(before) !== JSON.stringify(after)) {
+          updates[`users.${id}`] = after;
+        }
+      });
+
+      if (Object.keys(updates).length > 0) {
+        await updateDoc(docRef, updates);
+      }
+    } catch (error) {
+      console.error("Firestore User Save Error:", error);
     }
   };
 
@@ -2090,6 +2125,21 @@ export default function App() {
         let currentUserOrder = [...(data.userOrder || [])];
         let currentPartnerItems = Array.isArray(data.partnerItems) ? data.partnerItems : [];
         let currentPartnerNames = Array.isArray(data.partnerNames) ? data.partnerNames : [];
+
+        // 設定画面から直前に変更したユーザー情報を優先する。
+        // 古いsnapshotが後から届いても、画面上の名前が元へ戻らないようにする。
+        Object.entries(pendingUserOverridesRef.current).forEach(([uid, override]) => {
+          if (!currentUsers[uid]) return;
+          const firestoreUser = currentUsers[uid];
+          const sameName = firestoreUser.name === override.name;
+          const sameDisplayName = (firestoreUser.displayName || '') === (override.displayName || '');
+          const sameEmail = (firestoreUser.email || '').trim().toLowerCase() === (override.email || '').trim().toLowerCase();
+          if (sameName && sameDisplayName && sameEmail) {
+            delete pendingUserOverridesRef.current[uid];
+          } else {
+            currentUsers[uid] = { ...firestoreUser, ...override };
+          }
+        });
 
         // 同じメールアドレスの重複ユーザーを自動統合する。
         // 正規ユーザーは userOrder に入っているIDを最優先し、
@@ -2145,15 +2195,48 @@ export default function App() {
             Object.keys(currentTasks).forEach(dStr => {
               const day = currentTasks[dStr];
               if (!day?.[dUser.id]) return;
-              day[realUser.id] = [
-                ...(day[realUser.id] || []),
-                ...day[dUser.id]
-              ];
+
+              const existingTasks = Array.isArray(day[realUser.id]) ? day[realUser.id] : [];
+              const existingIds = new Set(existingTasks.map(task => task?.id).filter(Boolean));
+              const migratedTasks = day[dUser.id].filter(task => {
+                if (!task?.id) return true;
+                if (existingIds.has(task.id)) return false;
+                existingIds.add(task.id);
+                return true;
+              });
+
+              day[realUser.id] = [...existingTasks, ...migratedTasks];
               delete day[dUser.id];
             });
 
             currentUserOrder = currentUserOrder.filter(id => id !== dUser.id);
             delete currentUsers[dUser.id];
+          });
+        });
+
+        // 同じタスクIDが同じ日・同じ担当者に複数保存されていた場合は1件に整理する。
+        // 重複ユーザー統合の再実行で同じタスクが増殖するのを防ぐ。
+        Object.keys(currentTasks).forEach(dStr => {
+          const day = currentTasks[dStr];
+          if (!day || typeof day !== 'object') return;
+
+          Object.keys(day).forEach(uid => {
+            if (!Array.isArray(day[uid])) return;
+            const seenTaskIds = new Set();
+            const dedupedTasks = [];
+            day[uid].forEach(task => {
+              const taskId = task?.id;
+              if (taskId && seenTaskIds.has(taskId)) {
+                needsCleanup = true;
+                return;
+              }
+              if (taskId) seenTaskIds.add(taskId);
+              dedupedTasks.push(task);
+            });
+
+            if (dedupedTasks.length !== day[uid].length) {
+              day[uid] = dedupedTasks;
+            }
           });
         });
 
@@ -2164,8 +2247,13 @@ export default function App() {
 
         if (needsCleanup) {
           const updatedTeamData = { shifts: currentShifts, tasks: currentTasks };
+          // usersは差分だけ更新する。正規ユーザーの名前を古いsnapshotで上書きしない。
+          const usersForCleanup = { ...(data.users || {}) };
+          Object.entries(pendingUserOverridesRef.current).forEach(([uid, override]) => {
+            if (usersForCleanup[uid]) usersForCleanup[uid] = { ...usersForCleanup[uid], ...override };
+          });
+          saveUsersToFirestore(currentUsers, usersForCleanup);
           saveToFirestore({
-            users: currentUsers,
             userOrder: currentUserOrder,
             teamData: updatedTeamData
           });
@@ -2235,7 +2323,8 @@ export default function App() {
     setUsers(updatedUsers);
     setUserOrder(updatedOrder);
     setTeamData(updatedTeamData);
-    saveToFirestore({ users: updatedUsers, userOrder: updatedOrder, teamData: updatedTeamData });
+    saveUsersToFirestore(updatedUsers, users);
+    saveToFirestore({ userOrder: updatedOrder, teamData: updatedTeamData });
   };
 
   const handleGoogleLoginSuccess = (credentialResponse) => {
@@ -2281,7 +2370,8 @@ export default function App() {
       const updatedOrder = [loggedInUser.id];
       setUsers(updatedUsers);
       setUserOrder(updatedOrder);
-      saveToFirestore({ users: updatedUsers, userOrder: updatedOrder });
+      saveUsersToFirestore(updatedUsers, users);
+      saveToFirestore({ userOrder: updatedOrder });
     } else {
       // 同じメールが複数残っていても、userOrderに登録されているIDを優先。
       // これにより古い重複IDで新しいシフトが作られるのを防ぐ。
@@ -2305,7 +2395,7 @@ export default function App() {
         }
       };
       setUsers(updatedUsers);
-      saveToFirestore({ users: updatedUsers });
+      saveUsersToFirestore(updatedUsers, users);
     }
 
     setCurrentUser(loggedInUser);
@@ -2607,8 +2697,22 @@ export default function App() {
                   saveToFirestore({ shiftTypes: newShiftTypes });
                 }} 
                 updateUsers={(newUsers) => {
+                  const previousUsers = users;
+                  Object.keys(newUsers).forEach(uid => {
+                    if (JSON.stringify(previousUsers?.[uid]) !== JSON.stringify(newUsers[uid])) {
+                      pendingUserOverridesRef.current[uid] = newUsers[uid];
+                    }
+                  });
+                  Object.keys(previousUsers || {}).forEach(uid => {
+                    if (!newUsers[uid]) delete pendingUserOverridesRef.current[uid];
+                  });
+
                   setUsers(newUsers);
-                  saveToFirestore({ users: newUsers });
+                  if (currentUser?.id && newUsers[currentUser.id]) {
+                    setCurrentUser(newUsers[currentUser.id]);
+                    localStorage.setItem('google_user', JSON.stringify(newUsers[currentUser.id]));
+                  }
+                  saveUsersToFirestore(newUsers, previousUsers);
                 }} 
                 shiftTypes={shiftTypes} 
                 users={users}
