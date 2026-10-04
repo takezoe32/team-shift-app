@@ -748,13 +748,21 @@ const DailyDetailView = ({
         } flex items-start gap-3`}
       >
         <button
-          onClick={(e) => {
+          type="button"
+          aria-label={task.completed ? 'タスクを未完了に戻す' : 'タスクを完了にする'}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={async (e) => {
+            e.preventDefault();
             e.stopPropagation();
-            toggleTask(task.taskDate || selectedDate, task.ownerUid || selectedUserUid, task.id);
+            const taskDate = task.taskDate || selectedDate;
+            const ownerUid = task.ownerUid || selectedUserUid;
+            try {
+              await toggleTask(taskDate, ownerUid, task.id);
+            } catch (error) {
+              console.error('タスクチェック処理に失敗しました:', error);
+            }
           }}
-          className={`shrink-0 mt-0.5 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
-            task.completed ? 'border-green-500 bg-green-500 text-white' : 'border-gray-300 hover:border-blue-400'
-          }`}
+          className={\`relative z-20 shrink-0 mt-0.5 w-7 h-7 rounded-full border-2 flex items-center justify-center transition-colors cursor-pointer pointer-events-auto touch-manipulation \${task.completed ? 'border-green-500 bg-green-500 text-white' : 'border-gray-300 hover:border-blue-400 active:bg-blue-100'}\`}
         >
           {task.completed && <CheckSquare className="stroke-[3]" size={14}/>} 
         </button>
