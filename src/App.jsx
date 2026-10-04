@@ -2591,7 +2591,7 @@ export default function App() {
                   setTeamData(updatedTeamData);
                   saveToFirestore({ teamData: updatedTeamData });
 
-                  const monthKey = dateStr.slice(0, 7);
+                  const monthKey = dateStr.slice(0, 7).replace('-', '_');
                   const logEntry = {
                     id: \`shiftlog_\${Date.now()}_\${Math.random().toString(36).slice(2, 8)}\`,
                     timestamp: new Date().toISOString(),
