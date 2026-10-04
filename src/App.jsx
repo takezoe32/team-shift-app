@@ -1255,7 +1255,9 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
       ...users,
       [uid]: { 
         ...users[uid], 
+        // この名前がアプリ上の正式名称。Googleプロフィール名では上書きしない。
         name: editingName.trim(),
+        displayName: editingName.trim(),
         email: editingEmail.trim().toLowerCase()
       }
     });
@@ -2122,8 +2124,21 @@ export default function App() {
             Object.keys(currentShifts).forEach(dStr => {
               const day = currentShifts[dStr];
               if (!day?.[dUser.id]) return;
-              // 正規ユーザー側に既に値があれば、それを優先して上書きしない。
-              if (!day[realUser.id]) day[realUser.id] = day[dUser.id];
+              // 「none」は未設定として扱う。
+              // 設定画面側のユーザーに仮の「none」が入っていても、
+              // 旧ユーザー側に実際のシフトがあれば、そのシフトを引き継ぐ。
+              const existingShift = day[realUser.id];
+              const duplicateShift = day[dUser.id];
+              if (
+                existingShift === undefined ||
+                existingShift === null ||
+                existingShift === '' ||
+                existingShift === 'none'
+              ) {
+                if (duplicateShift && duplicateShift !== 'none') {
+                  day[realUser.id] = duplicateShift;
+                }
+              }
               delete day[dUser.id];
             });
 
@@ -2275,12 +2290,20 @@ export default function App() {
         matchedUsers.find(u => !u.id.startsWith('u_')) ||
         matchedUsers[0];
 
+      // ログイン時はGoogleプロフィール名で設定名を上書きしない。
+      // 名前は設定画面で登録・編集した users[].name をそのまま使用する。
       loggedInUser = {
         ...matchedUser,
         picture: decoded.picture
       };
 
-      const updatedUsers = { ...users, [matchedUser.id]: loggedInUser };
+      const updatedUsers = {
+        ...users,
+        [matchedUser.id]: {
+          ...matchedUser,
+          picture: decoded.picture
+        }
+      };
       setUsers(updatedUsers);
       saveToFirestore({ users: updatedUsers });
     }
