@@ -259,17 +259,26 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, onDate
           );
         })()}
         {(() => {
-          // 選択した日付の未終了タスクだけを表示する。
-          const selectedTasks = (sortedUsers || []).flatMap(member =>
-            ((teamData.tasks[selectedCalendarTaskDate] || {})[member.id] || [])
-              .filter(task => !task.completed)
-              .map(task => ({
-                ...task,
-                ownerUid: member.id,
-                member,
-                taskDate: selectedCalendarTaskDate,
-                assigneeIds: Array.isArray(task.assigneeIds) && task.assigneeIds.length ? task.assigneeIds : [member.id]
-              }))
+          // 選択した日付の未終了タスクに加えて、
+          // 本日までに終了できていない過去タスクも必ず表示する。
+          const todayStr = formatDate(new Date());
+          const datesToShow = Array.from(new Set([
+            ...Object.keys(teamData.tasks || {}).filter(dateStr => dateStr < todayStr),
+            selectedCalendarTaskDate
+          ])).sort();
+
+          const selectedTasks = datesToShow.flatMap(taskDate =>
+            (sortedUsers || []).flatMap(member =>
+              ((teamData.tasks[taskDate] || {})[member.id] || [])
+                .filter(task => !task.completed)
+                .map(task => ({
+                  ...task,
+                  ownerUid: member.id,
+                  member,
+                  taskDate,
+                  assigneeIds: Array.isArray(task.assigneeIds) && task.assigneeIds.length ? task.assigneeIds : [member.id]
+                }))
+            )
           );
 
           const selectedDateLabel = selectedCalendarTaskDate.replace(/-/g, '/');
@@ -281,7 +290,7 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, onDate
                 <span className="text-[9px] text-gray-400">{selectedDateLabel}・{selectedTasks.length}件</span>
               </div>
               {selectedTasks.length === 0 ? (
-                <p className="text-[10px] text-gray-400 py-1">この日の未終了タスクはありません</p>
+                <p className="text-[10px] text-gray-400 py-1">本日までに終了していないタスクはありません</p>
               ) : (
                 <div className="space-y-1.5">
                   {selectedTasks.map(task => (
