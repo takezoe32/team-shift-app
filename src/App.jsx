@@ -126,6 +126,11 @@ const checkCanManageShift = (user, roles) => {
   return level >= 40 || !!user.canManageShift;
 };
 
+const checkIsAdmin = (user, roles) => {
+  if (!user || !roles[user.role]) return false;
+  return (roles[user.role].level || 0) >= 40;
+};
+
 const LoginScreen = ({ onGoogleLoginSuccess, authError }) => (
   <div className="flex-1 flex flex-col items-center justify-center bg-gray-50 p-6 min-h-screen">
     <div className="w-full max-w-sm bg-white p-8 rounded-2xl shadow-lg text-center space-y-6">
@@ -222,7 +227,7 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partne
   </div>;
 };
 
-const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateUserShift, sortedUsers, roleNames, roles, bulkImportShifts, updateShiftTypes }) => {
+const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateUserShift, sortedUsers, roleNames, roles, bulkImportShifts, updateShiftTypes, currentUser, shiftLogs }) => {
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
   const daysInMonth = getDaysInMonth(year, month);
@@ -230,6 +235,11 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
   const [editingCell, setEditingCell] = useState(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importText, setImportText] = useState('');
+  const isAdmin = checkIsAdmin(currentUser, roles);
+  const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
+  const monthLogs = Array.isArray(shiftLogs?.[monthKey])
+    ? [...shiftLogs[monthKey]].sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')))
+    : [];
 
   const days = [];
   for(let i=1; i<=daysInMonth; i++) {
@@ -238,6 +248,10 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
   }
 
   const handleImportExecute = () => {
+    if (!isAdmin) {
+      alert('シフトの一括取り込みは管理者のみ実行できます。');
+      return;
+    }
     if (!importText.trim()) return;
 
     const rawLines = importText.replace(/\r\n?/g, '\n').split('\n');
@@ -396,8 +410,17 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
 
     // 現在の親コンポーネントの保存APIをそのまま使い、
     // シフト種類とシフト本体を保存する。
+    let changedCount = 0;
+    importedUsers.forEach(user => {
+      for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
+        const dateStr = formatDate(new Date(year, month, dayNum));
+        const oldShiftId = teamData.shifts[dateStr]?.[user.id] || 'none';
+        const newShiftId = newShifts[dateStr]?.[user.id] || 'none';
+        if (oldShiftId !== newShiftId) changedCount += 1;
+      }
+    });
     updateShiftTypes(newShiftTypes);
-    bulkImportShifts(newShifts);
+    bulkImportShifts(newShifts, changedCount);
     setShowImportModal(false);
     setImportText('');
     alert(`${importedUsers.length}人 × ${daysInMonth}日分のシフトを取り込みました。\n\n${importedUsers.map(u => u.name).join('、')}`);
@@ -413,13 +436,15 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
             <Table className="w-5 h-5 mr-1.5"/>
             シフト管理 ({year}年{month + 1}月)
           </h2>
-          <button 
-            onClick={() => setShowImportModal(true)}
-            className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 active:scale-95 transition-all shadow-sm shrink-0"
-          >
-            <FileSpreadsheet size={16}/>
-            一括取り込み
-          </button>
+          {isAdmin && (
+            <button 
+              onClick={() => setShowImportModal(true)}
+              className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 active:scale-95 transition-all shadow-sm shrink-0"
+            >
+              <FileSpreadsheet size={16}/>
+              一括取り込み
+            </button>
+          )}
         </div>
 
         <button onClick={() => changeMonth(1)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors active:scale-95"><ChevronRight className="w-5 h-5"/></button>
@@ -467,6 +492,37 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
             })}
           </tbody>
         </table>
+      </div>
+
+      <div className="bg-white border-t border-gray-200 px-4 py-3 shrink-0">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-sm font-bold text-gray-700">シフト変更ログ（${month + 1}月分）</h3>
+          <span className="text-[10px] text-gray-400">{monthLogs.length}件</span>
+        </div>
+        {monthLogs.length === 0 ? (
+          <p className="text-[10px] text-gray-400 py-2">この月のシフト変更ログはありません。</p>
+        ) : (
+          <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+            {monthLogs.map((log, index) => {
+              const timestamp = log.timestamp ? new Date(log.timestamp) : null;
+              const timeText = timestamp && !Number.isNaN(timestamp.getTime())
+                ? timestamp.toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                : '--/-- --:--';
+              return (
+                <div key={log.id || `${log.timestamp}-${index}`} className="text-[10px] text-gray-600 bg-gray-50 rounded-lg px-2.5 py-2 border border-gray-100">
+                  <span className="font-bold text-gray-500">{timeText}</span>
+                  <span className="mx-1"> </span>
+                  <span className="font-bold text-gray-800">{log.actorName || '不明なユーザー'}</span>
+                  {log.type === 'bulk' ? (
+                    <span>が{log.monthLabel || `${month + 1}月`}分のシフトを一括取り込み（{log.changedCount || 0}件変更）</span>
+                  ) : (
+                    <span>が{log.targetDate ? log.targetDate.replace(/-/g, '/') : '--'}の{log.targetName || '不明なメンバー'}のシフトを{log.oldLabel || '未定'}→{log.newLabel || '未定'}に変更</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
       
       {editingCell && (
@@ -1939,6 +1995,7 @@ export default function App() {
   const [partnerNames, setPartnerNames] = useState([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [debugLogs, setDebugLogs] = useState([]);
+  const [shiftLogs, setShiftLogs] = useState({});
   const currentUserRef = useRef(null);
   const lastDebugActionRef = useRef('app.loaded');
 
@@ -2031,6 +2088,7 @@ export default function App() {
         let currentPartnerItems = Array.isArray(data.partnerItems) ? data.partnerItems : [];
         let currentPartnerNames = Array.isArray(data.partnerNames) ? data.partnerNames : [];
         let currentDebugLogs = Array.isArray(data.debugLogs) ? data.debugLogs : [];
+        let currentShiftLogs = (data.shiftLogs && typeof data.shiftLogs === 'object') ? data.shiftLogs : {};
 
         // 設定画面から直前に変更したユーザー情報を優先する。
         // 古いsnapshotが後から届いても、画面上の名前が元へ戻らないようにする。
@@ -2171,6 +2229,7 @@ export default function App() {
         setPartnerItems(currentPartnerItems);
         setPartnerNames(currentPartnerNames);
         setDebugLogs(currentDebugLogs);
+        setShiftLogs(currentShiftLogs);
         if (data.shiftTypes) setShiftTypes(data.shiftTypes);
         if (data.roles) setRoles(data.roles);
         if (data.roleNames) setRoleNames(data.roleNames);
@@ -2518,19 +2577,67 @@ export default function App() {
                 roles={roles} 
                 shiftTypes={shiftTypes} 
                 teamData={teamData} 
-                updateUserShift={(dateStr, targetUid, shiftId) => {
+                currentUser={currentUser}
+                shiftLogs={shiftLogs}
+                updateUserShift={async (dateStr, targetUid, shiftId) => {
+                  const oldShiftId = teamData.shifts[dateStr]?.[targetUid] || 'none';
+                  const oldShift = shiftTypes.find(s => s.id === oldShiftId) || shiftTypes.find(s => s.id === 'none');
+                  const newShift = shiftTypes.find(s => s.id === shiftId) || shiftTypes.find(s => s.id === 'none');
+                  if (oldShiftId === shiftId) return;
                   const updatedTeamData = {
                     ...teamData,
                     shifts: { ...teamData.shifts, [dateStr]: { ...(teamData.shifts[dateStr] || {}), [targetUid]: shiftId } }
                   };
                   setTeamData(updatedTeamData);
                   saveToFirestore({ teamData: updatedTeamData });
+
+                  const monthKey = dateStr.slice(0, 7);
+                  const logEntry = {
+                    id: \`shiftlog_\${Date.now()}_\${Math.random().toString(36).slice(2, 8)}\`,
+                    timestamp: new Date().toISOString(),
+                    type: 'manual',
+                    actorUid: currentUser.id,
+                    actorName: currentUser.name || '不明なユーザー',
+                    targetUid,
+                    targetName: users[targetUid]?.name || '不明なメンバー',
+                    targetDate: dateStr,
+                    oldShiftId,
+                    oldLabel: oldShift?.label || '未定',
+                    newShiftId: shiftId,
+                    newLabel: newShift?.label || '未定'
+                  };
+                  const nextLogs = [...(shiftLogs?.[monthKey] || []), logEntry];
+                  setShiftLogs({ ...shiftLogs, [monthKey]: nextLogs });
+                  await updateDoc(doc(db, 'app_data', 'shared_state'), {
+                    [\`shiftLogs.\${monthKey}\`]: arrayUnion(logEntry)
+                  });
                 }} 
                 sortedUsers={sortedUsers}
-                bulkImportShifts={(newShifts) => {
+                bulkImportShifts={async (newShifts, changedCount) => {
+                  if (!checkIsAdmin(currentUser, roles)) {
+                    alert('シフトの一括取り込みは管理者のみ実行できます。');
+                    return false;
+                  }
                   const updatedTeamData = { ...teamData, shifts: newShifts };
                   setTeamData(updatedTeamData);
                   saveToFirestore({ teamData: updatedTeamData });
+                  const monthKey = \`\${currentDate.getFullYear()}-\${String(currentDate.getMonth() + 1).padStart(2, '0')}\`;
+                  const logEntry = {
+                    id: \`shiftlog_\${Date.now()}_\${Math.random().toString(36).slice(2, 8)}\`,
+                    timestamp: new Date().toISOString(),
+                    type: 'bulk',
+                    actorUid: currentUser.id,
+                    actorName: currentUser.name || '不明なユーザー',
+                    monthKey,
+                    monthLabel: \`\${currentDate.getMonth() + 1}月\`,
+                    changedCount: changedCount || 0
+                  };
+                  const nextLogs = [...(shiftLogs?.[monthKey] || []), logEntry];
+                  setShiftLogs({ ...shiftLogs, [monthKey]: nextLogs });
+                  await updateDoc(doc(db, 'app_data', 'shared_state'), {
+                    [\`shiftLogs.\${monthKey}\`]: arrayUnion(logEntry)
+                  });
+                  return true;
                 }}
                 updateShiftTypes={(newShiftTypes) => {
                   setShiftTypes(newShiftTypes);
