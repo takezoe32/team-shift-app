@@ -147,6 +147,8 @@ const LoginScreen = ({ onGoogleLoginSuccess, authError }) => (
 const CalendarView = ({ currentDate, changeMonth, teamData, onDateClick, currentUserUid, shiftTypes, sortedUsers, updateTaskAssignees }) => {
   const [detailTask, setDetailTask] = useState(null);
   const [selectedAssigneeIds, setSelectedAssigneeIds] = useState([]);
+  const [isUpdatingAssignees, setIsUpdatingAssignees] = useState(false);
+  const [assigneeUpdateMessage, setAssigneeUpdateMessage] = useState('');
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
   const daysInMonth = getDaysInMonth(year, month);
@@ -227,10 +229,11 @@ const CalendarView = ({ currentDate, changeMonth, teamData, onDateClick, current
                 <div className="space-y-1.5">
                   {allTodayTasks.map(task => (
                     <button type="button"
-                      onClick={() => { setDetailTask(task); setSelectedAssigneeIds(task.assigneeIds); }}
+                      onClick={() => { setDetailTask(task); setSelectedAssigneeIds(task.assigneeIds); setAssigneeUpdateMessage(''); }}
                       className="w-full text-left bg-white border rounded-md px-2 py-1.5 flex items-center gap-2 min-w-0 hover:border-purple-300 active:bg-purple-50">
                       <span className="shrink-0 text-[10px] font-bold text-purple-600 w-14 truncate" title={task.member.name}>{task.member.name.split(' ')[0]}</span>
                       <span className={`min-w-0 flex-1 text-[10px] truncate ${task.completed ? 'text-gray-400 line-through' : 'text-gray-700'}`} title={task.text || '画像タスク'}>{task.text || '📷 画像タスク'}</span>
+                      <span className="shrink-0 max-w-32 text-[8px] text-purple-600 truncate" title={task.assigneeIds.map(id => sortedUsers.find(u => u.id === id)?.name || '').filter(Boolean).join('・')}>担当: {task.assigneeIds.map(id => sortedUsers.find(u => u.id === id)?.name?.split(' ')[0] || '').filter(Boolean).join('・')}</span>
                       <span className="shrink-0 text-[8px] text-gray-400 whitespace-nowrap">開始 {task.createdAt ? new Date(task.createdAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '--:--'}</span>
                       <span className={`shrink-0 text-[8px] whitespace-nowrap ${task.completedAt ? 'text-green-600' : 'text-gray-300'}`}>終了 {task.completedAt ? new Date(task.completedAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '--:--'}</span>
                       <span className={`shrink-0 w-1.5 h-1.5 rounded-full ${task.completed ? 'bg-green-500' : 'bg-orange-400'}`} />
@@ -261,7 +264,29 @@ const CalendarView = ({ currentDate, changeMonth, teamData, onDateClick, current
                   </div>
                   <p className="text-[9px] text-gray-400 mt-1">1名なら担当変更、2名以上なら共同作業です。</p>
                 </div>
-                <button type="button" disabled={!selectedAssigneeIds.length} onClick={() => { updateTaskAssignees(detailTask.ownerUid, formatDate(new Date()), detailTask.id, selectedAssigneeIds); setDetailTask(prev => prev ? { ...prev, assigneeIds: selectedAssigneeIds } : prev); }} className="w-full py-2.5 rounded-xl bg-purple-600 text-white text-xs font-bold disabled:opacity-40">担当者を更新</button>
+                {assigneeUpdateMessage && <div className="text-[10px] text-green-600 font-bold bg-green-50 border border-green-100 rounded-lg px-2 py-1.5">{assigneeUpdateMessage}</div>}
+                <button
+                  type="button"
+                  disabled={!selectedAssigneeIds.length || isUpdatingAssignees}
+                  onClick={async () => {
+                    setIsUpdatingAssignees(true);
+                    setAssigneeUpdateMessage('');
+                    try {
+                      await updateTaskAssignees(detailTask.ownerUid, formatDate(new Date()), detailTask.id, selectedAssigneeIds);
+                      setDetailTask(prev => prev ? { ...prev, assigneeIds: [...selectedAssigneeIds] } : prev);
+                      setAssigneeUpdateMessage('担当者を更新しました');
+                    } catch (error) {
+                      console.error('担当者更新エラー:', error);
+                      setAssigneeUpdateMessage('担当者の更新に失敗しました。もう一度お試しください。');
+                    } finally {
+                      setIsUpdatingAssignees(false);
+                    }
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-purple-600 text-white text-xs font-bold disabled:opacity-40 flex items-center justify-center gap-1.5"
+                >
+                  {isUpdatingAssignees ? <Loader2 size={15} className="animate-spin"/> : null}
+                  {isUpdatingAssignees ? '更新中…' : '担当者を更新'}
+                </button>
               </div>
             </div>
           </div>
@@ -1706,10 +1731,28 @@ export default function App() {
                 onDateClick={(dateStr) => { setSelectedDate(dateStr); setActiveTab('daily'); }} 
                 shiftTypes={shiftTypes} 
                 teamData={teamData} 
-                updateTaskAssignees={(ownerUid, dateStr, taskId, assigneeIds) => {
-                  const updatedTeamData = { ...teamData, tasks: { ...teamData.tasks, [dateStr]: { ...(teamData.tasks[dateStr] || {}), [ownerUid]: (teamData.tasks[dateStr]?.[ownerUid] || []).map(t => t.id === taskId ? { ...t, assigneeIds } : t) } } };
+                updateTaskAssignees={async (ownerUid, dateStr, taskId, assigneeIds) => {
+                  const dayTasks = teamData.tasks[dateStr] || {};
+                  const ownerTasks = dayTasks[ownerUid] || [];
+                  const targetTask = ownerTasks.find(t => t.id === taskId);
+                  if (!targetTask) throw new Error('対象タスクが見つかりません。');
+
+                  const updatedOwnerTasks = ownerTasks.map(t =>
+                    t.id === taskId ? { ...t, assigneeIds: [...assigneeIds] } : t
+                  );
+                  const updatedTeamData = {
+                    ...teamData,
+                    tasks: {
+                      ...teamData.tasks,
+                      [dateStr]: {
+                        ...dayTasks,
+                        [ownerUid]: updatedOwnerTasks
+                      }
+                    }
+                  };
+
                   setTeamData(updatedTeamData);
-                  saveToFirestore({ teamData: updatedTeamData });
+                  await saveToFirestore({ teamData: updatedTeamData });
                 }}
                 sortedUsers={sortedUsers}
                 users={users}
@@ -1794,10 +1837,28 @@ export default function App() {
                   setTeamData(updatedTeamData);
                   saveToFirestore({ teamData: updatedTeamData });
                 }} 
-                updateTaskAssignees={(ownerUid, dateStr, taskId, assigneeIds) => {
-                  const updatedTeamData = { ...teamData, tasks: { ...teamData.tasks, [dateStr]: { ...(teamData.tasks[dateStr] || {}), [ownerUid]: (teamData.tasks[dateStr]?.[ownerUid] || []).map(t => t.id === taskId ? { ...t, assigneeIds } : t) } } };
+                updateTaskAssignees={async (ownerUid, dateStr, taskId, assigneeIds) => {
+                  const dayTasks = teamData.tasks[dateStr] || {};
+                  const ownerTasks = dayTasks[ownerUid] || [];
+                  const targetTask = ownerTasks.find(t => t.id === taskId);
+                  if (!targetTask) throw new Error('対象タスクが見つかりません。');
+
+                  const updatedOwnerTasks = ownerTasks.map(t =>
+                    t.id === taskId ? { ...t, assigneeIds: [...assigneeIds] } : t
+                  );
+                  const updatedTeamData = {
+                    ...teamData,
+                    tasks: {
+                      ...teamData.tasks,
+                      [dateStr]: {
+                        ...dayTasks,
+                        [ownerUid]: updatedOwnerTasks
+                      }
+                    }
+                  };
+
                   setTeamData(updatedTeamData);
-                  saveToFirestore({ teamData: updatedTeamData });
+                  await saveToFirestore({ teamData: updatedTeamData });
                 }} 
                 roleNames={roleNames} 
                 roles={roles} 
