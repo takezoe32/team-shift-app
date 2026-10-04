@@ -1992,8 +1992,12 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
             disabled={isSaving}
             className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold disabled:opacity-50 flex items-center justify-center gap-2"
           >
-            {isSaving && <Loader2 size={16} className="animate-spin" />}
-            {isSaving ? '保存中…' : (editingItemId ? '変更を保存' : '保存')}
+            <span aria-hidden="true" className="inline-flex w-4 h-4 items-center justify-center">
+              {isSaving ? <Loader2 size={16} className="animate-spin" /> : null}
+            </span>
+            <span translate="no">
+              {isSaving ? '保存中…' : (editingItemId ? '変更を保存' : '保存')}
+            </span>
           </button>
         </div>
 
