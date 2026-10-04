@@ -145,7 +145,7 @@ const LoginScreen = ({ onGoogleLoginSuccess, authError }) => (
   </div>
 );
 
-const CalendarView = ({ currentDate, changeMonth, teamData, onDateClick, currentUserUid, shiftTypes, sortedUsers, updateTaskAssignees }) => {
+const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, onDateClick, currentUserUid, shiftTypes, sortedUsers, updateTaskAssignees }) => {
   const [detailTask, setDetailTask] = useState(null);
   const [selectedAssigneeIds, setSelectedAssigneeIds] = useState([]);
   const [isUpdatingAssignees, setIsUpdatingAssignees] = useState(false);
@@ -212,6 +212,37 @@ const CalendarView = ({ currentDate, changeMonth, teamData, onDateClick, current
         <div className="grid grid-cols-7 border-l border-gray-100">
           {days}
         </div>
+        {(() => {
+          const activePartnerItems = (partnerItems || [])
+            .filter(item => !item.completed)
+            .sort((a, b) => {
+              const ak = `${a.date || ''}T${a.time || '00:00'}`;
+              const bk = `${b.date || ''}T${b.time || '00:00'}`;
+              return ak.localeCompare(bk);
+            });
+          return (
+            <div className="border-t border-gray-200 bg-blue-50/40 px-3 py-2">
+              <div className="flex items-center justify-between mb-1.5">
+                <h3 className="text-[11px] font-bold text-gray-600">パートナータスク</h3>
+                <span className="text-[9px] text-gray-400">{activePartnerItems.length}件</span>
+              </div>
+              {activePartnerItems.length === 0 ? (
+                <p className="text-[10px] text-gray-400 py-1">登録されている未終了のパートナータスクはありません</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {activePartnerItems.map(item => (
+                    <div key={item.id} className="w-full bg-white border border-blue-100 rounded-md px-2 py-1.5 flex items-center gap-2 min-w-0">
+                      <span className="shrink-0 text-[8px] font-bold text-blue-600 whitespace-nowrap">{item.date ? item.date.replace(/-/g, '/') : '日付なし'}</span>
+                      <span className="shrink-0 text-[8px] text-gray-500 whitespace-nowrap">{item.time || '--:--'}</span>
+                      <span className="shrink-0 max-w-24 text-[9px] font-bold text-purple-600 truncate">{item.partnerName || 'パートナー未設定'}</span>
+                      <span className="min-w-0 flex-1 text-[10px] text-gray-700 truncate" title={item.content || ''}>{item.content || ''}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
         {(() => {
           const todayStr = formatDate(new Date());
           const todayTasksByUser = teamData.tasks[todayStr] || {};
@@ -2004,6 +2035,7 @@ export default function App() {
                 onDateClick={(dateStr) => { setSelectedDate(dateStr); setActiveTab('daily'); }} 
                 shiftTypes={shiftTypes} 
                 teamData={teamData} 
+                partnerItems={partnerItems}
                 updateTaskAssignees={async (ownerUid, dateStr, taskId, assigneeIds) => {
                   const dayTasks = teamData.tasks[dateStr] || {};
                   const ownerTasks = dayTasks[ownerUid] || [];
