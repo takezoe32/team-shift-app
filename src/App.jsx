@@ -1607,7 +1607,9 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
 
 const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartnerItem, togglePartnerItem, deletePartnerItem, addPartnerName, updatePartnerName, deletePartnerName }) => {
   const [date, setDate] = useState(formatDate(new Date()));
-  const [time, setTime] = useState('');
+  const [timeHour, setTimeHour] = useState('');
+  const [timeMinute, setTimeMinute] = useState('');
+  const time = timeHour && timeMinute ? `${timeHour}:${timeMinute}` : '';
   const [partnerName, setPartnerName] = useState('');
   const [content, setContent] = useState('');
   const [newPartnerName, setNewPartnerName] = useState('');
@@ -1698,7 +1700,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
         });
       }
       setContent('');
-      setTime('');
+      setTimeHour(''); setTimeMinute('');
       setPartnerName('');
       setNewPartnerImage(null);
       setNewPartnerImagePreview('');
@@ -1849,19 +1851,31 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
             </label>
             <label className="block">
               <span className="text-[10px] font-bold text-gray-500">時間</span>
-              <select
-                value={time}
-                onChange={(e) => setTime(e.target.value)}
-                className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-400"
-              >
-                <option value="">時間を選択</option>
-                {Array.from({ length: 96 }, (_, index) => {
-                  const hour = String(Math.floor(index / 4)).padStart(2, '0');
-                  const minute = String((index % 4) * 15).padStart(2, '0');
-                  const value = `${hour}:${minute}`;
-                  return <option key={value} value={value}>{value}</option>;
-                })}
-              </select>
+              <div className="mt-1 flex items-center gap-2">
+                <select
+                  value={timeHour}
+                  onChange={(e) => setTimeHour(e.target.value)}
+                  className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-400"
+                >
+                  <option value="">時</option>
+                  {Array.from({ length: 24 }, (_, hour) => {
+                    const value = String(hour).padStart(2, '0');
+                    return <option key={value} value={value}>{value}</option>;
+                  })}
+                </select>
+                <span className="text-sm font-bold text-gray-500">時</span>
+                <select
+                  value={timeMinute}
+                  onChange={(e) => setTimeMinute(e.target.value)}
+                  className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-400"
+                >
+                  <option value="">分</option>
+                  {['00', '15', '30', '45'].map(value => (
+                    <option key={value} value={value}>{value}</option>
+                  ))}
+                </select>
+                <span className="text-sm font-bold text-gray-500">分</span>
+              </div>
             </label>
           </div>
 
@@ -1949,7 +1963,9 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
                     setEditingItemId(item.id);
                     setPartnerName(item.partnerName || '');
                     setDate(item.date || formatDate(new Date()));
-                    setTime(item.time || '');
+                    const [editHour, editMinute] = (item.time || '').split(':');
+                    setTimeHour(editHour || '');
+                    setTimeMinute(editMinute || '');
                     setContent(item.content || '');
                     setNewPartnerImage(null);
                     setNewPartnerImagePreview('');
