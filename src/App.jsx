@@ -165,245 +165,61 @@ const LoginScreen = ({ onGoogleLoginSuccess, authError }) => (
   </div>
 );
 
-const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, onDateClick, currentUserUid, shiftTypes, sortedUsers, updateTaskAssignees }) => {
+const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partnerNames, currentUserUid, shiftTypes, sortedUsers, roles, currentUser, updateTaskAssignees, updateTaskText, deleteTask, toggleTask, updatePartnerItem }) => {
   const [detailTask, setDetailTask] = useState(null);
   const [detailPartner, setDetailPartner] = useState(null);
   const [selectedAssigneeIds, setSelectedAssigneeIds] = useState([]);
   const [isUpdatingAssignees, setIsUpdatingAssignees] = useState(false);
   const [assigneeUpdateMessage, setAssigneeUpdateMessage] = useState('');
-  // カレンダー上で選択した日付。日付を押しても日別タスク画面へ移動せず、
-  // カレンダー下のタスク一覧だけを切り替える。
-  const [selectedCalendarTaskDate, setSelectedCalendarTaskDate] = useState(formatDate(new Date()));
-  const year = currentDate.getFullYear();
-  const month = currentDate.getMonth();
-  const daysInMonth = getDaysInMonth(year, month);
-  const firstDayOfWeek = new Date(year, month, 1).getDay();
-
+  const [editingTaskText, setEditingTaskText] = useState('');
+  const [isEditingTask, setIsEditingTask] = useState(false);
+  const [isEditingPartner, setIsEditingPartner] = useState(false);
+  const [partnerEditName, setPartnerEditName] = useState('');
+  const [partnerEditDate, setPartnerEditDate] = useState('');
+  const [partnerEditHour, setPartnerEditHour] = useState('');
+  const [partnerEditMinute, setPartnerEditMinute] = useState('');
+  const [partnerEditContent, setPartnerEditContent] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const isAdmin = currentUser?.role === 'admin' || (roles?.[currentUser?.role]?.level || 0) >= 40;
+  const canEditTask = detailTask && (isAdmin || detailTask.ownerUid === currentUserUid);
+  const todayStr = formatDate(new Date());
+  const [selectedCalendarTaskDate, setSelectedCalendarTaskDate] = useState(todayStr);
+  const year = currentDate.getFullYear(), month = currentDate.getMonth();
+  const daysInMonth = getDaysInMonth(year, month), firstDayOfWeek = new Date(year, month, 1).getDay();
   const days = [];
-  for (let i = 0; i < firstDayOfWeek; i++) {
-    days.push(<div key={`empty-${i}`} className="p-2 border-b border-r border-gray-100 bg-gray-50/50 min-h-[80px]"></div>);
+  for (let i=0;i<firstDayOfWeek;i++) days.push(<div key={`empty-${i}`} className="p-2 border-b border-r border-gray-100 bg-gray-50/50 min-h-[80px]"></div>);
+  for (let i=1;i<=daysInMonth;i++) {
+    const dateStr=formatDate(new Date(year,month,i));
+    const myShiftId=(teamData.shifts[dateStr]||{})[currentUserUid]||'none';
+    const myShift=shiftTypes.find(s=>s.id===myShiftId)||shiftTypes.find(s=>s.id==='none');
+    const hasMyTask=teamData.tasks[dateStr]?.[currentUserUid]?.length>0;
+    days.push(<div key={i} onClick={()=>setSelectedCalendarTaskDate(dateStr)} className="p-1 border-b border-r border-gray-100 min-h-[80px] cursor-pointer active:bg-gray-50 flex flex-col">
+      <div className="flex justify-between items-start p-1"><span className={`text-sm font-bold ${new Date().getDate()===i&&new Date().getMonth()===month?'bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center':'text-gray-700'}`}>{i}</span>{hasMyTask&&<div className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-1.5"></div>}</div>
+      <div className="mt-1 flex-1 px-1">{myShift.id!=='none'&&<div className={`text-[10px] font-bold px-1.5 py-0.5 rounded truncate ${myShift.color}`}>{myShift.label}</div>}</div>
+    </div>);
   }
+  const activePartnerItems=(partnerItems||[]).filter(i=>!i.completed).sort((a,b)=>`${a.date||''}T${a.time||'00:00'}`.localeCompare(`${b.date||''}T${b.time||'00:00'}`));
+  const datesToShow=Array.from(new Set([...Object.keys(teamData.tasks||{}).filter(d=>d<todayStr),selectedCalendarTaskDate])).sort();
+  const selectedTasks=datesToShow.flatMap(taskDate=>(sortedUsers||[]).flatMap(member=>(teamData.tasks[taskDate]?.[member.id]||[]).filter(t=>!t.completed).map(task=>({...task,ownerUid:member.id,member,taskDate,assigneeIds:Array.isArray(task.assigneeIds)&&task.assigneeIds.length?task.assigneeIds:[member.id]}))));
+  const startPartnerEdit=()=>{const [h='',m='']=String(detailPartner?.time||'').split(':');setPartnerEditName(detailPartner?.partnerName||'');setPartnerEditDate(detailPartner?.date||'');setPartnerEditHour(h);setPartnerEditMinute(m);setPartnerEditContent(detailPartner?.content||'');setIsEditingPartner(true);};
+  const savePartnerEdit=async()=>{if(!detailPartner||!updatePartnerItem)return;if(!partnerEditName||!partnerEditDate||!partnerEditHour||!partnerEditMinute||!partnerEditContent.trim()){alert('パートナー名・日付・時間・内容を入力してください。');return;}setIsSaving(true);try{const changes={partnerName:partnerEditName,date:partnerEditDate,time:`${partnerEditHour}:${partnerEditMinute}`,content:partnerEditContent.trim()};await updatePartnerItem(detailPartner.id,changes);setDetailPartner(p=>p?{...p,...changes}:p);setIsEditingPartner(false);}catch(e){alert('パートナータスクの更新に失敗しました。');}finally{setIsSaving(false);}};
+  const saveTaskEdit=async()=>{if(!detailTask||!canEditTask)return;setIsSaving(true);try{const text=editingTaskText.trim();await updateTaskText(detailTask.taskDate,detailTask.ownerUid,detailTask.id,text);setDetailTask(p=>p?{...p,text}:p);setIsEditingTask(false);}catch(e){alert('タスクの更新に失敗しました。');}finally{setIsSaving(false);}};
+  const removeTask=async()=>{if(!detailTask||!canEditTask)return;if(!window.confirm('このタスクを削除してもよろしいですか？'))return;await deleteTask(detailTask.taskDate,detailTask.ownerUid,detailTask.id);setDetailTask(null);};
+  const finishTask=async()=>{if(!detailTask||!canEditTask)return;await toggleTask(detailTask.taskDate,detailTask.ownerUid,detailTask.id);setDetailTask(null);};
 
-  for (let i = 1; i <= daysInMonth; i++) {
-    const dateStr = formatDate(new Date(year, month, i));
-    const dayShifts = teamData.shifts[dateStr] || {};
-    const myShiftId = dayShifts[currentUserUid] || 'none';
-    const myShift = shiftTypes.find(s => s.id === myShiftId) || shiftTypes.find(s => s.id === 'none');
-    
-    const hasMyTask = teamData.tasks[dateStr]?.[currentUserUid]?.length > 0;
-
-    days.push(
-      <div 
-        key={i} 
-        onClick={() => setSelectedCalendarTaskDate(dateStr)}
-        className="p-1 border-b border-r border-gray-100 min-h-[80px] cursor-pointer active:bg-gray-50 flex flex-col transition-colors"
-      >
-        <div className="flex justify-between items-start p-1">
-          <span className={`text-sm font-bold ${
-            new Date().getDate() === i && new Date().getMonth() === month ? 'bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center' : 'text-gray-700'
-          }`}>
-            {i}
-          </span>
-          {hasMyTask && <div className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-1.5"></div>}
-        </div>
-        
-        <div className="mt-1 flex-1 flex flex-col gap-1 px-1">
-          {myShift.id !== 'none' && (
-            <div className={`text-[10px] font-bold px-1.5 py-0.5 rounded truncate ${myShift.color}`}>
-              {myShift.label}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex-1 flex flex-col bg-gray-50 pb-[68px] overflow-hidden">
-      <div className="bg-white px-4 py-3 flex items-center justify-between shadow-sm z-10 shrink-0 md:border-b md:border-gray-200">
-        <button onClick={() => changeMonth(-1)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full active:scale-95"><ChevronLeft className="w-5 h-5"/></button>
-        <h2 className="text-base font-bold text-gray-800">{year}年 {month + 1}月</h2>
-        <button onClick={() => changeMonth(1)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full active:scale-95"><ChevronRight className="w-5 h-5"/></button>
-      </div>
-      <div className="flex-1 overflow-y-auto bg-white">
-        <div className="md:grid md:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.85fr)] md:items-start md:gap-3 md:p-3">
-          <div className="min-w-0 md:border md:border-gray-200 md:rounded-xl md:overflow-hidden md:shadow-sm">
-            <div className="grid grid-cols-7 border-b border-gray-200 sticky top-0 bg-white z-10 shadow-sm">
-          {DAYS_OF_WEEK.map((day, idx) => (
-            <div key={day} className={`py-2 text-center text-[10px] font-bold ${idx === 0 ? 'text-red-500' : idx === 6 ? 'text-blue-500' : 'text-gray-500'}`}>
-              {day}
-            </div>
-          ))}
-        </div>
-            <div className="grid grid-cols-7 border-l border-gray-100">
-              {days}
-            </div>
-          </div>
-          <div className="min-w-0 md:space-y-3">
-            {(() => {
-          const activePartnerItems = (partnerItems || [])
-            .filter(item => !item.completed)
-            .sort((a, b) => {
-              const ak = `${a.date || ''}T${a.time || '00:00'}`;
-              const bk = `${b.date || ''}T${b.time || '00:00'}`;
-              return ak.localeCompare(bk);
-            });
-          return (
-            <div className="border-t border-gray-200 bg-blue-50/40 px-3 py-2">
-              <div className="flex items-center justify-between mb-1.5">
-                <h3 className="text-[11px] font-bold text-gray-600">パートナータスク</h3>
-                <span className="text-[9px] text-gray-400">{activePartnerItems.length}件</span>
-              </div>
-              {activePartnerItems.length === 0 ? (
-                <p className="text-[10px] text-gray-400 py-1">登録されている未終了のパートナータスクはありません</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {activePartnerItems.map(item => (
-                    <button type="button" key={item.id} onClick={() => setDetailPartner(item)} className="w-full bg-white border border-blue-100 rounded-md px-2 py-1.5 flex items-center gap-2 min-w-0 text-left hover:border-blue-300 active:bg-blue-50">
-                      {item.date && item.date < formatDate(new Date()) ? (
-                        <span className="shrink-0 text-[8px] font-bold text-red-500 whitespace-nowrap">未終了 {item.date.replace(/-/g, '/')}</span>
-                      ) : (
-                        <span className="shrink-0 text-[8px] font-bold text-blue-600 whitespace-nowrap">{item.date ? item.date.replace(/-/g, '/') : '日付なし'}</span>
-                      )}
-                      <span className="shrink-0 text-[8px] text-gray-500 whitespace-nowrap">{item.time || '--:--'}</span>
-                      <span className="shrink-0 max-w-24 text-[9px] font-bold text-purple-600 truncate">{item.partnerName || 'パートナー未設定'}</span>
-                      <span className="min-w-0 flex-1 text-[10px] text-gray-700 truncate" title={item.content || ''}>{(item.content || '').split(/\r?\n/)[0] || ''}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-            })()}
-            {(() => {
-          // 選択した日付の未終了タスクに加えて、
-          // 本日までに終了できていない過去タスクも必ず表示する。
-          const todayStr = formatDate(new Date());
-          const datesToShow = Array.from(new Set([
-            ...Object.keys(teamData.tasks || {}).filter(dateStr => dateStr < todayStr),
-            selectedCalendarTaskDate
-          ])).sort();
-
-          const selectedTasks = datesToShow.flatMap(taskDate =>
-            (sortedUsers || []).flatMap(member =>
-              ((teamData.tasks[taskDate] || {})[member.id] || [])
-                .filter(task => !task.completed)
-                .map(task => ({
-                  ...task,
-                  ownerUid: member.id,
-                  member,
-                  taskDate,
-                  assigneeIds: Array.isArray(task.assigneeIds) && task.assigneeIds.length ? task.assigneeIds : [member.id]
-                }))
-            )
-          );
-
-          const selectedDateLabel = selectedCalendarTaskDate.replace(/-/g, '/');
-
-          return (
-            <div className="border-t border-gray-200 bg-gray-50 px-3 py-2">
-              <div className="flex items-center justify-between mb-1.5">
-                <h3 className="text-[11px] font-bold text-gray-600">本日のタスク（全員）</h3>
-                <span className="text-[9px] text-gray-400">{selectedDateLabel}・{selectedTasks.length}件</span>
-              </div>
-              {selectedTasks.length === 0 ? (
-                <p className="text-[10px] text-gray-400 py-1">本日までに終了していないタスクはありません</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {selectedTasks.map(task => (
-                    <button type="button"
-                      key={`${task.taskDate}-${task.ownerUid}-${task.id}`}
-                      onClick={() => { setDetailTask(task); setSelectedAssigneeIds(task.assigneeIds); setAssigneeUpdateMessage(''); }}
-                      className="w-full text-left bg-white border rounded-md px-2 py-1.5 flex items-center gap-2 min-w-0 hover:border-purple-300 active:bg-purple-50">
-                      {task.taskDate < formatDate(new Date()) && <span className="shrink-0 text-[8px] font-bold text-red-500 whitespace-nowrap">対象日 {task.taskDate.replace(/-/g, '/')}</span>}
-                      <span className="min-w-0 flex-1 text-[10px] truncate text-gray-700" title={task.text || '画像タスク'}>{task.text || '📷 画像タスク'}</span>
-                      <span className="shrink-0 max-w-32 text-[8px] text-purple-600 truncate" title={task.assigneeIds.map(id => sortedUsers.find(u => u.id === id)?.name || '').filter(Boolean).join('・')}>担当: {task.assigneeIds.map(id => sortedUsers.find(u => u.id === id)?.name?.split(' ')[0] || '').filter(Boolean).join('・')}</span>
-                      <span className="shrink-0 text-[8px] text-gray-400 whitespace-nowrap">開始 {task.createdAt ? new Date(task.createdAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '--:--'}</span>
-                      <span className="shrink-0 text-[8px] text-gray-300 whitespace-nowrap">終了 --:--</span>
-                      <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-orange-400" />
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-            })()}
-          </div>
-        </div>
-        {detailPartner && (
-          <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={() => setDetailPartner(null)}>
-            <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-              <div className="px-4 py-3 border-b flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-bold text-gray-800">パートナータスク詳細</div>
-                  <div className="text-[10px] text-gray-400">{detailPartner.date?.replace(/-/g, '/')} {detailPartner.time || '--:--'}</div>
-                </div>
-                <button onClick={() => setDetailPartner(null)} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-full"><X size={18}/></button>
-              </div>
-              <div className="p-4 space-y-3">
-                <div className="text-xs font-bold text-purple-600">{detailPartner.partnerName || 'パートナー未設定'}</div>
-                <div className="text-sm text-gray-700 whitespace-pre-wrap break-words">{detailPartner.content || ''}</div>
-                {detailPartner.imageUrl && (
-                  <img src={detailPartner.imageUrl} alt={detailPartner.imageName || '添付画像'} className="max-h-72 w-auto max-w-full rounded-lg border object-contain mx-auto" />
-                )}
-                {detailPartner.completedAt && (
-                  <div className="text-[10px] text-green-600 bg-green-50 rounded-lg p-2">終了 {new Date(detailPartner.completedAt).toLocaleString('ja-JP')}</div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-        {detailTask && (
-          <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={() => setDetailTask(null)}>
-            <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-              <div className="px-4 py-3 border-b flex items-center justify-between">
-                <div><div className="text-sm font-bold text-gray-800">タスク詳細</div><div className="text-[10px] text-gray-400">登録者: {detailTask.member.name}</div></div>
-                <button onClick={() => setDetailTask(null)} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-full"><X size={18}/></button>
-              </div>
-              <div className="p-4 space-y-3">
-                <div className="text-sm text-gray-700 whitespace-pre-wrap break-words">{detailTask.text || '📷 画像タスク'}</div>
-                {detailTask.imageUrl && <img src={detailTask.imageUrl} alt={detailTask.imageName || '添付画像'} className="max-h-64 w-auto max-w-full rounded-lg border object-contain mx-auto" />}
-                <div className="grid grid-cols-2 gap-2 text-[10px] text-gray-500"><div className="bg-gray-50 rounded-lg p-2">開始<br/><span className="font-bold text-gray-700">{detailTask.createdAt ? new Date(detailTask.createdAt).toLocaleString('ja-JP') : '--'}</span></div><div className="bg-gray-50 rounded-lg p-2">終了<br/><span className="font-bold text-gray-700">{detailTask.completedAt ? new Date(detailTask.completedAt).toLocaleString('ja-JP') : '--'}</span></div></div>
-                <div>
-                  <div className="text-xs font-bold text-gray-600 mb-2">担当者（複数選択可）</div>
-                  <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
-                    {(sortedUsers || []).map(member => {
-                      const checked = selectedAssigneeIds.includes(member.id);
-                      return <label key={member.id} className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer ${checked ? 'border-purple-400 bg-purple-50' : 'border-gray-200'}`}><input type="checkbox" checked={checked} onChange={() => setSelectedAssigneeIds(prev => checked ? prev.filter(id => id !== member.id) : [...prev, member.id])} /><span className="text-xs font-bold text-gray-700 truncate">{member.name.split(' ')[0]}</span></label>;
-                    })}
-                  </div>
-                  <p className="text-[9px] text-gray-400 mt-1">1名なら担当変更、2名以上なら共同作業です。</p>
-                </div>
-                {assigneeUpdateMessage && <div className="text-[10px] text-green-600 font-bold bg-green-50 border border-green-100 rounded-lg px-2 py-1.5">{assigneeUpdateMessage}</div>}
-                <button
-                  type="button"
-                  disabled={!selectedAssigneeIds.length || isUpdatingAssignees}
-                  onClick={async () => {
-                    setIsUpdatingAssignees(true);
-                    setAssigneeUpdateMessage('');
-                    try {
-                      await updateTaskAssignees(detailTask.ownerUid, detailTask.taskDate || formatDate(new Date()), detailTask.id, selectedAssigneeIds);
-                      setDetailTask(prev => prev ? { ...prev, assigneeIds: [...selectedAssigneeIds] } : prev);
-                      setAssigneeUpdateMessage('担当者を更新しました');
-                    } catch (error) {
-                      console.error('担当者更新エラー:', error);
-                      setAssigneeUpdateMessage('担当者の更新に失敗しました。もう一度お試しください。');
-                    } finally {
-                      setIsUpdatingAssignees(false);
-                    }
-                  }}
-                  className="w-full py-2.5 rounded-xl bg-purple-600 text-white text-xs font-bold disabled:opacity-40 flex items-center justify-center gap-1.5"
-                >
-                  {isUpdatingAssignees ? <Loader2 size={15} className="animate-spin"/> : null}
-                  {isUpdatingAssignees ? '更新中…' : '担当者を更新'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+  return <div className="flex-1 flex flex-col bg-gray-50 pb-[68px] overflow-hidden">
+    <div className="bg-white px-4 py-3 flex items-center justify-between shadow-sm z-10 shrink-0 md:border-b md:border-gray-200"><button onClick={()=>changeMonth(-1)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full"><ChevronLeft className="w-5 h-5"/></button><h2 className="text-base font-bold text-gray-800">{year}年 {month+1}月</h2><button onClick={()=>changeMonth(1)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full"><ChevronRight className="w-5 h-5"/></button></div>
+    <div className="flex-1 overflow-y-auto bg-white"><div className="md:grid md:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.85fr)] md:items-start md:gap-3 md:p-3">
+      <div className="min-w-0 md:border md:border-gray-200 md:rounded-xl md:overflow-hidden"><div className="grid grid-cols-7 border-b border-gray-200 sticky top-0 bg-white z-10 shadow-sm">{DAYS_OF_WEEK.map((d,i)=><div key={d} className={`py-2 text-center text-[10px] font-bold ${i===0?'text-red-500':i===6?'text-blue-500':'text-gray-500'}`}>{d}</div>)}</div><div className="grid grid-cols-7 border-l border-gray-100">{days}</div></div>
+      <div className="min-w-0 md:space-y-3">
+        <div className="border-t border-gray-200 bg-blue-50/40 px-3 py-2"><div className="flex items-center justify-between mb-1.5"><h3 className="text-[11px] font-bold text-gray-600">パートナータスク</h3><span className="text-[9px] text-gray-400">{activePartnerItems.length}件</span></div>{activePartnerItems.length===0?<p className="text-[10px] text-gray-400 py-1">登録されている未終了のパートナータスクはありません</p>:<div className="space-y-1.5">{activePartnerItems.map(item=><button type="button" key={item.id} onClick={()=>{setDetailPartner(item);setIsEditingPartner(false);}} className="w-full bg-white border border-blue-100 rounded-md px-2 py-1.5 flex items-center gap-2 min-w-0 text-left hover:border-blue-300 active:bg-blue-50">{item.date&&item.date<todayStr?<span className="shrink-0 text-[8px] font-bold text-red-500 whitespace-nowrap">未終了 {item.date.replace(/-/g,'/')}</span>:<span className="shrink-0 text-[8px] font-bold text-blue-600 whitespace-nowrap">{item.date?item.date.replace(/-/g,'/'):'日付なし'}</span>}<span className="shrink-0 text-[8px] text-gray-500">{item.time||'--:--'}</span><span className="shrink-0 max-w-24 text-[9px] font-bold text-purple-600 truncate">{item.partnerName||'パートナー未設定'}</span><span className="min-w-0 flex-1 text-[10px] text-gray-700 truncate">{(item.content||'').split(/\r?\n/)[0]}</span></button>)}</div>}</div>
+        <div className="border-t border-gray-200 bg-gray-50 px-3 py-2"><div className="flex items-center justify-between mb-1.5"><h3 className="text-[11px] font-bold text-gray-600">本日のタスク（全員）</h3><span className="text-[9px] text-gray-400">{selectedCalendarTaskDate.replace(/-/g,'/')}・{selectedTasks.length}件</span></div>{selectedTasks.length===0?<p className="text-[10px] text-gray-400 py-1">本日までに終了していないタスクはありません</p>:<div className="space-y-1.5">{selectedTasks.map(task=><button type="button" key={`${task.taskDate}-${task.ownerUid}-${task.id}`} onClick={()=>{setDetailTask(task);setSelectedAssigneeIds(task.assigneeIds);setAssigneeUpdateMessage('');setIsEditingTask(false);}} className="w-full text-left bg-white border rounded-md px-2 py-1.5 flex items-center gap-2 min-w-0 hover:border-purple-300 active:bg-purple-50">{task.taskDate<todayStr&&<span className="shrink-0 text-[8px] font-bold text-red-500 whitespace-nowrap">対象日 {task.taskDate.replace(/-/g,'/')}</span>}<span className="min-w-0 flex-1 text-[10px] truncate text-gray-700">{task.text||'📷 画像タスク'}</span><span className="shrink-0 max-w-32 text-[8px] text-purple-600 truncate">担当: {task.assigneeIds.map(id=>sortedUsers.find(u=>u.id===id)?.name?.split(' ')[0]||'').filter(Boolean).join('・')}</span><span className="shrink-0 text-[8px] text-gray-400">開始 {task.createdAt?new Date(task.createdAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}):'--:--'}</span></button>)}</div>}</div>
       </div>
     </div>
-  );
+    {detailPartner&&<div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={()=>setDetailPartner(null)}><div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden" onClick={e=>e.stopPropagation()}><div className="px-4 py-3 border-b flex items-center justify-between"><div><div className="text-sm font-bold text-gray-800">パートナータスク詳細</div><div className="text-[10px] text-gray-400">{detailPartner.date?.replace(/-/g,'/')} {detailPartner.time||'--:--'}</div></div><button onClick={()=>setDetailPartner(null)} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-full"><X size={18}/></button></div><div className="p-4 space-y-3">{isEditingPartner?<><select value={partnerEditName} onChange={e=>setPartnerEditName(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm"><option value="">パートナーを選択</option>{(partnerNames||[]).map(n=><option key={n} value={n}>{n}</option>)}</select><div className="grid grid-cols-2 gap-2"><input type="date" value={partnerEditDate} onChange={e=>setPartnerEditDate(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm"/><div className="flex gap-1"><select value={partnerEditHour} onChange={e=>setPartnerEditHour(e.target.value)} className="w-1/2 border rounded-lg px-1 py-2 text-sm"><option value="">時</option>{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(v=><option key={v} value={v}>{v}</option>)}</select><select value={partnerEditMinute} onChange={e=>setPartnerEditMinute(e.target.value)} className="w-1/2 border rounded-lg px-1 py-2 text-sm"><option value="">分</option>{['00','15','30','45'].map(v=><option key={v} value={v}>{v}</option>)}</select></div></div><textarea value={partnerEditContent} onChange={e=>setPartnerEditContent(e.target.value)} rows={5} className="w-full border rounded-lg px-3 py-2 text-sm resize-y"/><div className="flex gap-2"><button type="button" onClick={()=>setIsEditingPartner(false)} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-xs font-bold">キャンセル</button><button type="button" disabled={isSaving} onClick={savePartnerEdit} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold"><span>{isSaving?'保存中…':'変更を保存'}</span></button></div></>:<><div className="text-xs font-bold text-purple-600">{detailPartner.partnerName||'パートナー未設定'}</div><div className="text-sm text-gray-700 whitespace-pre-wrap break-words">{detailPartner.content||''}</div>{detailPartner.imageUrl&&<img src={detailPartner.imageUrl} alt={detailPartner.imageName||'添付画像'} className="max-h-72 w-auto max-w-full rounded-lg border object-contain mx-auto"/>}<button type="button" onClick={startPartnerEdit} className="w-full py-2.5 rounded-xl bg-blue-50 text-blue-700 text-xs font-bold flex items-center justify-center gap-1.5"><Edit2 size={14}/><span>編集</span></button></>}</div></div></div>}
+    {detailTask&&<div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={()=>setDetailTask(null)}><div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden" onClick={e=>e.stopPropagation()}><div className="px-4 py-3 border-b flex items-center justify-between"><div><div className="text-sm font-bold text-gray-800">タスク詳細</div><div className="text-[10px] text-gray-400">登録者: {detailTask.member.name}</div>{!canEditTask&&<div className="text-[9px] text-gray-400">他のメンバーのタスクは操作できません</div>}</div><button onClick={()=>setDetailTask(null)} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-full"><X size={18}/></button></div><div className="p-4 space-y-3">{isEditingTask?<><textarea value={editingTaskText} onChange={e=>setEditingTaskText(e.target.value)} rows={5} className="w-full border rounded-xl px-3 py-2.5 text-sm resize-y"/><div className="flex gap-2"><button type="button" onClick={()=>setIsEditingTask(false)} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-xs font-bold">キャンセル</button><button type="button" disabled={isSaving} onClick={saveTaskEdit} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold"><span>{isSaving?'保存中…':'変更を保存'}</span></button></div></>:<><div className="text-sm text-gray-700 whitespace-pre-wrap break-words">{detailTask.text||'📷 画像タスク'}</div>{detailTask.imageUrl&&<img src={detailTask.imageUrl} alt={detailTask.imageName||'添付画像'} className="max-h-64 w-auto max-w-full rounded-lg border object-contain mx-auto"/>}<div className="grid grid-cols-2 gap-2 text-[10px] text-gray-500"><div className="bg-gray-50 rounded-lg p-2">開始<br/><span className="font-bold text-gray-700">{detailTask.createdAt?new Date(detailTask.createdAt).toLocaleString('ja-JP'):'--'}</span></div><div className="bg-gray-50 rounded-lg p-2">終了<br/><span className="font-bold text-gray-700">{detailTask.completedAt?new Date(detailTask.completedAt).toLocaleString('ja-JP'):'--'}</span></div></div><div><div className="text-xs font-bold text-gray-600 mb-2">担当者（複数選択可）</div><div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">{(sortedUsers||[]).map(member=>{const checked=selectedAssigneeIds.includes(member.id);return <label key={member.id} className={`flex items-center gap-2 p-2 rounded-lg border ${canEditTask?'cursor-pointer':'cursor-not-allowed opacity-70'} ${checked?'border-purple-400 bg-purple-50':'border-gray-200'}`}><input type="checkbox" disabled={!canEditTask} checked={checked} onChange={()=>setSelectedAssigneeIds(p=>checked?p.filter(id=>id!==member.id):[...p,member.id])}/><span className="text-xs font-bold text-gray-700 truncate">{member.name.split(' ')[0]}</span></label>})}</div></div>{canEditTask&&<><button type="button" disabled={!selectedAssigneeIds.length||isUpdatingAssignees} onClick={async()=>{setIsUpdatingAssignees(true);setAssigneeUpdateMessage('');try{await updateTaskAssignees(detailTask.ownerUid,detailTask.taskDate,detailTask.id,selectedAssigneeIds);setDetailTask(p=>p?{...p,assigneeIds:[...selectedAssigneeIds]}:p);setAssigneeUpdateMessage('担当者を更新しました');}catch(e){setAssigneeUpdateMessage('担当者の更新に失敗しました。')}finally{setIsUpdatingAssignees(false);}}} className="w-full py-2.5 rounded-xl bg-purple-600 text-white text-xs font-bold disabled:opacity-40"><span>{isUpdatingAssignees?'更新中…':'担当者を更新'}</span></button><div className="flex gap-2"><button type="button" onClick={()=>{setEditingTaskText(detailTask.text||'');setIsEditingTask(true);}} className="flex-1 py-2 rounded-xl bg-blue-50 text-blue-700 text-xs font-bold"><span>編集</span></button><button type="button" onClick={finishTask} className="flex-1 py-2 rounded-xl bg-green-50 text-green-700 text-xs font-bold"><span>終了にする</span></button><button type="button" onClick={removeTask} className="p-2 rounded-xl bg-red-50 text-red-600"><Trash2 size={16}/></button></div></>}{assigneeUpdateMessage&&<div className="text-[10px] text-green-600 font-bold">{assigneeUpdateMessage}</div>}</>}</div></div></div>}
+    </div>
+  </div>;
 };
 
 const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateUserShift, sortedUsers, roleNames, roles, bulkImportShifts, updateShiftTypes }) => {
@@ -2628,10 +2444,20 @@ export default function App() {
                 changeMonth={(offset) => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + offset, 1))} 
                 currentDate={currentDate} 
                 currentUserUid={currentUser.id} 
+                currentUser={currentUser}
+                roles={roles}
                 onDateClick={(dateStr) => { setSelectedDate(dateStr); setActiveTab('daily'); }} 
                 shiftTypes={shiftTypes} 
                 teamData={teamData} 
                 partnerItems={partnerItems}
+                partnerNames={partnerNames}
+                updatePartnerItem={async (itemId, changes) => {
+                  const currentItem = (partnerItems || []).find(item => item.id === itemId);
+                  if (!currentItem) throw new Error('対象のパートナー予定が見つかりません。');
+                  const updatedItems = (partnerItems || []).map(item => item.id === itemId ? { ...item, ...changes } : item);
+                  setPartnerItems(updatedItems);
+                  await updateDoc(doc(db, 'app_data', 'shared_state'), { partnerItems: updatedItems });
+                }}
                 updateTaskAssignees={async (ownerUid, dateStr, taskId, assigneeIds) => {
                   const dayTasks = teamData.tasks[dateStr] || {};
                   const ownerTasks = dayTasks[ownerUid] || [];
@@ -2658,6 +2484,27 @@ export default function App() {
                   await updateDoc(doc(db, 'app_data', 'shared_state'), {
                     [`teamData.tasks.${dateStr}.${ownerUid}`]: updatedOwnerTasks
                   });
+                }}
+                updateTaskText={async (dateStr, ownerUid, taskId, newText) => {
+                  const dayTasks = teamData.tasks[dateStr] || {};
+                  const ownerTasks = dayTasks[ownerUid] || [];
+                  const updatedOwnerTasks = ownerTasks.map(t => t.id === taskId ? { ...t, text: newText } : t);
+                  setTeamData({ ...teamData, tasks: { ...teamData.tasks, [dateStr]: { ...dayTasks, [ownerUid]: updatedOwnerTasks } } });
+                  await updateDoc(doc(db, 'app_data', 'shared_state'), { [`teamData.tasks.${dateStr}.${ownerUid}`]: updatedOwnerTasks });
+                }}
+                deleteTask={async (dateStr, ownerUid, taskId) => {
+                  const dayTasks = teamData.tasks[dateStr] || {};
+                  const ownerTasks = dayTasks[ownerUid] || [];
+                  const updatedOwnerTasks = ownerTasks.filter(t => t.id !== taskId);
+                  setTeamData({ ...teamData, tasks: { ...teamData.tasks, [dateStr]: { ...dayTasks, [ownerUid]: updatedOwnerTasks } } });
+                  await updateDoc(doc(db, 'app_data', 'shared_state'), { [`teamData.tasks.${dateStr}.${ownerUid}`]: updatedOwnerTasks });
+                }}
+                toggleTask={async (dateStr, ownerUid, taskId) => {
+                  const dayTasks = teamData.tasks[dateStr] || {};
+                  const ownerTasks = dayTasks[ownerUid] || [];
+                  const updatedOwnerTasks = ownerTasks.map(t => t.id === taskId ? { ...t, completed: true, completedAt: new Date().toISOString() } : t);
+                  setTeamData({ ...teamData, tasks: { ...teamData.tasks, [dateStr]: { ...dayTasks, [ownerUid]: updatedOwnerTasks } } });
+                  await updateDoc(doc(db, 'app_data', 'shared_state'), { [`teamData.tasks.${dateStr}.${ownerUid}`]: updatedOwnerTasks });
                 }}
                 sortedUsers={sortedUsers}
                 users={users}
