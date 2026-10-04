@@ -909,7 +909,7 @@ const DailyDetailView = ({
                   type="button"
                   onClick={handleSaveAssignees}
                   disabled={!selectedAssigneeIds.length || isUpdatingAssignees}
-                  className="flex-1 py-2 rounded-lg bg-purple-600 text-white text-xs font-bold disabled:opacity-40 flex items-center justify-center gap-1.5"
+                  className="flex-1 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 active:scale-[0.98] text-white text-xs font-bold disabled:opacity-40 flex items-center justify-center gap-1.5 transition-all"
                 >
                   {isUpdatingAssignees ? <Loader2 size={14} className="animate-spin"/> : <Save size={14}/>}
                   {isUpdatingAssignees ? '更新中…' : '担当者を更新'}
@@ -2539,8 +2539,12 @@ export default function App() {
                     }
                   };
 
+                  // 担当者変更はteamData全体ではなく対象ユーザーのタスク配列だけを保存。
+                  // 古いsnapshotとの競合で変更直後に元へ戻るのを防ぐ。
                   setTeamData(updatedTeamData);
-                  await saveToFirestore({ teamData: updatedTeamData });
+                  await updateDoc(doc(db, 'app_data', 'shared_state'), {
+                    [`teamData.tasks.${dateStr}.${ownerUid}`]: updatedOwnerTasks
+                  });
                 }}
                 sortedUsers={sortedUsers}
                 users={users}
@@ -2645,8 +2649,12 @@ export default function App() {
                     }
                   };
 
+                  // 担当者変更はteamData全体ではなく対象ユーザーのタスク配列だけを保存。
+                  // 古いsnapshotとの競合で変更直後に元へ戻るのを防ぐ。
                   setTeamData(updatedTeamData);
-                  await saveToFirestore({ teamData: updatedTeamData });
+                  await updateDoc(doc(db, 'app_data', 'shared_state'), {
+                    [`teamData.tasks.${dateStr}.${ownerUid}`]: updatedOwnerTasks
+                  });
                 }} 
                 roleNames={roleNames} 
                 roles={roles} 
