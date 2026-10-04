@@ -2068,6 +2068,9 @@ export default function App() {
   const [partnerItems, setPartnerItems] = useState([]);
   const [partnerNames, setPartnerNames] = useState([]);
   const [isLoaded, setIsLoaded] = useState(false);
+  // Firestoreから古いsnapshotが返ってきても、直前に設定画面で変更した
+  // ユーザー名を一瞬でも古い名前へ戻さないためのローカル上書き。
+  const pendingUserOverridesRef = useRef({});
 
   const saveToFirestore = async (updates) => {
     try {
@@ -2122,6 +2125,21 @@ export default function App() {
         let currentUserOrder = [...(data.userOrder || [])];
         let currentPartnerItems = Array.isArray(data.partnerItems) ? data.partnerItems : [];
         let currentPartnerNames = Array.isArray(data.partnerNames) ? data.partnerNames : [];
+
+        // 設定画面から直前に変更したユーザー情報を優先する。
+        // 古いsnapshotが後から届いても、画面上の名前が元へ戻らないようにする。
+        Object.entries(pendingUserOverridesRef.current).forEach(([uid, override]) => {
+          if (!currentUsers[uid]) return;
+          const firestoreUser = currentUsers[uid];
+          const sameName = firestoreUser.name === override.name;
+          const sameDisplayName = (firestoreUser.displayName || '') === (override.displayName || '');
+          const sameEmail = (firestoreUser.email || '').trim().toLowerCase() === (override.email || '').trim().toLowerCase();
+          if (sameName && sameDisplayName && sameEmail) {
+            delete pendingUserOverridesRef.current[uid];
+          } else {
+            currentUsers[uid] = { ...firestoreUser, ...override };
+          }
+        });
 
         // 同じメールアドレスの重複ユーザーを自動統合する。
         // 正規ユーザーは userOrder に入っているIDを最優先し、
@@ -2197,7 +2215,11 @@ export default function App() {
         if (needsCleanup) {
           const updatedTeamData = { shifts: currentShifts, tasks: currentTasks };
           // usersは差分だけ更新する。正規ユーザーの名前を古いsnapshotで上書きしない。
-          saveUsersToFirestore(currentUsers, data.users || {});
+          const usersForCleanup = { ...(data.users || {}) };
+          Object.entries(pendingUserOverridesRef.current).forEach(([uid, override]) => {
+            if (usersForCleanup[uid]) usersForCleanup[uid] = { ...usersForCleanup[uid], ...override };
+          });
+          saveUsersToFirestore(currentUsers, usersForCleanup);
           saveToFirestore({
             userOrder: currentUserOrder,
             teamData: updatedTeamData
@@ -2643,6 +2665,15 @@ export default function App() {
                 }} 
                 updateUsers={(newUsers) => {
                   const previousUsers = users;
+                  Object.keys(newUsers).forEach(uid => {
+                    if (JSON.stringify(previousUsers?.[uid]) !== JSON.stringify(newUsers[uid])) {
+                      pendingUserOverridesRef.current[uid] = newUsers[uid];
+                    }
+                  });
+                  Object.keys(previousUsers || {}).forEach(uid => {
+                    if (!newUsers[uid]) delete pendingUserOverridesRef.current[uid];
+                  });
+
                   setUsers(newUsers);
                   if (currentUser?.id && newUsers[currentUser.id]) {
                     setCurrentUser(newUsers[currentUser.id]);
