@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { GoogleOAuthProvider, GoogleLogin, googleLogout } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, onSnapshot, setDoc, updateDoc, deleteField } from 'firebase/firestore';
+import { getFirestore, doc, onSnapshot, setDoc, updateDoc, deleteField, arrayUnion } from 'firebase/firestore';
 
 import { 
   Calendar as CalendarIcon, 
@@ -49,6 +49,19 @@ const CLOUDINARY_CLOUD_NAME = 'hfkn6ad1';
 const CLOUDINARY_UPLOAD_PRESET = 'teamshift_tasks';
 const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
 
+const writeDebugLog = async ({ level = 'INFO', event, user = null, details = {} }) => {
+  try {
+    const safeDetails = details && typeof details === 'object' ? details : { value: String(details ?? '') };
+    await updateDoc(doc(db, 'app_data', 'shared_state'), {
+      debugLogs: arrayUnion({
+        id: 'log_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+        timestamp: new Date().toISOString(), level, event: String(event || 'unknown'),
+        userId: user?.id || '', userEmail: user?.email || '', userName: user?.name || '',
+        page: window.location.pathname, userAgent: navigator.userAgent, details: safeDetails
+      })
+    });
+  } catch (error) { console.error('Debug log write failed:', error); }
+};
 const uploadTaskImageToCloudinary = async (file) => {
   const formData = new FormData();
   formData.append('file', file);
@@ -1077,7 +1090,7 @@ const DailyDetailView = ({
   );
 };
 
-const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, currentUserUid, roleNames, updateRoleNames, roles, updateRoles, deleteUserCompletely, sortedUsers, userOrder, updateUserOrder }) => {
+const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, currentUserUid, roleNames, updateRoleNames, roles, updateRoles, deleteUserCompletely, sortedUsers, userOrder, updateUserOrder, debugLogs }) => {
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserRole, setNewUserRole] = useState(Object.keys(roles)[0] || 'staff');
@@ -1612,11 +1625,37 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
           </div>
         </div>
       </div>
+
+      <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 mb-6">
+        <div className="flex items-center justify-between border-b pb-2 mb-3">
+          <div>
+            <h3 className="font-bold text-gray-700 text-sm">調査ログ</h3>
+            <p className="text-[10px] text-gray-400 mt-0.5">白画面・保存失敗などの調査用。最新50件を表示します。</p>
+          </div>
+          <span className="text-[10px] text-gray-400">{(debugLogs || []).length}件</span>
+        </div>
+        <div className="space-y-2 max-h-[420px] overflow-y-auto">
+          {[...(debugLogs || [])].slice().sort((a,b) => String(b.timestamp || '').localeCompare(String(a.timestamp || ''))).slice(0, 50).map((log, index) => (
+            <details key={log.id || String(log.timestamp || '') + '-' + index} className={log.level === 'ERROR' ? 'rounded-lg border border-red-200 bg-red-50 p-2' : 'rounded-lg border border-gray-100 bg-gray-50 p-2'}>
+              <summary className="cursor-pointer text-[10px] font-bold text-gray-700">
+                {log.timestamp ? new Date(log.timestamp).toLocaleString('ja-JP') : '--'} ・ {log.level || 'INFO'} ・ {log.event || 'unknown'} ・ {log.userName || log.userEmail || 'ユーザー不明'}
+              </summary>
+              <div className="mt-2 text-[9px] text-gray-600 space-y-1">
+                <div>ユーザー: {log.userName || '--'} / {log.userEmail || '--'}</div>
+                <div>画面: {log.page || '--'}</div>
+                <div>端末: {log.userAgent || '--'}</div>
+                <pre className="whitespace-pre-wrap break-all bg-white border border-gray-100 rounded p-2">{JSON.stringify(log.details || {}, null, 2)}</pre>
+              </div>
+            </details>
+          ))}
+          {(!debugLogs || debugLogs.length === 0) && <p className="text-[10px] text-gray-400 py-3">まだ調査ログはありません。</p>}
+        </div>
+      </div>
     </div>
   );
 };
 
-const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartnerItem, togglePartnerItem, deletePartnerItem, addPartnerName, updatePartnerName, deletePartnerName }) => {
+const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartnerItem, togglePartnerItem, deletePartnerItem, addPartnerName, updatePartnerName, deletePartnerName, currentUser, debugLog }) => {
   const [date, setDate] = useState(formatDate(new Date()));
   const [timeHour, setTimeHour] = useState('');
   const [timeMinute, setTimeMinute] = useState('');
@@ -1685,6 +1724,8 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
     }
 
     setIsSaving(true);
+    const action = editingItemId ? 'partner.edit.save' : 'partner.add.save';
+    await debugLog?.('INFO', action + '.start', { itemId: editingItemId || '', partnerName, date, time, hasImage: !!newPartnerImage });
     try {
       let imageUrl = editingItemId ? ((partnerItems || []).find(item => item.id === editingItemId)?.imageUrl || '') : '';
       let imageName = editingItemId ? ((partnerItems || []).find(item => item.id === editingItemId)?.imageName || '') : '';
@@ -1700,17 +1741,21 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
       const itemData = { partnerName, date, time, content: content.trim(), ...(imageUrl ? { imageUrl, imageName, imagePublicId, imageBytes, imageUploadedAt: new Date().toISOString() } : {}) };
       if (editingItemId) {
         const savedItemId = editingItemId;
+        await debugLog?.('INFO', action + '.firestore.update.start', { itemId: savedItemId, itemData });
         await updatePartnerItem(savedItemId, itemData);
+        await debugLog?.('INFO', action + '.success', { itemId: savedItemId });
         // 保存が成功してから編集状態を解除する。
         setEditingItemId(null);
       } else {
+        const newItemId = Date.now().toString();
         await addPartnerItem({
-          id: Date.now().toString(),
+          id: newItemId,
           ...itemData,
           completed: false,
           completedAt: null,
           createdAt: new Date().toISOString()
         });
+        await debugLog?.('INFO', action + '.success', { itemId: newItemId });
       }
       setContent('');
       setTimeHour(''); setTimeMinute('');
@@ -1718,6 +1763,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
       setNewPartnerImage(null);
       setNewPartnerImagePreview('');
     } catch (error) {
+      await debugLog?.('ERROR', action + '.error', { itemId: editingItemId || '', name: error?.name || '', message: error?.message || String(error), stack: error?.stack || '' });
       console.error('パートナー予定の保存に失敗しました:', error);
       alert('保存に失敗しました。もう一度お試しください。');
     } finally {
@@ -2072,6 +2118,41 @@ export default function App() {
   const [partnerItems, setPartnerItems] = useState([]);
   const [partnerNames, setPartnerNames] = useState([]);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [debugLogs, setDebugLogs] = useState([]);
+  const currentUserRef = useRef(null);
+  const lastDebugActionRef = useRef('app.loaded');
+
+  const debugLog = async (level, event, details = {}) => {
+    lastDebugActionRef.current = event;
+    await writeDebugLog({ level, event, user: currentUserRef.current, details: { ...details, lastAction: event } });
+  };
+
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
+
+  useEffect(() => {
+    const handleWindowError = (event) => {
+      void writeDebugLog({
+        level: 'ERROR', event: 'window.error', user: currentUserRef.current,
+        details: { lastAction: lastDebugActionRef.current, message: event?.message || '', source: event?.filename || '', line: event?.lineno || 0, column: event?.colno || 0, stack: event?.error?.stack || '' }
+      });
+    };
+    const handleUnhandledRejection = (event) => {
+      const reason = event?.reason;
+      void writeDebugLog({
+        level: 'ERROR', event: 'unhandledrejection', user: currentUserRef.current,
+        details: { lastAction: lastDebugActionRef.current, name: reason?.name || '', message: reason?.message || String(reason || ''), stack: reason?.stack || '' }
+      });
+    };
+    window.addEventListener('error', handleWindowError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    return () => {
+      window.removeEventListener('error', handleWindowError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
+
   // Firestoreから古いsnapshotが返ってきても、直前に設定画面で変更した
   // ユーザー名を一瞬でも古い名前へ戻さないためのローカル上書き。
   const pendingUserOverridesRef = useRef({});
@@ -2129,6 +2210,7 @@ export default function App() {
         let currentUserOrder = [...(data.userOrder || [])];
         let currentPartnerItems = Array.isArray(data.partnerItems) ? data.partnerItems : [];
         let currentPartnerNames = Array.isArray(data.partnerNames) ? data.partnerNames : [];
+        let currentDebugLogs = Array.isArray(data.debugLogs) ? data.debugLogs : [];
 
         // 設定画面から直前に変更したユーザー情報を優先する。
         // 古いsnapshotが後から届いても、画面上の名前が元へ戻らないようにする。
@@ -2268,6 +2350,7 @@ export default function App() {
         if (data.teamData || needsCleanup) setTeamData({ shifts: currentShifts, tasks: currentTasks });
         setPartnerItems(currentPartnerItems);
         setPartnerNames(currentPartnerNames);
+        setDebugLogs(currentDebugLogs);
         if (data.shiftTypes) setShiftTypes(data.shiftTypes);
         if (data.roles) setRoles(data.roles);
         if (data.roleNames) setRoleNames(data.roleNames);
@@ -2333,6 +2416,7 @@ export default function App() {
 
   const handleGoogleLoginSuccess = (credentialResponse) => {
     setAuthError('');
+    lastDebugActionRef.current = 'login.start';
 
     if (!isLoaded) {
       setAuthError('メンバー情報を読み込み中です。少し待ってからもう一度ログインしてください。');
@@ -2341,6 +2425,7 @@ export default function App() {
 
     const decoded = jwtDecode(credentialResponse.credential);
     const loginEmail = (decoded.email || '').trim().toLowerCase();
+    void writeDebugLog({ level: 'INFO', event: 'login.start', user: { id: decoded.sub || '', email: loginEmail, name: decoded.name || '' }, details: { googleSub: decoded.sub || '' } });
 
     if (!loginEmail) {
       setAuthError('Googleアカウントのメールアドレスを取得できませんでした。');
@@ -2403,6 +2488,9 @@ export default function App() {
     }
 
     setCurrentUser(loggedInUser);
+    currentUserRef.current = loggedInUser;
+    lastDebugActionRef.current = 'login.success';
+    void writeDebugLog({ level: 'INFO', event: 'login.success', user: loggedInUser, details: { matchedUserId: loggedInUser.id } });
     localStorage.setItem('google_user', JSON.stringify(loggedInUser));
   };
 
@@ -2463,9 +2551,13 @@ export default function App() {
 
             {activeTab === 'partner' ? (
               <PartnerView
+                currentUser={currentUser}
+                debugLog={debugLog}
                 partnerItems={partnerItems}
                 partnerNames={partnerNames}
                 updatePartnerItem={async (itemId, changes) => {
+                  lastDebugActionRef.current = 'partner.firestore.update';
+                  await debugLog('INFO', 'partner.firestore.update.start', { itemId });
                   const currentItem = (partnerItems || []).find(item => item.id === itemId);
                   if (!currentItem) throw new Error('対象のパートナー予定が見つかりません。');
 
@@ -2481,6 +2573,7 @@ export default function App() {
                   await updateDoc(doc(db, 'app_data', 'shared_state'), {
                     partnerItems: updatedItems
                   });
+                  await debugLog('INFO', 'partner.firestore.update.success', { itemId });
                 }}
                 togglePartnerItem={async (itemId) => {
                   const now = new Date().toISOString();
@@ -2705,6 +2798,7 @@ export default function App() {
             ) : (
               <SettingsView 
                 currentUserUid={currentUser.id} 
+                debugLogs={debugLogs}
                 roleNames={roleNames} 
                 roles={roles} 
                 deleteUserCompletely={deleteUserCompletely}
