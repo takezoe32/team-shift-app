@@ -2561,9 +2561,34 @@ export default function App() {
                 toggleTask={async (dateStr, ownerUid, taskId) => {
                   const dayTasks = teamData.tasks[dateStr] || {};
                   const ownerTasks = dayTasks[ownerUid] || [];
-                  const updatedOwnerTasks = ownerTasks.map(t => t.id === taskId ? { ...t, completed: true, completedAt: new Date().toISOString() } : t);
-                  setTeamData({ ...teamData, tasks: { ...teamData.tasks, [dateStr]: { ...dayTasks, [ownerUid]: updatedOwnerTasks } } });
-                  await updateDoc(doc(db, 'app_data', 'shared_state'), { [`teamData.tasks.${dateStr}.${ownerUid}`]: updatedOwnerTasks });
+                  const targetTask = ownerTasks.find(t => t.id === taskId);
+                  if (!targetTask) return;
+                  const nextCompleted = !targetTask.completed;
+                  const updatedOwnerTasks = ownerTasks.map(t =>
+                    t.id === taskId
+                      ? { ...t, completed: nextCompleted, completedAt: nextCompleted ? new Date().toISOString() : null }
+                      : t
+                  );
+                  const updatedTeamData = {
+                    ...teamData,
+                    tasks: {
+                      ...teamData.tasks,
+                      [dateStr]: {
+                        ...dayTasks,
+                        [ownerUid]: updatedOwnerTasks
+                      }
+                    }
+                  };
+                  setTeamData(updatedTeamData);
+                  try {
+                    await updateDoc(doc(db, 'app_data', 'shared_state'), {
+                      [`teamData.tasks.${dateStr}.${ownerUid}`]: updatedOwnerTasks
+                    });
+                  } catch (error) {
+                    console.error('タスク完了状態の保存に失敗しました:', error);
+                    setTeamData(teamData);
+                    alert('タスクの完了状態を保存できませんでした。もう一度お試しください。');
+                  }
                 }}
                 sortedUsers={sortedUsers}
                 users={users}
