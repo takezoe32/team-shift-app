@@ -144,7 +144,9 @@ const LoginScreen = ({ onGoogleLoginSuccess, authError }) => (
   </div>
 );
 
-const CalendarView = ({ currentDate, changeMonth, teamData, onDateClick, currentUserUid, shiftTypes, sortedUsers }) => {
+const CalendarView = ({ currentDate, changeMonth, teamData, onDateClick, currentUserUid, shiftTypes, sortedUsers, updateTaskAssignees }) => {
+  const [detailTask, setDetailTask] = useState(null);
+  const [selectedAssigneeIds, setSelectedAssigneeIds] = useState([]);
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
   const daysInMonth = getDaysInMonth(year, month);
@@ -211,7 +213,7 @@ const CalendarView = ({ currentDate, changeMonth, teamData, onDateClick, current
           const todayStr = formatDate(new Date());
           const todayTasksByUser = teamData.tasks[todayStr] || {};
           const allTodayTasks = (sortedUsers || []).flatMap(member =>
-            (todayTasksByUser[member.id] || []).map(task => ({ ...task, member }))
+            (todayTasksByUser[member.id] || []).map(task => ({ ...task, ownerUid: member.id, member, assigneeIds: Array.isArray(task.assigneeIds) && task.assigneeIds.length ? task.assigneeIds : [member.id] }))
           );
           return (
             <div className="border-t border-gray-200 bg-gray-50 px-3 py-2">
@@ -224,27 +226,46 @@ const CalendarView = ({ currentDate, changeMonth, teamData, onDateClick, current
               ) : (
                 <div className="space-y-1.5">
                   {allTodayTasks.map(task => (
-                    <div key={`${task.member.id}-${task.id}`} className={`bg-white border rounded-md px-2 py-1.5 flex items-center gap-2 min-w-0 ${task.completed ? 'border-gray-100 opacity-70' : 'border-gray-200'}`}>
-                      <span className="shrink-0 text-[10px] font-bold text-purple-600 w-14 truncate" title={task.member.name}>
-                        {task.member.name.split(' ')[0]}
-                      </span>
-                      <span className={`min-w-0 flex-1 text-[10px] truncate ${task.completed ? 'text-gray-400 line-through' : 'text-gray-700'}`} title={task.text || '画像タスク'}>
-                        {task.text || '📷 画像タスク'}
-                      </span>
-                      <span className="shrink-0 text-[8px] text-gray-400 whitespace-nowrap">
-                        開始 {task.createdAt ? new Date(task.createdAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
-                      </span>
-                      <span className={`shrink-0 text-[8px] whitespace-nowrap ${task.completedAt ? 'text-green-600' : 'text-gray-300'}`}>
-                        終了 {task.completedAt ? new Date(task.completedAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
-                      </span>
+                    <button type="button"
+                      onClick={() => { setDetailTask(task); setSelectedAssigneeIds(task.assigneeIds); }}
+                      className="w-full text-left bg-white border rounded-md px-2 py-1.5 flex items-center gap-2 min-w-0 hover:border-purple-300 active:bg-purple-50">
+                      <span className="shrink-0 text-[10px] font-bold text-purple-600 w-14 truncate" title={task.member.name}>{task.member.name.split(' ')[0]}</span>
+                      <span className={`min-w-0 flex-1 text-[10px] truncate ${task.completed ? 'text-gray-400 line-through' : 'text-gray-700'}`} title={task.text || '画像タスク'}>{task.text || '📷 画像タスク'}</span>
+                      <span className="shrink-0 text-[8px] text-gray-400 whitespace-nowrap">開始 {task.createdAt ? new Date(task.createdAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '--:--'}</span>
+                      <span className={`shrink-0 text-[8px] whitespace-nowrap ${task.completedAt ? 'text-green-600' : 'text-gray-300'}`}>終了 {task.completedAt ? new Date(task.completedAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '--:--'}</span>
                       <span className={`shrink-0 w-1.5 h-1.5 rounded-full ${task.completed ? 'bg-green-500' : 'bg-orange-400'}`} />
-                    </div>
-                  ))}
+                    </button>                  ))}
                 </div>
               )}
             </div>
           );
         })()}
+        {detailTask && (
+          <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={() => setDetailTask(null)}>
+            <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="px-4 py-3 border-b flex items-center justify-between">
+                <div><div className="text-sm font-bold text-gray-800">タスク詳細</div><div className="text-[10px] text-gray-400">登録者: {detailTask.member.name}</div></div>
+                <button onClick={() => setDetailTask(null)} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-full"><X size={18}/></button>
+              </div>
+              <div className="p-4 space-y-3">
+                <div className="text-sm text-gray-700 whitespace-pre-wrap break-words">{detailTask.text || '📷 画像タスク'}</div>
+                {detailTask.imageUrl && <img src={detailTask.imageUrl} alt={detailTask.imageName || '添付画像'} className="max-h-64 w-auto max-w-full rounded-lg border object-contain mx-auto" />}
+                <div className="grid grid-cols-2 gap-2 text-[10px] text-gray-500"><div className="bg-gray-50 rounded-lg p-2">開始<br/><span className="font-bold text-gray-700">{detailTask.createdAt ? new Date(detailTask.createdAt).toLocaleString('ja-JP') : '--'}</span></div><div className="bg-gray-50 rounded-lg p-2">終了<br/><span className="font-bold text-gray-700">{detailTask.completedAt ? new Date(detailTask.completedAt).toLocaleString('ja-JP') : '--'}</span></div></div>
+                <div>
+                  <div className="text-xs font-bold text-gray-600 mb-2">担当者（複数選択可）</div>
+                  <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                    {(sortedUsers || []).map(member => {
+                      const checked = selectedAssigneeIds.includes(member.id);
+                      return <label key={member.id} className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer ${checked ? 'border-purple-400 bg-purple-50' : 'border-gray-200'}`}><input type="checkbox" checked={checked} onChange={() => setSelectedAssigneeIds(prev => checked ? prev.filter(id => id !== member.id) : [...prev, member.id])} /><span className="text-xs font-bold text-gray-700 truncate">{member.name.split(' ')[0]}</span></label>;
+                    })}
+                  </div>
+                  <p className="text-[9px] text-gray-400 mt-1">1名なら担当変更、2名以上なら共同作業です。</p>
+                </div>
+                <button type="button" disabled={!selectedAssigneeIds.length} onClick={() => { updateTaskAssignees(detailTask.ownerUid, formatDate(new Date()), detailTask.id, selectedAssigneeIds); setDetailTask(prev => prev ? { ...prev, assigneeIds: selectedAssigneeIds } : prev); }} className="w-full py-2.5 rounded-xl bg-purple-600 text-white text-xs font-bold disabled:opacity-40">担当者を更新</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -570,7 +591,7 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
 
 const DailyDetailView = ({ 
   selectedDate, changeDay, teamData, currentUserUid, shiftTypes,
-  addTask, toggleTask, deleteTask, updateTaskText, users, roles, sortedUsers
+  addTask, toggleTask, deleteTask, updateTaskText, updateTaskAssignees, users, roles, sortedUsers
 }) => {
   const [newTaskText, setNewTaskText] = useState('');
   const [selectedUserUid, setSelectedUserUid] = useState(currentUserUid);
@@ -583,7 +604,7 @@ const DailyDetailView = ({
   const currentUser = users[currentUserUid];
   const viewUser = users[selectedUserUid] || currentUser;
   const canManageShift = checkCanManageShift(currentUser, roles);
-  const selectedDateTasks = teamData.tasks[selectedDate]?.[selectedUserUid] || [];
+  const selectedDateTasks = Object.entries(teamData.tasks[selectedDate] || {}).flatMap(([ownerUid, tasks]) => (tasks || []).filter(task => { const assignees = Array.isArray(task.assigneeIds) && task.assigneeIds.length ? task.assigneeIds : [ownerUid]; return assignees.includes(selectedUserUid); }).map(task => ({ ...task, ownerUid })));
   const selectedDateShifts = teamData.shifts[selectedDate] || {};
   const myCurrentShift = selectedDateShifts[currentUserUid] || 'none';
 
@@ -655,7 +676,7 @@ const DailyDetailView = ({
             />
             <button
               onClick={() => {
-                updateTaskText(selectedDate, selectedUserUid, task.id, editVal);
+                updateTaskText(selectedDate, task.ownerUid || selectedUserUid, task.id, editVal);
                 setIsEditing(false);
               }}
               className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg h-fit"
@@ -681,7 +702,7 @@ const DailyDetailView = ({
         <button
           onClick={(e) => {
             e.stopPropagation();
-            toggleTask(selectedDate, selectedUserUid, task.id);
+            toggleTask(selectedDate, task.ownerUid || selectedUserUid, task.id);
           }}
           className={`shrink-0 mt-0.5 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
             task.completed ? 'border-green-500 bg-green-500 text-white' : 'border-gray-300 hover:border-blue-400'
@@ -697,6 +718,9 @@ const DailyDetailView = ({
             } ${isSelected ? '' : 'overflow-hidden max-h-[2.8em] line-clamp-2'}`}>
               {task.text}
             </span>
+          )}
+          {Array.isArray(task.assigneeIds) && task.assigneeIds.length > 0 && (
+            <div className="mt-1 text-[9px] text-purple-600">担当: {task.assigneeIds.map(id => users[id]?.name?.split(' ')[0] || '').filter(Boolean).join('・')}</div>
           )}
           {task.imageUrl && (
             <img
@@ -717,7 +741,7 @@ const DailyDetailView = ({
             <Edit2 size={16}/>
           </button>
           <button
-            onClick={() => deleteTask(selectedDate, selectedUserUid, task.id)}
+            onClick={() => deleteTask(selectedDate, task.ownerUid || selectedUserUid, task.id)}
             className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg active:scale-95"
             title="削除"
           >
@@ -1682,6 +1706,11 @@ export default function App() {
                 onDateClick={(dateStr) => { setSelectedDate(dateStr); setActiveTab('daily'); }} 
                 shiftTypes={shiftTypes} 
                 teamData={teamData} 
+                updateTaskAssignees={(ownerUid, dateStr, taskId, assigneeIds) => {
+                  const updatedTeamData = { ...teamData, tasks: { ...teamData.tasks, [dateStr]: { ...(teamData.tasks[dateStr] || {}), [ownerUid]: (teamData.tasks[dateStr]?.[ownerUid] || []).map(t => t.id === taskId ? { ...t, assigneeIds } : t) } } };
+                  setTeamData(updatedTeamData);
+                  saveToFirestore({ teamData: updatedTeamData });
+                }}
                 sortedUsers={sortedUsers}
                 users={users}
               />
@@ -1731,6 +1760,8 @@ export default function App() {
                             text,
                             completed: false,
                             createdAt: new Date().toISOString(),
+                            ownerUid: targetUid,
+                            assigneeIds: [targetUid],
                             completedAt: null,
                             ...(imageUrl ? {
                               imageUrl,
@@ -1760,6 +1791,11 @@ export default function App() {
                     ...teamData,
                     tasks: { ...teamData.tasks, [dateStr]: { ...(teamData.tasks[dateStr] || {}), [targetUid]: (teamData.tasks[dateStr]?.[targetUid] || []).filter(t => t.id !== taskId) } }
                   };
+                  setTeamData(updatedTeamData);
+                  saveToFirestore({ teamData: updatedTeamData });
+                }} 
+                updateTaskAssignees={(ownerUid, dateStr, taskId, assigneeIds) => {
+                  const updatedTeamData = { ...teamData, tasks: { ...teamData.tasks, [dateStr]: { ...(teamData.tasks[dateStr] || {}), [ownerUid]: (teamData.tasks[dateStr]?.[ownerUid] || []).map(t => t.id === taskId ? { ...t, assigneeIds } : t) } } };
                   setTeamData(updatedTeamData);
                   saveToFirestore({ teamData: updatedTeamData });
                 }} 
