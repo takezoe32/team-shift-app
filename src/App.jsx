@@ -211,12 +211,71 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
   const handleImportExecute = () => {
     if (!importText.trim()) return;
 
-    const rawLines = importText.trim().split('\n');
-    let newShifts = { ...teamData.shifts };
+    const rawLines = importText.replace(/\r\n?/g, '\n').split('\n');
+    const newShifts = { ...teamData.shifts };
     let newShiftTypes = [...shiftTypes];
+    const importedUsers = [];
+    const errors = [];
+    const importedUserIds = new Set();
+
+    // 名前比較用。全角/半角スペース、改行などをすべて無視する。
+    const normalizeName = (value) =>
+      String(value ?? '').replace(/[\s\u3000]+/g, '').trim();
+
+    const cleanCell = (value) =>
+      String(value ?? '')
+        .replace(/<br\s*\/?>/gi, '')
+        .replace(/`/g, '')
+        .trim();
+
+    const normalizeSymbol = (value) => cleanCell(value);
+
+    const findUserByCell = (cell) => {
+      const target = normalizeName(cell);
+      if (!target) return null;
+      return sortedUsers.find(u => normalizeName(u.name) === target) || null;
+    };
+
+    // Markdown表、タブ区切り、通常の空白区切りを同じ形式にする。
+    const parseLine = (line) => {
+      const text = line.trim();
+      if (!text) return null;
+
+      if (text.includes('|')) {
+        let cells = text.split('|').map(cleanCell);
+        if (cells.length && cells[0] === '') cells.shift();
+        if (cells.length && cells[cells.length - 1] === '') cells.pop();
+        return cells;
+      }
+
+      if (text.includes('\t')) {
+        return text.split('\t').map(cleanCell);
+      }
+
+      // 最後の保険：登録済みメンバー名を先頭部分から探し、残りをシフト列として扱う。
+      const candidates = sortedUsers
+        .slice()
+        .sort((a, b) => normalizeName(b.name).length - normalizeName(a.name).length);
+      for (const user of candidates) {
+        const name = String(user.name || '').trim();
+        if (!name) continue;
+        const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/[\\s\\u3000]+/g, '[\\s\\u3000]*');
+        const match = text.match(new RegExp('^\\s*' + escaped + '(?:\\s+|$)', 'i'));
+        if (match) {
+          const rest = text.slice(match[0].length).trim();
+          return [name, ...rest.split(/[\s\u3000]+/).filter(Boolean)];
+        }
+      }
+      return null;
+    };
+
+    const isShiftToken = (value) => {
+      const sym = normalizeSymbol(value);
+      return ['A', '／', '/', '夏休', '有', '有休', '有給', '冬休', '講習', '出勤', '休み', '有給', '冬休', '講習'].includes(sym);
+    };
 
     const findOrCreateShiftId = (symbol) => {
-      let sym = (symbol || '').trim();
+      const sym = normalizeSymbol(symbol);
       if (!sym) return 'none';
 
       let targetLabel = sym;
@@ -229,11 +288,11 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
 
       let matched = newShiftTypes.find(s => s.label === targetLabel);
       if (!matched && targetLabel === '出勤') {
-        matched = newShiftTypes.find(s => s.label === '早番' || s.id === 'work' || s.id === 'early');
+        matched = newShiftTypes.find(s => s.id === 'work' || s.id === 'early' || s.label === '早番');
       }
       if (matched) return matched.id;
 
-      const newId = `shift_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+      const newId = `shift_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
       const colors = [
         'bg-green-100 text-green-700 border-green-200',
         'bg-teal-100 text-teal-700 border-teal-200',
@@ -241,59 +300,78 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
         'bg-amber-100 text-amber-700 border-amber-200',
         'bg-purple-100 text-purple-700 border-purple-200'
       ];
-      const newShiftObj = {
-        id: newId,
-        label: targetLabel,
-        color: colors[newShiftTypes.length % colors.length]
+      const noneShift = newShiftTypes.find(s => s.id === 'none') || {
+        id: 'none', label: '未定', color: 'bg-gray-100 text-gray-500 border-gray-200'
       };
-
-      const noneShift = newShiftTypes.find(s => s.id === 'none') || { id: 'none', label: '未定', color: 'bg-gray-100 text-gray-500 border-gray-200' };
       const filtered = newShiftTypes.filter(s => s.id !== 'none');
-      newShiftTypes = [...filtered, newShiftObj, noneShift];
+      newShiftTypes = [
+        ...filtered,
+        { id: newId, label: targetLabel, color: colors[filtered.length % colors.length] },
+        noneShift
+      ];
       return newId;
     };
 
-    rawLines.forEach(lineStr => {
-      // タブおよび任意の空白文字でトークン化して空要素を除去
-      const tokens = lineStr.split(/[\t\s]+/).filter(Boolean);
-      if (tokens.length < 2) return;
+    rawLines.forEach((rawLine, lineIndex) => {
+      const cells = parseLine(rawLine);
+      if (!cells || cells.length === 0) return;
 
-      let matchedUser = null;
-      let userTokenIndex = -1;
+      // 日付見出し・曜日行・Markdown区切り行などはメンバー名がないので無視。
+      const userIndex = cells.findIndex(cell => !!findUserByCell(cell));
+      if (userIndex < 0) return;
 
-      // 行の中からメンバー名を特定
-      for (let i = 0; i < tokens.length; i++) {
-        const tokenClean = tokens[i].replace(/[\s ]+/g, '');
-        const found = sortedUsers.find(u => u.name.replace(/[\s ]+/g, '') === tokenClean);
-        if (found) {
-          matchedUser = found;
-          userTokenIndex = i;
-          break;
-        }
+      const matchedUser = findUserByCell(cells[userIndex]);
+
+      // コピー元によっては、名前の直後に空列や補助列が入ることがある。
+      // 最初の「実際のシフト記号」を1日目として、そこから月末までを取得する。
+      // A / 有 / 夏休 / 冬休 / 講習など、シフトとして認識できる値だけを起点にする。
+      const afterName = cells.slice(userIndex + 1).map(cleanCell);
+      const firstShiftIndex = afterName.findIndex(isShiftToken);
+      if (firstShiftIndex < 0) {
+        errors.push(`${lineIndex + 1}行目 ${matchedUser.name}: シフト開始位置を見つけられません`);
+        return;
+      }
+      const shiftValues = afterName.slice(firstShiftIndex);
+
+      if (importedUserIds.has(matchedUser.id)) {
+        errors.push(`${lineIndex + 1}行目 ${matchedUser.name}: 同じメンバーが複数行あります`);
+        return;
       }
 
-      if (!matchedUser || userTokenIndex === -1) return;
+      if (shiftValues.length < daysInMonth) {
+        errors.push(`${lineIndex + 1}行目 ${matchedUser.name}: シフトが${shiftValues.length}個しかありません（${daysInMonth}個必要）`);
+        return;
+      }
 
-      // 名前の直後のトークン群を1日〜31日目としてダイレクトに読み込み
-      const shiftTokens = tokens.slice(userTokenIndex + 1);
+      importedUserIds.add(matchedUser.id);
+      importedUsers.push(matchedUser);
 
       for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
-        const val = shiftTokens[dayNum - 1];
-        if (!val) break;
-
+        const val = shiftValues[dayNum - 1];
         const dateStr = formatDate(new Date(year, month, dayNum));
         const shiftId = findOrCreateShiftId(val);
-
         if (!newShifts[dateStr]) newShifts[dateStr] = {};
         newShifts[dateStr][matchedUser.id] = shiftId;
       }
     });
 
+    if (errors.length > 0) {
+      alert(`一括取り込みを中止しました。\n\n${errors.join('\n')}`);
+      return;
+    }
+
+    if (importedUsers.length === 0) {
+      alert('取り込めるメンバー行が見つかりませんでした。\n名前と1日〜31日のシフトが入った表をそのまま貼り付けてください。');
+      return;
+    }
+
+    // 現在の親コンポーネントの保存APIをそのまま使い、
+    // シフト種類とシフト本体を保存する。
     updateShiftTypes(newShiftTypes);
     bulkImportShifts(newShifts);
     setShowImportModal(false);
     setImportText('');
-    alert('シフトデータを取り込みました！');
+    alert(`${importedUsers.length}人 × ${daysInMonth}日分のシフトを取り込みました。\n\n${importedUsers.map(u => u.name).join('、')}`);
   };
 
   return (
