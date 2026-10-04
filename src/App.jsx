@@ -207,23 +207,27 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, onDate
 
   return (
     <div className="flex-1 flex flex-col bg-gray-50 pb-[68px] overflow-hidden">
-      <div className="bg-white px-4 py-3 flex items-center justify-between shadow-sm z-10 shrink-0">
+      <div className="bg-white px-4 py-3 flex items-center justify-between shadow-sm z-10 shrink-0 md:border-b md:border-gray-200">
         <button onClick={() => changeMonth(-1)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full active:scale-95"><ChevronLeft className="w-5 h-5"/></button>
         <h2 className="text-base font-bold text-gray-800">{year}年 {month + 1}月</h2>
         <button onClick={() => changeMonth(1)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full active:scale-95"><ChevronRight className="w-5 h-5"/></button>
       </div>
       <div className="flex-1 overflow-y-auto bg-white">
-        <div className="grid grid-cols-7 border-b border-gray-200 sticky top-0 bg-white z-10 shadow-sm">
+        <div className="md:grid md:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.85fr)] md:items-start md:gap-3 md:p-3">
+          <div className="min-w-0 md:border md:border-gray-200 md:rounded-xl md:overflow-hidden md:shadow-sm">
+            <div className="grid grid-cols-7 border-b border-gray-200 sticky top-0 bg-white z-10 shadow-sm">
           {DAYS_OF_WEEK.map((day, idx) => (
             <div key={day} className={`py-2 text-center text-[10px] font-bold ${idx === 0 ? 'text-red-500' : idx === 6 ? 'text-blue-500' : 'text-gray-500'}`}>
               {day}
             </div>
           ))}
         </div>
-        <div className="grid grid-cols-7 border-l border-gray-100">
-          {days}
-        </div>
-        {(() => {
+            <div className="grid grid-cols-7 border-l border-gray-100">
+              {days}
+            </div>
+          </div>
+          <div className="min-w-0 md:space-y-3">
+            {(() => {
           const activePartnerItems = (partnerItems || [])
             .filter(item => !item.completed)
             .sort((a, b) => {
@@ -257,8 +261,8 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, onDate
               )}
             </div>
           );
-        })()}
-        {(() => {
+            })()}
+            {(() => {
           // 選択した日付の未終了タスクに加えて、
           // 本日までに終了できていない過去タスクも必ず表示する。
           const todayStr = formatDate(new Date());
@@ -310,7 +314,9 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, onDate
               )}
             </div>
           );
-        })()}
+            })()}
+          </div>
+        </div>
         {detailPartner && (
           <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={() => setDetailPartner(null)}>
             <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
