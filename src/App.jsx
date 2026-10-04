@@ -1716,35 +1716,6 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
             </div>
           </div>
 
-          <div className="bg-white border border-gray-200 rounded-xl p-3">
-            <div className="text-[10px] font-bold text-gray-500 mb-2">登録済みパートナー名</div>
-            {(partnerNames || []).length === 0 ? (
-              <p className="text-[9px] text-gray-400">まだ登録されていません。</p>
-            ) : (
-              <div className="space-y-1.5">
-                {(partnerNames || []).map(name => (
-                  <div key={name} className="flex items-center gap-2">
-                    {editingPartnerName === name ? (
-                      <>
-                        <input type="text" value={editingPartnerNameValue} onChange={(e) => setEditingPartnerNameValue(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSavePartnerName(); } }}
-                          className="min-w-0 flex-1 border border-blue-300 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-400" autoFocus />
-                        <button type="button" onClick={handleSavePartnerName} disabled={!editingPartnerNameValue.trim()} className="px-2.5 py-1.5 rounded-lg bg-blue-600 text-white text-[10px] font-bold disabled:opacity-40">保存</button>
-                        <button type="button" onClick={() => { setEditingPartnerName(null); setEditingPartnerNameValue(''); }} className="px-2 py-1.5 rounded-lg bg-gray-100 text-gray-500 text-[10px] font-bold">取消</button>
-                      </>
-                    ) : (
-                      <>
-                        <span className="min-w-0 flex-1 text-xs font-bold text-gray-700 truncate">{name}</span>
-                        <button type="button" onClick={() => handleStartEditPartnerName(name)} className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-md" title="パートナー名を編集"><Edit2 size={14}/></button>
-                        <button type="button" onClick={() => handleDeletePartnerName(name)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-md" title="パートナー名を削除"><Trash2 size={14}/></button>
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
           <div className="block">
             <span className="text-[10px] font-bold text-gray-500">パートナー名</span>
             <div className="relative mt-1">
