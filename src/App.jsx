@@ -18,7 +18,8 @@ import {
   Edit2, 
   Save, 
   LogOut, 
-  ClipboardList, 
+  ClipboardList,
+  Handshake,
   Settings, 
   Table, 
   UserPlus,
@@ -1392,6 +1393,125 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
   );
 };
 
+const PartnerView = ({ partnerItems, addPartnerItem, deletePartnerItem }) => {
+  const [date, setDate] = useState(formatDate(new Date()));
+  const [time, setTime] = useState('');
+  const [content, setContent] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!date || !time || !content.trim()) {
+      alert('日付・時間・内容を入力してください。');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await addPartnerItem({
+        id: Date.now().toString(),
+        date,
+        time,
+        content: content.trim(),
+        createdAt: new Date().toISOString()
+      });
+      setContent('');
+      setTime('');
+    } catch (error) {
+      console.error('パートナー予定の保存に失敗しました:', error);
+      alert('保存に失敗しました。もう一度お試しください。');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const sortedItems = [...(partnerItems || [])].sort((a, b) => {
+    const aKey = `${a.date || ''}T${a.time || '00:00'}`;
+    const bKey = `${b.date || ''}T${b.time || '00:00'}`;
+    return aKey.localeCompare(bKey);
+  });
+
+  return (
+    <div className="flex-1 bg-gray-50 pb-[68px] overflow-y-auto">
+      <div className="bg-white px-4 py-3 border-b border-gray-100 shadow-sm">
+        <h2 className="text-base font-bold text-gray-800">パートナー</h2>
+        <p className="text-[10px] text-gray-400 mt-0.5">日付・時間・内容を登録できます</p>
+      </div>
+
+      <div className="p-4 max-w-2xl mx-auto space-y-4">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="text-[10px] font-bold text-gray-500">日付</span>
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400"
+              />
+            </label>
+            <label className="block">
+              <span className="text-[10px] font-bold text-gray-500">時間</span>
+              <input
+                type="time"
+                value={time}
+                onChange={(e) => setTime(e.target.value)}
+                className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400"
+              />
+            </label>
+          </div>
+
+          <label className="block">
+            <span className="text-[10px] font-bold text-gray-500">内容</span>
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              rows={4}
+              placeholder="パートナーに関する内容を入力"
+              className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400 resize-none"
+            />
+          </label>
+
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={isSaving}
+            className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {isSaving && <Loader2 size={16} className="animate-spin" />}
+            {isSaving ? '保存中…' : '保存'}
+          </button>
+        </div>
+
+        <div className="space-y-2">
+          {sortedItems.length === 0 ? (
+            <div className="text-center text-[11px] text-gray-400 py-8">登録された内容はありません</div>
+          ) : (
+            sortedItems.map(item => (
+              <div key={item.id} className="bg-white rounded-xl border border-gray-200 px-3 py-2.5 flex items-start gap-3">
+                <div className="shrink-0 text-center min-w-[74px]">
+                  <div className="text-[10px] font-bold text-blue-600">{item.date?.replace(/-/g, '/')}</div>
+                  <div className="text-[11px] font-bold text-gray-700 mt-0.5">{item.time || '--:--'}</div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs text-gray-700 whitespace-pre-wrap break-words">{item.content}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => deletePartnerItem(item.id)}
+                  className="shrink-0 p-1 text-gray-300 hover:text-red-500 rounded-md"
+                  title="削除"
+                >
+                  <Trash2 size={15}/>
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const BottomNav = ({ activeTab, setActiveTab, currentUser, roles }) => {
   const canManageShift = checkCanManageShift(currentUser, roles);
   const userRoleObj = roles[currentUser.role] || { level: 10 };
@@ -1429,6 +1549,15 @@ const BottomNav = ({ activeTab, setActiveTab, currentUser, roles }) => {
           {activeTab === 'daily' && <div className="absolute top-0 w-1/2 h-0.5 bg-blue-600 rounded-b-full"></div>}
         </button>
 
+        <button
+          onClick={() => setActiveTab('partner')}
+          className={`flex-1 flex flex-col items-center justify-center space-y-1.5 relative ${activeTab === 'partner' ? 'text-blue-600' : 'text-gray-400'}`}
+        >
+          <Handshake className="w-6 h-6"/>
+          <span className="text-[10px] font-bold">パートナー</span>
+          {activeTab === 'partner' && <div className="absolute top-0 w-1/2 h-0.5 bg-blue-600 rounded-b-full"></div>}
+        </button>
+
         {canManageSettings && (
           <button 
             onClick={() => setActiveTab('settings')}
@@ -1457,6 +1586,7 @@ export default function App() {
   const [users, setUsers] = useState({});
   const [userOrder, setUserOrder] = useState([]);
   const [teamData, setTeamData] = useState({ shifts: {}, tasks: {} });
+  const [partnerItems, setPartnerItems] = useState([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
   const saveToFirestore = async (updates) => {
@@ -1478,6 +1608,7 @@ export default function App() {
         let currentShifts = { ...(data.teamData?.shifts || {}) };
         let currentTasks = { ...(data.teamData?.tasks || {}) };
         let currentUserOrder = [...(data.userOrder || [])];
+        let currentPartnerItems = Array.isArray(data.partnerItems) ? data.partnerItems : [];
 
         // 同じメールアドレスの重複ユーザーを自動統合する。
         // 正規ユーザーは userOrder に入っているIDを最優先し、
@@ -1545,6 +1676,7 @@ export default function App() {
         setUsers(currentUsers);
         setUserOrder(currentUserOrder);
         if (data.teamData || needsCleanup) setTeamData({ shifts: currentShifts, tasks: currentTasks });
+        setPartnerItems(currentPartnerItems);
         if (data.shiftTypes) setShiftTypes(data.shiftTypes);
         if (data.roles) setRoles(data.roles);
         if (data.roleNames) setRoleNames(data.roleNames);
@@ -1723,7 +1855,21 @@ export default function App() {
               </button>
             </div>
 
-            {activeTab === 'calendar' ? (
+            {activeTab === 'partner' ? (
+              <PartnerView
+                partnerItems={partnerItems}
+                addPartnerItem={async (item) => {
+                  const updatedItems = [...partnerItems, item];
+                  setPartnerItems(updatedItems);
+                  await saveToFirestore({ partnerItems: updatedItems });
+                }}
+                deletePartnerItem={async (itemId) => {
+                  const updatedItems = partnerItems.filter(item => item.id !== itemId);
+                  setPartnerItems(updatedItems);
+                  await saveToFirestore({ partnerItems: updatedItems });
+                }}
+              />
+            ) : activeTab === 'calendar' ? (
               <CalendarView 
                 changeMonth={(offset) => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + offset, 1))} 
                 currentDate={currentDate} 
