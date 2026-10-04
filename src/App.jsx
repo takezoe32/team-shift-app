@@ -144,7 +144,7 @@ const LoginScreen = ({ onGoogleLoginSuccess, authError }) => (
   </div>
 );
 
-const CalendarView = ({ currentDate, changeMonth, teamData, onDateClick, currentUserUid, shiftTypes }) => {
+const CalendarView = ({ currentDate, changeMonth, teamData, onDateClick, currentUserUid, shiftTypes, sortedUsers }) => {
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
   const daysInMonth = getDaysInMonth(year, month);
@@ -207,6 +207,44 @@ const CalendarView = ({ currentDate, changeMonth, teamData, onDateClick, current
         <div className="grid grid-cols-7 border-l border-gray-100">
           {days}
         </div>
+        {(() => {
+          const todayStr = formatDate(new Date());
+          const todayTasksByUser = teamData.tasks[todayStr] || {};
+          const allTodayTasks = (sortedUsers || []).flatMap(member =>
+            (todayTasksByUser[member.id] || []).map(task => ({ ...task, member }))
+          );
+          return (
+            <div className="border-t border-gray-200 bg-gray-50 px-3 py-2">
+              <div className="flex items-center justify-between mb-1.5">
+                <h3 className="text-[11px] font-bold text-gray-600">本日のタスク（全員）</h3>
+                <span className="text-[9px] text-gray-400">{todayStr.replace(/-/g, '/')}・{allTodayTasks.length}件</span>
+              </div>
+              {allTodayTasks.length === 0 ? (
+                <p className="text-[10px] text-gray-400 py-1">現在のタスクはありません</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {allTodayTasks.map(task => (
+                    <div key={`${task.member.id}-${task.id}`} className={`bg-white border rounded-md px-2 py-1.5 flex items-center gap-2 min-w-0 ${task.completed ? 'border-gray-100 opacity-70' : 'border-gray-200'}`}>
+                      <span className="shrink-0 text-[10px] font-bold text-purple-600 w-14 truncate" title={task.member.name}>
+                        {task.member.name.split(' ')[0]}
+                      </span>
+                      <span className={`min-w-0 flex-1 text-[10px] truncate ${task.completed ? 'text-gray-400 line-through' : 'text-gray-700'}`} title={task.text || '画像タスク'}>
+                        {task.text || '📷 画像タスク'}
+                      </span>
+                      <span className="shrink-0 text-[8px] text-gray-400 whitespace-nowrap">
+                        開始 {task.createdAt ? new Date(task.createdAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                      </span>
+                      <span className={`shrink-0 text-[8px] whitespace-nowrap ${task.completedAt ? 'text-green-600' : 'text-gray-300'}`}>
+                        終了 {task.completedAt ? new Date(task.completedAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                      </span>
+                      <span className={`shrink-0 w-1.5 h-1.5 rounded-full ${task.completed ? 'bg-green-500' : 'bg-orange-400'}`} />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
@@ -1644,6 +1682,7 @@ export default function App() {
                 onDateClick={(dateStr) => { setSelectedDate(dateStr); setActiveTab('daily'); }} 
                 shiftTypes={shiftTypes} 
                 teamData={teamData} 
+                sortedUsers={sortedUsers}
                 users={users}
               />
             ) : activeTab === 'team-shift' ? (
@@ -1691,6 +1730,8 @@ export default function App() {
                             id: Date.now().toString(),
                             text,
                             completed: false,
+                            createdAt: new Date().toISOString(),
+                            completedAt: null,
                             ...(imageUrl ? {
                               imageUrl,
                               imageName,
@@ -1730,7 +1771,13 @@ export default function App() {
                 toggleTask={(dateStr, targetUid, taskId) => {
                   const updatedTeamData = {
                     ...teamData,
-                    tasks: { ...teamData.tasks, [dateStr]: { ...(teamData.tasks[dateStr] || {}), [targetUid]: (teamData.tasks[dateStr]?.[targetUid] || []).map(t => t.id === taskId ? { ...t, completed: !t.completed } : t) } }
+                    tasks: { ...teamData.tasks, [dateStr]: { ...(teamData.tasks[dateStr] || {}), [targetUid]: (teamData.tasks[dateStr]?.[targetUid] || []).map(t => t.id === taskId
+                            ? {
+                                ...t,
+                                completed: !t.completed,
+                                completedAt: !t.completed ? new Date().toISOString() : null
+                              }
+                            : t) } }
                   };
                   setTeamData(updatedTeamData);
                   saveToFirestore({ teamData: updatedTeamData });
