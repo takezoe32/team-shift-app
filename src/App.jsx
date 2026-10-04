@@ -1393,15 +1393,18 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
   );
 };
 
-const PartnerView = ({ partnerItems, addPartnerItem, deletePartnerItem }) => {
+const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, deletePartnerItem, addPartnerName }) => {
   const [date, setDate] = useState(formatDate(new Date()));
   const [time, setTime] = useState('');
+  const [partnerName, setPartnerName] = useState('');
   const [content, setContent] = useState('');
+  const [newPartnerName, setNewPartnerName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isAddingName, setIsAddingName] = useState(false);
 
   const handleSave = async () => {
-    if (!date || !time || !content.trim()) {
-      alert('日付・時間・内容を入力してください。');
+    if (!partnerName || !date || !time || !content.trim()) {
+      alert('パートナー名・日付・時間・内容を入力してください。');
       return;
     }
 
@@ -1409,6 +1412,7 @@ const PartnerView = ({ partnerItems, addPartnerItem, deletePartnerItem }) => {
     try {
       await addPartnerItem({
         id: Date.now().toString(),
+        partnerName,
         date,
         time,
         content: content.trim(),
@@ -1439,6 +1443,74 @@ const PartnerView = ({ partnerItems, addPartnerItem, deletePartnerItem }) => {
 
       <div className="p-4 max-w-2xl mx-auto space-y-4">
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 space-y-3">
+          <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+            <div className="text-[10px] font-bold text-gray-500 mb-2">パートナー名を追加</div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newPartnerName}
+                onChange={(e) => setNewPartnerName(e.target.value)}
+                placeholder="例：○○会社"
+                className="min-w-0 flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+                onKeyDown={async (e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const name = newPartnerName.trim();
+                    if (!name) return;
+                    setIsAddingName(true);
+                    try {
+                      const added = await addPartnerName(name);
+                      if (added) {
+                        setPartnerName(name);
+                        setNewPartnerName('');
+                      }
+                    } finally {
+                      setIsAddingName(false);
+                    }
+                  }
+                }}
+              />
+              <button
+                type="button"
+                disabled={isAddingName || !newPartnerName.trim()}
+                onClick={async () => {
+                  const name = newPartnerName.trim();
+                  if (!name) return;
+                  setIsAddingName(true);
+                  try {
+                    const added = await addPartnerName(name);
+                    if (added) {
+                      setPartnerName(name);
+                      setNewPartnerName('');
+                    }
+                  } finally {
+                    setIsAddingName(false);
+                  }
+                }}
+                className="shrink-0 px-3 rounded-xl bg-gray-700 text-white text-xs font-bold disabled:opacity-40"
+              >
+                {isAddingName ? '…' : '追加'}
+              </button>
+            </div>
+          </div>
+
+          <label className="block">
+            <span className="text-[10px] font-bold text-gray-500">パートナー名</span>
+            <select
+              value={partnerName}
+              onChange={(e) => setPartnerName(e.target.value)}
+              className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-400"
+            >
+              <option value="">パートナー名を選択</option>
+              {(partnerNames || []).map(name => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+            {(partnerNames || []).length === 0 && (
+              <p className="text-[9px] text-gray-400 mt-1">上の欄からパートナー名を追加してください。</p>
+            )}
+          </label>
+
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <span className="text-[10px] font-bold text-gray-500">日付</span>
@@ -1493,6 +1565,7 @@ const PartnerView = ({ partnerItems, addPartnerItem, deletePartnerItem }) => {
                   <div className="text-[11px] font-bold text-gray-700 mt-0.5">{item.time || '--:--'}</div>
                 </div>
                 <div className="flex-1 min-w-0">
+                  <div className="text-[10px] font-bold text-purple-600 mb-0.5">{item.partnerName || 'パートナー未設定'}</div>
                   <div className="text-xs text-gray-700 whitespace-pre-wrap break-words">{item.content}</div>
                 </div>
                 <button
@@ -1587,6 +1660,7 @@ export default function App() {
   const [userOrder, setUserOrder] = useState([]);
   const [teamData, setTeamData] = useState({ shifts: {}, tasks: {} });
   const [partnerItems, setPartnerItems] = useState([]);
+  const [partnerNames, setPartnerNames] = useState([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
   const saveToFirestore = async (updates) => {
@@ -1609,6 +1683,7 @@ export default function App() {
         let currentTasks = { ...(data.teamData?.tasks || {}) };
         let currentUserOrder = [...(data.userOrder || [])];
         let currentPartnerItems = Array.isArray(data.partnerItems) ? data.partnerItems : [];
+        let currentPartnerNames = Array.isArray(data.partnerNames) ? data.partnerNames : [];
 
         // 同じメールアドレスの重複ユーザーを自動統合する。
         // 正規ユーザーは userOrder に入っているIDを最優先し、
@@ -1677,6 +1752,7 @@ export default function App() {
         setUserOrder(currentUserOrder);
         if (data.teamData || needsCleanup) setTeamData({ shifts: currentShifts, tasks: currentTasks });
         setPartnerItems(currentPartnerItems);
+        setPartnerNames(currentPartnerNames);
         if (data.shiftTypes) setShiftTypes(data.shiftTypes);
         if (data.roles) setRoles(data.roles);
         if (data.roleNames) setRoleNames(data.roleNames);
@@ -1858,6 +1934,19 @@ export default function App() {
             {activeTab === 'partner' ? (
               <PartnerView
                 partnerItems={partnerItems}
+                partnerNames={partnerNames}
+                addPartnerName={async (name) => {
+                  const normalized = name.trim();
+                  if (!normalized) return false;
+                  if (partnerNames.some(existing => existing.toLowerCase() === normalized.toLowerCase())) {
+                    alert('同じパートナー名がすでに登録されています。');
+                    return false;
+                  }
+                  const updatedNames = [...partnerNames, normalized];
+                  setPartnerNames(updatedNames);
+                  await saveToFirestore({ partnerNames: updatedNames });
+                  return true;
+                }}
                 addPartnerItem={async (item) => {
                   const updatedItems = [...partnerItems, item];
                   setPartnerItems(updatedItems);
