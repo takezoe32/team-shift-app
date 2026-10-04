@@ -749,13 +749,13 @@ const DailyDetailView = ({
             : task.completed ? 'border-gray-100 bg-gray-50/50' : 'border-gray-200 shadow-sm hover:border-gray-300'
         } flex items-start gap-3`}
       >
-        <button
-          type="button"
+        <input
+          type="checkbox"
+          checked={!!task.completed}
           disabled={!canEditTask}
           aria-label={task.completed ? 'タスクを未完了に戻す' : 'タスクを完了にする'}
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={async (e) => {
-            e.preventDefault();
+          onClick={(e) => e.stopPropagation()}
+          onChange={async (e) => {
             e.stopPropagation();
             const taskDate = task.taskDate || selectedDate;
             const ownerUid = task.ownerUid || selectedUserUid;
@@ -765,10 +765,10 @@ const DailyDetailView = ({
               console.error('タスクチェック処理に失敗しました:', error);
             }
           }}
-          className={\`relative z-20 shrink-0 mt-0.5 w-7 h-7 rounded-full border-2 flex items-center justify-center transition-colors cursor-pointer pointer-events-auto touch-manipulation \${task.completed ? 'border-green-500 bg-green-500 text-white' : 'border-gray-300 hover:border-blue-400 active:bg-blue-100'}\`}
-        >
-          {task.completed && <CheckSquare className="stroke-[3]" size={14}/>} 
-        </button>
+          className={`appearance-none relative z-20 shrink-0 mt-0.5 w-7 h-7 rounded-full border-2 flex items-center justify-center cursor-pointer pointer-events-auto touch-manipulation checked:bg-green-500 checked:border-green-500 disabled:cursor-not-allowed disabled:opacity-50 ${
+            task.completed ? 'bg-green-500 border-green-500' : 'bg-white border-gray-300 hover:border-blue-400'
+          }`}
+        />
 
         <div className="flex-1 min-w-0">
           {task.text && (
