@@ -2195,15 +2195,48 @@ export default function App() {
             Object.keys(currentTasks).forEach(dStr => {
               const day = currentTasks[dStr];
               if (!day?.[dUser.id]) return;
-              day[realUser.id] = [
-                ...(day[realUser.id] || []),
-                ...day[dUser.id]
-              ];
+
+              const existingTasks = Array.isArray(day[realUser.id]) ? day[realUser.id] : [];
+              const existingIds = new Set(existingTasks.map(task => task?.id).filter(Boolean));
+              const migratedTasks = day[dUser.id].filter(task => {
+                if (!task?.id) return true;
+                if (existingIds.has(task.id)) return false;
+                existingIds.add(task.id);
+                return true;
+              });
+
+              day[realUser.id] = [...existingTasks, ...migratedTasks];
               delete day[dUser.id];
             });
 
             currentUserOrder = currentUserOrder.filter(id => id !== dUser.id);
             delete currentUsers[dUser.id];
+          });
+        });
+
+        // 同じタスクIDが同じ日・同じ担当者に複数保存されていた場合は1件に整理する。
+        // 重複ユーザー統合の再実行で同じタスクが増殖するのを防ぐ。
+        Object.keys(currentTasks).forEach(dStr => {
+          const day = currentTasks[dStr];
+          if (!day || typeof day !== 'object') return;
+
+          Object.keys(day).forEach(uid => {
+            if (!Array.isArray(day[uid])) return;
+            const seenTaskIds = new Set();
+            const dedupedTasks = [];
+            day[uid].forEach(task => {
+              const taskId = task?.id;
+              if (taskId && seenTaskIds.has(taskId)) {
+                needsCleanup = true;
+                return;
+              }
+              if (taskId) seenTaskIds.add(taskId);
+              dedupedTasks.push(task);
+            });
+
+            if (dedupedTasks.length !== day[uid].length) {
+              day[uid] = dedupedTasks;
+            }
           });
         });
 
