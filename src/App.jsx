@@ -750,7 +750,7 @@ const DailyDetailView = ({
         <button
           onClick={(e) => {
             e.stopPropagation();
-            toggleTask(selectedDate, task.ownerUid || selectedUserUid, task.id);
+            toggleTask(task.taskDate || selectedDate, task.ownerUid || selectedUserUid, task.id);
           }}
           className={`shrink-0 mt-0.5 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
             task.completed ? 'border-green-500 bg-green-500 text-white' : 'border-gray-300 hover:border-blue-400'
