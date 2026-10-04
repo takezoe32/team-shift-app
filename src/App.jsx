@@ -3,6 +3,7 @@ import { GoogleOAuthProvider, GoogleLogin, googleLogout } from '@react-oauth/goo
 import { jwtDecode } from 'jwt-decode';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { 
   Calendar as CalendarIcon, 
   CheckSquare, 
@@ -22,7 +23,10 @@ import {
   Table, 
   UserPlus,
   ShieldAlert,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Image as ImageIcon,
+  Paperclip,
+  Loader2
 } from 'lucide-react';
 
 // Google OAuth Client ID
@@ -40,6 +44,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const storage = getStorage(app);
 
 const INITIAL_ROLES = {
   admin: { level: 40, name: '管理者' },
@@ -518,75 +523,108 @@ const DailyDetailView = ({
   const [newTaskText, setNewTaskText] = useState('');
   const [selectedUserUid, setSelectedUserUid] = useState(currentUserUid);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const [newTaskImage, setNewTaskImage] = useState(null);
+  const [newTaskImagePreview, setNewTaskImagePreview] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const imageInputRef = React.useRef(null);
   
   const currentUser = users[currentUserUid];
   const viewUser = users[selectedUserUid] || currentUser;
-
   const canManageShift = checkCanManageShift(currentUser, roles);
-
   const selectedDateTasks = teamData.tasks[selectedDate]?.[selectedUserUid] || [];
   const selectedDateShifts = teamData.shifts[selectedDate] || {};
   const myCurrentShift = selectedDateShifts[currentUserUid] || 'none';
 
-  const handleAddTask = () => {
-    if (newTaskText.trim()) {
-      addTask(selectedDate, selectedUserUid, newTaskText.trim());
-      setNewTaskText('');
+  const handleImageChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('画像ファイルを選択してください。');
+      e.target.value = '';
+      return;
     }
+    if (file.size > 10 * 1024 * 1024) {
+      alert('画像は10MB以下にしてください。');
+      e.target.value = '';
+      return;
+    }
+    setNewTaskImage(file);
+    setNewTaskImagePreview(URL.createObjectURL(file));
   };
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleAddTask();
+  const clearNewTaskImage = () => {
+    if (newTaskImagePreview) URL.revokeObjectURL(newTaskImagePreview);
+    setNewTaskImage(null);
+    setNewTaskImagePreview('');
+    if (imageInputRef.current) imageInputRef.current.value = '';
+  };
+
+  const handleAddTask = async () => {
+    if (!newTaskText.trim() && !newTaskImage) return;
+    setIsUploading(true);
+    try {
+      let imageUrl = '';
+      let imageName = '';
+      if (newTaskImage) {
+        const safeName = newTaskImage.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const imageRef = ref(storage, `task-images/${selectedDate}/${selectedUserUid}/${Date.now()}_${safeName}`);
+        const uploadResult = await uploadBytes(imageRef, newTaskImage, { contentType: newTaskImage.type });
+        imageUrl = await getDownloadURL(uploadResult.ref);
+        imageName = newTaskImage.name;
+      }
+      addTask(selectedDate, selectedUserUid, newTaskText.trim(), imageUrl, imageName);
+      setNewTaskText('');
+      clearNewTaskImage();
+    } catch (error) {
+      console.error('画像のアップロードに失敗しました:', error);
+      alert('画像の保存に失敗しました。Firebase Storageの設定を確認してください。');
+    } finally {
+      setIsUploading(false);
     }
   };
 
   const TaskItem = ({ task }) => {
     const [isEditing, setIsEditing] = useState(false);
-    const [editVal, setEditVal] = useState(task.text);
+    const [editVal, setEditVal] = useState(task.text || '');
     const isSelected = selectedTaskId === task.id;
 
     if (isEditing) {
       return (
-        <div className="bg-white p-3 rounded-xl border border-blue-400 shadow-sm flex gap-2">
-          <textarea
-            className="flex-1 bg-blue-50/50 p-2 text-sm rounded outline-none resize-none"
-            value={editVal}
-            onChange={(e) => setEditVal(e.target.value)}
-            onKeyDown={(e) => {
-              if(e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
+        <div className="bg-white p-3 rounded-xl border border-blue-400 shadow-sm space-y-2">
+          <div className="flex gap-2 items-start">
+            <textarea
+              className="flex-1 bg-blue-50/50 p-2 text-sm rounded outline-none resize-none"
+              value={editVal}
+              onChange={(e) => setEditVal(e.target.value)}
+              rows={4}
+              autoFocus
+            />
+            <button
+              onClick={() => {
                 updateTaskText(selectedDate, selectedUserUid, task.id, editVal);
                 setIsEditing(false);
-              }
-            }}
-            rows={3}
-            autoFocus
-          />
-          <button 
-            onClick={() => {
-              updateTaskText(selectedDate, selectedUserUid, task.id, editVal);
-              setIsEditing(false);
-            }}
-            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg h-fit"
-          >
-            <Save size={18}/>
-          </button>
+              }}
+              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg h-fit"
+              title="保存"
+            >
+              <Save size={18}/>
+            </button>
+          </div>
+          <p className="text-[10px] text-gray-400">Enterで改行できます。保存は右のボタンを押してください。</p>
         </div>
       );
     }
 
     return (
-      <div 
+      <div
         onClick={() => setSelectedTaskId(isSelected ? null : task.id)}
         className={`bg-white p-3 rounded-xl border transition-all cursor-pointer ${
-          isSelected 
-            ? 'border-purple-400 bg-purple-50/20 ring-2 ring-purple-400/20 shadow-md' 
+          isSelected
+            ? 'border-purple-400 bg-purple-50/20 ring-2 ring-purple-400/20 shadow-md'
             : task.completed ? 'border-gray-100 bg-gray-50/50' : 'border-gray-200 shadow-sm hover:border-gray-300'
         } flex items-start gap-3`}
       >
-        <button 
+        <button
           onClick={(e) => {
             e.stopPropagation();
             toggleTask(selectedDate, selectedUserUid, task.id);
@@ -595,30 +633,36 @@ const DailyDetailView = ({
             task.completed ? 'border-green-500 bg-green-500 text-white' : 'border-gray-300 hover:border-blue-400'
           }`}
         >
-          {task.completed && <CheckSquare className="stroke-[3]" size={14}/>}
+          {task.completed && <CheckSquare className="stroke-[3]" size={14}/>} 
         </button>
-        
+
         <div className="flex-1 min-w-0">
-          <span className={`text-sm block whitespace-pre-wrap leading-tight ${
-            task.completed ? 'text-gray-400 line-through' : 'text-gray-700'
-          } ${
-            isSelected 
-              ? '' 
-              : 'overflow-hidden max-h-[2.8em] line-clamp-2'
-          }`}>
-            {task.text}
-          </span>
+          {task.text && (
+            <span className={`text-sm block whitespace-pre-wrap leading-tight ${
+              task.completed ? 'text-gray-400 line-through' : 'text-gray-700'
+            } ${isSelected ? '' : 'overflow-hidden max-h-[2.8em] line-clamp-2'}`}>
+              {task.text}
+            </span>
+          )}
+          {task.imageUrl && (
+            <img
+              src={task.imageUrl}
+              alt={task.imageName || '添付画像'}
+              className="mt-2 max-h-56 w-auto max-w-full rounded-lg border border-gray-200 object-contain"
+              onClick={(e) => e.stopPropagation()}
+            />
+          )}
         </div>
 
         <div className="shrink-0 flex gap-1" onClick={(e) => e.stopPropagation()}>
-          <button 
+          <button
             onClick={() => setIsEditing(true)}
             className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-gray-100 rounded-lg active:scale-95"
             title="編集"
           >
             <Edit2 size={16}/>
           </button>
-          <button 
+          <button
             onClick={() => deleteTask(selectedDate, selectedUserUid, task.id)}
             className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg active:scale-95"
             title="削除"
@@ -643,15 +687,11 @@ const DailyDetailView = ({
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-gray-500">あなたの今日のシフト:</span>
             {shiftTypes.map(shift => myCurrentShift === shift.id && (
-              <div key={shift.id} className={`px-3 py-1 rounded-md border text-xs font-bold ${shift.color}`}>
-                {shift.label}
-              </div>
+              <div key={shift.id} className={`px-3 py-1 rounded-md border text-xs font-bold ${shift.color}`}>{shift.label}</div>
             ))}
             {myCurrentShift === 'none' && <span className="text-xs text-gray-400">未定</span>}
           </div>
-          {!canManageShift && (
-            <p className="text-[10px] text-gray-400 mt-1">※シフトの編集は管理者および権限を付与されたメンバーのみ可能です</p>
-          )}
+          {!canManageShift && <p className="text-[10px] text-gray-400 mt-1">※シフトの編集は管理者および権限を付与されたメンバーのみ可能です</p>}
         </div>
 
         <div className="bg-white px-3 py-2 border-b border-gray-200 flex overflow-x-auto gap-2 no-scrollbar shadow-sm shrink-0 items-center min-h-[56px] sticky top-[53px] z-10">
@@ -660,26 +700,71 @@ const DailyDetailView = ({
               const isSelected = selectedUserUid === member.id;
               const shiftId = selectedDateShifts[member.id] || 'none';
               const shiftObj = shiftTypes.find(s => s.id === shiftId) || shiftTypes.find(s => s.id === 'none');
-
               return (
                 <button
                   key={member.id}
-                  onClick={() => {
-                    setSelectedUserUid(member.id);
-                    setSelectedTaskId(null);
-                  }}
-                  className={`flex flex-col items-center px-3 py-1.5 rounded-xl border transition-all shrink-0 active:scale-95
-                    ${isSelected ? 'bg-purple-50 border-purple-400 ring-2 ring-purple-400/20 shadow-sm' : 'bg-white border-gray-200 hover:bg-gray-50'}`}
+                  onClick={() => { setSelectedUserUid(member.id); setSelectedTaskId(null); }}
+                  className={`flex flex-col items-center px-3 py-1.5 rounded-xl border transition-all shrink-0 active:scale-95 ${isSelected ? 'bg-purple-50 border-purple-400 ring-2 ring-purple-400/20 shadow-sm' : 'bg-white border-gray-200 hover:bg-gray-50'}`}
                 >
-                  <div className={`text-xs font-bold ${isSelected ? 'text-purple-700' : 'text-gray-700'}`}>
-                    {member.name.split(' ')[0]}
-                  </div>
-                  <div className={`text-[9px] mt-0.5 px-1.5 rounded-sm ${shiftObj.id !== 'none' ? shiftObj.color : 'text-gray-400'}`}>
-                    {shiftObj.label.substring(0, 2)}
-                  </div>
+                  <div className={`text-xs font-bold ${isSelected ? 'text-purple-700' : 'text-gray-700'}`}>{member.name.split(' ')[0]}</div>
+                  <div className={`text-[9px] mt-0.5 px-1.5 rounded-sm ${shiftObj.id !== 'none' ? shiftObj.color : 'text-gray-400'}`}>{shiftObj.label.substring(0, 2)}</div>
                 </button>
               );
             })}
+          </div>
+        </div>
+
+        {/* スマホで使いやすいよう、タスク入力欄を一覧の上へ移動 */}
+        <div className="bg-white border-b border-gray-200 p-3 shrink-0 shadow-sm">
+          <div className="max-w-3xl mx-auto">
+            <div className="flex gap-2 items-end">
+              <textarea
+                value={newTaskText}
+                onChange={(e) => setNewTaskText(e.target.value)}
+                placeholder={`${viewUser.name.split(' ')[0]}さんのタスクを入力`}
+                className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow resize-y"
+                rows={2}
+                style={{ minHeight: '52px', maxHeight: '160px' }}
+                disabled={isUploading}
+              />
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                disabled={isUploading}
+                className="shrink-0 p-3 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl active:scale-95 disabled:opacity-50"
+                title="画像を添付"
+              >
+                <ImageIcon size={21}/>
+              </button>
+              <button
+                onClick={handleAddTask}
+                disabled={isUploading || (!newTaskText.trim() && !newTaskImage)}
+                className="shrink-0 bg-blue-600 text-white px-4 py-3 rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:bg-gray-400 transition-colors shadow-sm active:scale-95 font-bold text-sm flex items-center gap-1.5"
+              >
+                {isUploading ? <Loader2 size={18} className="animate-spin"/> : <Save size={18}/>} 保存
+              </button>
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleImageChange}
+                className="hidden"
+              />
+            </div>
+
+            {newTaskImagePreview && (
+              <div className="mt-2 flex items-start gap-2">
+                <div className="relative">
+                  <img src={newTaskImagePreview} alt="添付画像プレビュー" className="h-20 w-20 rounded-lg object-cover border border-gray-200"/>
+                  <button type="button" onClick={clearNewTaskImage} className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-gray-800 text-white flex items-center justify-center shadow" title="画像を外す">
+                    <X size={14}/>
+                  </button>
+                </div>
+                <div className="text-xs text-gray-500 pt-1 flex items-center gap-1"><Paperclip size={13}/>{newTaskImage?.name}</div>
+              </div>
+            )}
+            <p className="text-[10px] text-gray-400 mt-1.5">Enterで改行。保存は「保存」ボタン。画像ボタンから写真・画像を添付できます。</p>
           </div>
         </div>
 
@@ -689,32 +774,7 @@ const DailyDetailView = ({
               <ClipboardList className="mx-auto text-gray-300 mb-3" size={48}/>
               <p className="text-gray-400 text-sm">タスクはありません</p>
             </div>
-          ) : (
-            selectedDateTasks.map(task => (
-              <TaskItem key={task.id} task={task}/>
-            ))
-          )}
-        </div>
-      </div>
-
-      <div className="bg-white p-3 border-t border-gray-200 shrink-0 sticky bottom-0 z-10 pb-safe shadow-[0_-4px_10px_rgba(0,0,0,0.03)]">
-        <div className="flex gap-2 max-w-3xl mx-auto">
-          <textarea
-            value={newTaskText}
-            onChange={(e) => setNewTaskText(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={`${viewUser.name.split(' ')[0]}さんのタスクを追加 (Shift+Enterで改行)`}
-            className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow resize-none"
-            rows={1}
-            style={{ minHeight: '44px', maxHeight: '100px' }}
-          />
-          <button 
-            onClick={handleAddTask}
-            disabled={!newTaskText.trim()}
-            className="bg-blue-600 text-white p-2.5 rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:bg-gray-400 transition-colors shadow-sm active:scale-95 h-fit"
-          >
-            <Plus size={24}/>
-          </button>
+          ) : selectedDateTasks.map(task => <TaskItem key={task.id} task={task}/>) }
         </div>
       </div>
     </div>
@@ -1600,12 +1660,26 @@ export default function App() {
               />
             ) : activeTab === 'daily' ? (
               <DailyDetailView 
-                addTask={(dateStr, targetUid, text) => {
+                addTask={(dateStr, targetUid, text, imageUrl = '', imageName = '') => {
                   const dayTasks = teamData.tasks[dateStr] || {};
                   const userTasks = dayTasks[targetUid] || [];
                   const updatedTeamData = {
                     ...teamData,
-                    tasks: { ...teamData.tasks, [dateStr]: { ...dayTasks, [targetUid]: [...userTasks, { id: Date.now().toString(), text, completed: false }] } }
+                    tasks: {
+                      ...teamData.tasks,
+                      [dateStr]: {
+                        ...dayTasks,
+                        [targetUid]: [
+                          ...userTasks,
+                          {
+                            id: Date.now().toString(),
+                            text,
+                            completed: false,
+                            ...(imageUrl ? { imageUrl, imageName } : {})
+                          }
+                        ]
+                      }
+                    }
                   };
                   setTeamData(updatedTeamData);
                   saveToFirestore({ teamData: updatedTeamData });
