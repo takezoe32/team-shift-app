@@ -2311,8 +2311,8 @@ export default function App() {
             
             <div className="bg-white border-b border-gray-100 pt-safe px-6 py-3 flex justify-between items-center z-20 shrink-0 shadow-sm">
               <div>
-                <h1 className="text-xl font-black text-gray-900 tracking-tight flex items-center">
-                  管理課<span className="text-blue-600 ml-1.5">App</span>
+                <h1 className="text-sm sm:text-base font-black text-gray-900 tracking-tight whitespace-nowrap">
+                  LUIGANS OPERATIONS CREW <span className="text-blue-600">App</span>
                 </h1>
               </div>
               <button 
