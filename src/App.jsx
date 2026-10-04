@@ -1393,7 +1393,7 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
   );
 };
 
-const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, deletePartnerItem, addPartnerName }) => {
+const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartnerItem, togglePartnerItem, deletePartnerItem, addPartnerName }) => {
   const [date, setDate] = useState(formatDate(new Date()));
   const [time, setTime] = useState('');
   const [partnerName, setPartnerName] = useState('');
@@ -1401,6 +1401,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, deletePartner
   const [newPartnerName, setNewPartnerName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isAddingName, setIsAddingName] = useState(false);
+  const [editingItemId, setEditingItemId] = useState(null);
 
   const handleSave = async () => {
     if (!partnerName || !date || !time || !content.trim()) {
@@ -1410,16 +1411,22 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, deletePartner
 
     setIsSaving(true);
     try {
-      await addPartnerItem({
-        id: Date.now().toString(),
-        partnerName,
-        date,
-        time,
-        content: content.trim(),
-        createdAt: new Date().toISOString()
-      });
+      const itemData = { partnerName, date, time, content: content.trim() };
+      if (editingItemId) {
+        await updatePartnerItem(editingItemId, itemData);
+        setEditingItemId(null);
+      } else {
+        await addPartnerItem({
+          id: Date.now().toString(),
+          ...itemData,
+          completed: false,
+          completedAt: null,
+          createdAt: new Date().toISOString()
+        });
+      }
       setContent('');
       setTime('');
+      setPartnerName('');
     } catch (error) {
       console.error('パートナー予定の保存に失敗しました:', error);
       alert('保存に失敗しました。もう一度お試しください。');
@@ -1443,6 +1450,14 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, deletePartner
 
       <div className="p-4 max-w-2xl mx-auto space-y-4">
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 space-y-3">
+          {editingItemId && (
+            <div className="flex items-center justify-between bg-blue-50 border border-blue-100 rounded-xl px-3 py-2">
+              <span className="text-[10px] font-bold text-blue-700">パートナー予定を編集中</span>
+              <button type="button" onClick={() => {
+                setEditingItemId(null); setPartnerName(''); setDate(formatDate(new Date())); setTime(''); setContent('');
+              }} className="text-[10px] font-bold text-gray-500 hover:text-gray-800">キャンセル</button>
+            </div>
+          )}
           <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
             <div className="text-[10px] font-bold text-gray-500 mb-2">パートナー名を追加</div>
             <div className="flex gap-2">
@@ -1550,7 +1565,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, deletePartner
             className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {isSaving && <Loader2 size={16} className="animate-spin" />}
-            {isSaving ? '保存中…' : '保存'}
+            {isSaving ? '保存中…' : (editingItemId ? '変更を保存' : '保存')}
           </button>
         </div>
 
@@ -1559,23 +1574,33 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, deletePartner
             <div className="text-center text-[11px] text-gray-400 py-8">登録された内容はありません</div>
           ) : (
             sortedItems.map(item => (
-              <div key={item.id} className="bg-white rounded-xl border border-gray-200 px-3 py-2.5 flex items-start gap-3">
-                <div className="shrink-0 text-center min-w-[74px]">
-                  <div className="text-[10px] font-bold text-blue-600">{item.date?.replace(/-/g, '/')}</div>
-                  <div className="text-[11px] font-bold text-gray-700 mt-0.5">{item.time || '--:--'}</div>
+              <div key={item.id} className={`bg-white rounded-xl border ${item.completed ? 'border-green-200' : 'border-gray-200'} px-3 py-2 flex items-start gap-2`}>
+                <button type="button" onClick={() => togglePartnerItem(item.id)}
+                  className={`shrink-0 mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center ${item.completed ? 'border-green-500 bg-green-500 text-white' : 'border-gray-300 hover:border-blue-400'}`}
+                  title={item.completed ? '未完了に戻す' : '終了にする'}>
+                  {item.completed && <CheckSquare className="stroke-[3]" size={12}/>}
+                </button>
+                <div className="shrink-0 text-center min-w-[68px]">
+                  <div className={`text-[10px] font-bold ${item.completed ? 'text-gray-400 line-through' : 'text-blue-600'}`}>{item.date?.replace(/-/g, '/')}</div>
+                  <div className={`text-[11px] font-bold mt-0.5 ${item.completed ? 'text-gray-400 line-through' : 'text-gray-700'}`}>{item.time || '--:--'}</div>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-[10px] font-bold text-purple-600 mb-0.5">{item.partnerName || 'パートナー未設定'}</div>
-                  <div className="text-xs text-gray-700 whitespace-pre-wrap break-words">{item.content}</div>
+                  <div className={`text-[10px] font-bold mb-0.5 ${item.completed ? 'text-gray-400 line-through' : 'text-purple-600'}`}>{item.partnerName || 'パートナー未設定'}</div>
+                  <div className={`text-xs whitespace-pre-wrap break-words ${item.completed ? 'text-gray-400 line-through' : 'text-gray-700'}`}>{item.content}</div>
+                  {item.completedAt && <div className="text-[8px] text-green-600 mt-0.5">終了 {new Date(item.completedAt).toLocaleString('ja-JP')}</div>}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => deletePartnerItem(item.id)}
-                  className="shrink-0 p-1 text-gray-300 hover:text-red-500 rounded-md"
-                  title="削除"
-                >
-                  <Trash2 size={15}/>
-                </button>
+                <div className="shrink-0 flex gap-0.5">
+                  <button type="button" onClick={() => {
+                    setEditingItemId(item.id);
+                    setPartnerName(item.partnerName || '');
+                    setDate(item.date || formatDate(new Date()));
+                    setTime(item.time || '');
+                    setContent(item.content || '');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }} className="p-1 text-gray-300 hover:text-blue-500 rounded-md" title="編集"><Edit2 size={14}/></button>
+                  <button type="button" onClick={() => deletePartnerItem(item.id)}
+                    className="p-1 text-gray-300 hover:text-red-500 rounded-md" title="削除"><Trash2 size={14}/></button>
+                </div>
               </div>
             ))
           )}
@@ -1935,6 +1960,20 @@ export default function App() {
               <PartnerView
                 partnerItems={partnerItems}
                 partnerNames={partnerNames}
+                updatePartnerItem={async (itemId, changes) => {
+                  const updatedItems = partnerItems.map(item => item.id === itemId ? { ...item, ...changes } : item);
+                  setPartnerItems(updatedItems);
+                  await saveToFirestore({ partnerItems: updatedItems });
+                }}
+                togglePartnerItem={async (itemId) => {
+                  const now = new Date().toISOString();
+                  const updatedItems = partnerItems.map(item => item.id === itemId
+                    ? { ...item, completed: !item.completed, completedAt: !item.completed ? now : null }
+                    : item
+                  );
+                  setPartnerItems(updatedItems);
+                  await saveToFirestore({ partnerItems: updatedItems });
+                }}
                 addPartnerName={async (name) => {
                   const normalized = name.trim();
                   if (!normalized) return false;
