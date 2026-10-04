@@ -233,7 +233,11 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, onDate
                 <div className="space-y-1.5">
                   {activePartnerItems.map(item => (
                     <button type="button" key={item.id} onClick={() => setDetailPartner(item)} className="w-full bg-white border border-blue-100 rounded-md px-2 py-1.5 flex items-center gap-2 min-w-0 text-left hover:border-blue-300 active:bg-blue-50">
-                      <span className="shrink-0 text-[8px] font-bold text-blue-600 whitespace-nowrap">{item.date ? item.date.replace(/-/g, '/') : '日付なし'}</span>
+                      {item.date && item.date < formatDate(new Date()) ? (
+                        <span className="shrink-0 text-[8px] font-bold text-red-500 whitespace-nowrap">未終了 {item.date.replace(/-/g, '/')}</span>
+                      ) : (
+                        <span className="shrink-0 text-[8px] font-bold text-blue-600 whitespace-nowrap">{item.date ? item.date.replace(/-/g, '/') : '日付なし'}</span>
+                      )}
                       <span className="shrink-0 text-[8px] text-gray-500 whitespace-nowrap">{item.time || '--:--'}</span>
                       <span className="shrink-0 max-w-24 text-[9px] font-bold text-purple-600 truncate">{item.partnerName || 'パートナー未設定'}</span>
                       <span className="min-w-0 flex-1 text-[10px] text-gray-700 truncate" title={item.content || ''}>{(item.content || '').split(/\r?\n/)[0] || ''}</span>
@@ -1781,13 +1785,19 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
             </label>
             <label className="block">
               <span className="text-[10px] font-bold text-gray-500">時間</span>
-              <input
-                type="time"
+              <select
                 value={time}
-                step="900"
                 onChange={(e) => setTime(e.target.value)}
-                className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400"
-              />
+                className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-400"
+              >
+                <option value="">時間を選択</option>
+                {Array.from({ length: 96 }, (_, index) => {
+                  const hour = String(Math.floor(index / 4)).padStart(2, '0');
+                  const minute = String((index % 4) * 15).padStart(2, '0');
+                  const value = `${hour}:${minute}`;
+                  return <option key={value} value={value}>{value}</option>;
+                })}
+              </select>
             </label>
           </div>
 
