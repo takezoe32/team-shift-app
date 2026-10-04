@@ -1825,7 +1825,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
                 onClick={() => document.getElementById('partner-image-input')?.click()}
                 className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-gray-100 border border-gray-200 text-gray-700 text-xs font-bold hover:bg-gray-200"
               >
-                <ImagePlus size={16} />
+                <ImageIcon size={16} />
                 画像を追加
               </button>
               {newPartnerImage && (
