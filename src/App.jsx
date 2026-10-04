@@ -424,7 +424,7 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
     const findUserByCell = (cell) => {
       const target = normalizeName(cell);
       if (!target) return null;
-      return sortedUsers.find(u => normalizeName(u.name) === target) || null;
+      return sortedUsers.filter(u => u.shiftEligible !== false).find(u => normalizeName(u.name) === target) || null;
     };
 
     // Markdown表、タブ区切り、通常の空白区切りを同じ形式にする。
@@ -603,15 +603,11 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
             </tr>
           </thead>
           <tbody>
-            {sortedUsers.map(u => {
-              const roleObj = roles[u.role] || { level: 10, name: '' };
+            {sortedUsers.filter(u => u.shiftEligible !== false).map(u => {
               return (
                 <tr key={u.id}>
                   <td className="sticky left-0 bg-white z-10 p-2 border-r border-b border-gray-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                     <div className="font-bold text-gray-800 truncate">{u.name.split(' ')[0]}</div>
-                    <div className={`text-[9px] mt-0.5 font-bold ${roleObj.level >= 40 ? 'text-red-600' : roleObj.level >= 30 ? 'text-purple-600' : 'text-gray-400'}`}>
-                      {roleNames[u.role] || roleObj.name}
-                    </div>
                   </td>
                   {days.map(d => {
                      const shiftId = teamData.shifts[d.dateStr]?.[u.id] || 'none';
@@ -1049,6 +1045,7 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserRole, setNewUserRole] = useState(Object.keys(roles)[0] || 'staff');
+  const [newUserShiftEligible, setNewUserShiftEligible] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingUserId, setEditingUserId] = useState(null);
   const [editingName, setEditingName] = useState('');
@@ -1158,6 +1155,13 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
     });
   };
 
+  const handleToggleShiftEligible = (uid) => {
+    updateUsers({
+      ...users,
+      [uid]: { ...users[uid], shiftEligible: users[uid].shiftEligible === false }
+    });
+  };
+
   const handleDeleteUser = (uid) => {
     if(uid === currentUserUid) return;
     if(window.confirm(`${users[uid].name}さんを完全に削除してもよろしいですか？`)) {
@@ -1190,7 +1194,8 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
         name: newUserName.trim(), 
         email: normalizedEmail,
         role: newUserRole || defaultRole, 
-        canManageShift: false 
+        canManageShift: false,
+        shiftEligible: newUserShiftEligible 
       }
     };
 
@@ -1200,6 +1205,7 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
     setNewUserName('');
     setNewUserEmail('');
     setNewUserRole(defaultRole);
+    setNewUserShiftEligible(true);
     setShowAddForm(false);
   };
 
@@ -1409,16 +1415,25 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
                   placeholder="Googleメールアドレス (例: example@gmail.com)"
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                 />
-                <div className="flex gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <select
                     value={newUserRole}
                     onChange={(e) => setNewUserRole(e.target.value)}
-                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                    className="flex-1 min-w-[150px] border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                   >
                     {sortedRoleKeys.map((key) => (
                       <option key={key} value={key}>{roleNames[key] || roles[key].name}</option>
                     ))}
                   </select>
+                  <label className="flex items-center gap-1.5 text-[10px] text-gray-600 font-bold px-1 whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      checked={!newUserShiftEligible}
+                      onChange={(e) => setNewUserShiftEligible(!e.target.checked)}
+                      className="w-3.5 h-3.5 rounded"
+                    />
+                    シフト対象外
+                  </label>
                   <button 
                     onClick={handleAddUser}
                     disabled={!newUserName.trim() || !newUserEmail.trim()}
@@ -1512,6 +1527,16 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
                   </div>
                   
                   <div className="flex items-center gap-2 shrink-0 justify-end border-t md:border-t-0 pt-2 md:pt-0 border-gray-100 pl-6 md:pl-0">
+                    <label className="flex items-center gap-1 cursor-pointer" title="このメンバーをシフト管理表の対象外にします">
+                      <input
+                        type="checkbox"
+                        checked={u.shiftEligible === false}
+                        onChange={() => handleToggleShiftEligible(u.id)}
+                        className="w-3.5 h-3.5 rounded"
+                      />
+                      <span className="text-[10px] text-gray-600 font-bold mr-1">シフト対象外</span>
+                    </label>
+
                     {roleLevel < 40 && (
                       <label className="flex items-center gap-1 cursor-pointer" title="管理者以外のユーザーにシフト操作権限を付与">
                         <input 
