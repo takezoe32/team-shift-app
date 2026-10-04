@@ -236,7 +236,7 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
   const [showImportModal, setShowImportModal] = useState(false);
   const [importText, setImportText] = useState('');
   const isAdmin = checkIsAdmin(currentUser, roles);
-  const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
+  const monthKey = `${year}_${String(month + 1).padStart(2, '0')}`;
   const monthLogs = Array.isArray(shiftLogs?.[monthKey])
     ? [...shiftLogs[monthKey]].sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')))
     : [];
