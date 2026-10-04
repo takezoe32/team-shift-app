@@ -120,7 +120,14 @@ const LoginScreen = ({ onGoogleLoginSuccess, authError }) => (
         <Users size={32}/>
       </div>
       <div>
-        <h1 className="text-sm sm:text-base font-black text-gray-800 tracking-tight whitespace-nowrap">LUIGANS OPERATIONS CREW <span className="text-blue-600">App</span></h1>
+        <div className="flex items-center justify-center gap-2">
+          <div className="flex flex-col text-[10px] sm:text-xs font-black text-gray-800 tracking-tight leading-[0.9] text-right">
+            <span>LUIGANS</span>
+            <span>OPERATIONS</span>
+            <span>CREW</span>
+          </div>
+          <span className="text-3xl sm:text-4xl font-normal text-blue-600 tracking-tight leading-none">App</span>
+        </div>
         <p className="text-sm text-gray-500 mt-2">Google アカウントでログインしてください</p>
       </div>
 
@@ -2311,9 +2318,14 @@ export default function App() {
             
             <div className="bg-white border-b border-gray-100 pt-safe px-6 py-3 flex justify-between items-center z-20 shrink-0 shadow-sm">
               <div>
-                <h1 className="text-sm sm:text-base font-black text-gray-900 tracking-tight whitespace-nowrap">
-                  LUIGANS OPERATIONS CREW <span className="text-blue-600">App</span>
-                </h1>
+                <div className="flex items-center gap-2">
+                  <div className="flex flex-col text-[9px] sm:text-[10px] font-black text-gray-900 tracking-tight leading-[0.9] text-right">
+                    <span>LUIGANS</span>
+                    <span>OPERATIONS</span>
+                    <span>CREW</span>
+                  </div>
+                  <span className="text-2xl sm:text-3xl font-normal text-blue-600 tracking-tight leading-none">App</span>
+                </div>
               </div>
               <button 
                 onClick={handleLogout}
