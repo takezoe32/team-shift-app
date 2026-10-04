@@ -1549,7 +1549,7 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
   );
 };
 
-const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartnerItem, togglePartnerItem, deletePartnerItem, addPartnerName }) => {
+const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartnerItem, togglePartnerItem, deletePartnerItem, addPartnerName, updatePartnerName, deletePartnerName }) => {
   const [date, setDate] = useState(formatDate(new Date()));
   const [time, setTime] = useState('');
   const [partnerName, setPartnerName] = useState('');
@@ -1559,7 +1559,39 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
   const [newPartnerImagePreview, setNewPartnerImagePreview] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isAddingName, setIsAddingName] = useState(false);
+  const [editingPartnerName, setEditingPartnerName] = useState(null);
+  const [editingPartnerNameValue, setEditingPartnerNameValue] = useState('');
   const [editingItemId, setEditingItemId] = useState(null);
+
+  const handleStartEditPartnerName = (name) => {
+    setEditingPartnerName(name);
+    setEditingPartnerNameValue(name);
+  };
+
+  const handleSavePartnerName = async () => {
+    const oldName = editingPartnerName;
+    const newName = editingPartnerNameValue.trim();
+    if (!oldName || !newName) return;
+    if (newName.toLowerCase() !== oldName.toLowerCase() &&
+        (partnerNames || []).some(name => name.toLowerCase() === newName.toLowerCase())) {
+      alert('同じパートナー名がすでに登録されています。');
+      return;
+    }
+    await updatePartnerName(oldName, newName);
+    if (partnerName === oldName) setPartnerName(newName);
+    setEditingPartnerName(null);
+    setEditingPartnerNameValue('');
+  };
+
+  const handleDeletePartnerName = async (name) => {
+    if (!window.confirm(`「${name}」をパートナー名の登録一覧から削除してもよろしいですか？`)) return;
+    await deletePartnerName(name);
+    if (partnerName === name) setPartnerName('');
+    if (editingPartnerName === name) {
+      setEditingPartnerName(null);
+      setEditingPartnerNameValue('');
+    }
+  };
 
   const handleSave = async () => {
     if (!partnerName || !date || !time || !content.trim()) {
@@ -1680,6 +1712,35 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
             </div>
           </div>
 
+          <div className="bg-white border border-gray-200 rounded-xl p-3">
+            <div className="text-[10px] font-bold text-gray-500 mb-2">登録済みパートナー名</div>
+            {(partnerNames || []).length === 0 ? (
+              <p className="text-[9px] text-gray-400">まだ登録されていません。</p>
+            ) : (
+              <div className="space-y-1.5">
+                {(partnerNames || []).map(name => (
+                  <div key={name} className="flex items-center gap-2">
+                    {editingPartnerName === name ? (
+                      <>
+                        <input type="text" value={editingPartnerNameValue} onChange={(e) => setEditingPartnerNameValue(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSavePartnerName(); } }}
+                          className="min-w-0 flex-1 border border-blue-300 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-400" autoFocus />
+                        <button type="button" onClick={handleSavePartnerName} disabled={!editingPartnerNameValue.trim()} className="px-2.5 py-1.5 rounded-lg bg-blue-600 text-white text-[10px] font-bold disabled:opacity-40">保存</button>
+                        <button type="button" onClick={() => { setEditingPartnerName(null); setEditingPartnerNameValue(''); }} className="px-2 py-1.5 rounded-lg bg-gray-100 text-gray-500 text-[10px] font-bold">取消</button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="min-w-0 flex-1 text-xs font-bold text-gray-700 truncate">{name}</span>
+                        <button type="button" onClick={() => handleStartEditPartnerName(name)} className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-md" title="パートナー名を編集"><Edit2 size={14}/></button>
+                        <button type="button" onClick={() => handleDeletePartnerName(name)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-md" title="パートナー名を削除"><Trash2 size={14}/></button>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <label className="block">
             <span className="text-[10px] font-bold text-gray-500">パートナー名</span>
             <select
@@ -1712,6 +1773,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
               <input
                 type="time"
                 value={time}
+                step="900"
                 onChange={(e) => setTime(e.target.value)}
                 className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400"
               />
@@ -2176,6 +2238,18 @@ export default function App() {
                   setPartnerNames(updatedNames);
                   await saveToFirestore({ partnerNames: updatedNames });
                   return true;
+                }}
+                updatePartnerName={async (oldName, newName) => {
+                  const updatedNames = partnerNames.map(name => name === oldName ? newName : name);
+                  const updatedItems = partnerItems.map(item => item.partnerName === oldName ? { ...item, partnerName: newName } : item);
+                  setPartnerNames(updatedNames);
+                  setPartnerItems(updatedItems);
+                  await saveToFirestore({ partnerNames: updatedNames, partnerItems: updatedItems });
+                }}
+                deletePartnerName={async (name) => {
+                  const updatedNames = partnerNames.filter(existing => existing !== name);
+                  setPartnerNames(updatedNames);
+                  await saveToFirestore({ partnerNames: updatedNames });
                 }}
                 addPartnerItem={async (item) => {
                   const updatedItems = [...partnerItems, item];
