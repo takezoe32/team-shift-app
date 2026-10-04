@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { GoogleOAuthProvider, GoogleLogin, googleLogout } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { getFirestore, doc, onSnapshot, setDoc, updateDoc, deleteField } from 'firebase/firestore';
 
 import { 
   Calendar as CalendarIcon, 
@@ -2078,6 +2078,38 @@ export default function App() {
     }
   };
 
+  // ユーザー情報はusers全体を一括保存しない。
+  // ログイン情報や設定変更が古いusers全体をFirestoreへ書き戻して
+  // 設定した名前を元に戻してしまう競合を防ぐため、変更されたユーザーだけを更新する。
+  const saveUsersToFirestore = async (nextUsers, previousUsers = users) => {
+    try {
+      const docRef = doc(db, 'app_data', 'shared_state');
+      const updates = {};
+      const ids = new Set([
+        ...Object.keys(previousUsers || {}),
+        ...Object.keys(nextUsers || {})
+      ]);
+
+      ids.forEach(id => {
+        const before = previousUsers?.[id];
+        const after = nextUsers?.[id];
+        if (!after) {
+          if (before) updates[`users.${id}`] = deleteField();
+          return;
+        }
+        if (JSON.stringify(before) !== JSON.stringify(after)) {
+          updates[`users.${id}`] = after;
+        }
+      });
+
+      if (Object.keys(updates).length > 0) {
+        await updateDoc(docRef, updates);
+      }
+    } catch (error) {
+      console.error("Firestore User Save Error:", error);
+    }
+  };
+
   // Firestore Realtime Listener
   useEffect(() => {
     const docRef = doc(db, 'app_data', 'shared_state');
@@ -2164,8 +2196,9 @@ export default function App() {
 
         if (needsCleanup) {
           const updatedTeamData = { shifts: currentShifts, tasks: currentTasks };
+          // usersは差分だけ更新する。正規ユーザーの名前を古いsnapshotで上書きしない。
+          saveUsersToFirestore(currentUsers, data.users || {});
           saveToFirestore({
-            users: currentUsers,
             userOrder: currentUserOrder,
             teamData: updatedTeamData
           });
@@ -2235,7 +2268,8 @@ export default function App() {
     setUsers(updatedUsers);
     setUserOrder(updatedOrder);
     setTeamData(updatedTeamData);
-    saveToFirestore({ users: updatedUsers, userOrder: updatedOrder, teamData: updatedTeamData });
+    saveUsersToFirestore(updatedUsers, users);
+    saveToFirestore({ userOrder: updatedOrder, teamData: updatedTeamData });
   };
 
   const handleGoogleLoginSuccess = (credentialResponse) => {
@@ -2281,7 +2315,8 @@ export default function App() {
       const updatedOrder = [loggedInUser.id];
       setUsers(updatedUsers);
       setUserOrder(updatedOrder);
-      saveToFirestore({ users: updatedUsers, userOrder: updatedOrder });
+      saveUsersToFirestore(updatedUsers, users);
+      saveToFirestore({ userOrder: updatedOrder });
     } else {
       // 同じメールが複数残っていても、userOrderに登録されているIDを優先。
       // これにより古い重複IDで新しいシフトが作られるのを防ぐ。
@@ -2305,7 +2340,7 @@ export default function App() {
         }
       };
       setUsers(updatedUsers);
-      saveToFirestore({ users: updatedUsers });
+      saveUsersToFirestore(updatedUsers, users);
     }
 
     setCurrentUser(loggedInUser);
@@ -2607,8 +2642,13 @@ export default function App() {
                   saveToFirestore({ shiftTypes: newShiftTypes });
                 }} 
                 updateUsers={(newUsers) => {
+                  const previousUsers = users;
                   setUsers(newUsers);
-                  saveToFirestore({ users: newUsers });
+                  if (currentUser?.id && newUsers[currentUser.id]) {
+                    setCurrentUser(newUsers[currentUser.id]);
+                    localStorage.setItem('google_user', JSON.stringify(newUsers[currentUser.id]));
+                  }
+                  saveUsersToFirestore(newUsers, previousUsers);
                 }} 
                 shiftTypes={shiftTypes} 
                 users={users}
