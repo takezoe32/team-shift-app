@@ -120,7 +120,7 @@ const LoginScreen = ({ onGoogleLoginSuccess, authError }) => (
         <Users size={32}/>
       </div>
       <div>
-        <h1 className="text-xl font-bold text-gray-800">TeamShift App</h1>
+        <h1 className="text-xl font-bold text-gray-800">管理課App</h1>
         <p className="text-sm text-gray-500 mt-2">Google アカウントでログインしてください</p>
       </div>
 
@@ -2285,7 +2285,7 @@ export default function App() {
             <div className="bg-white border-b border-gray-100 pt-safe px-6 py-3 flex justify-between items-center z-20 shrink-0 shadow-sm">
               <div>
                 <h1 className="text-xl font-black text-gray-900 tracking-tight flex items-center">
-                  TeamShift <span className="text-blue-600 ml-1.5">App</span>
+                  管理課<span className="text-blue-600 ml-1.5">App</span>
                 </h1>
               </div>
               <button 
