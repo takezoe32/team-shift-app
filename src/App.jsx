@@ -1791,23 +1791,42 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
             </label>
           </div>
 
-          <label className="block">
+          <div className="block">
             <span className="text-[10px] font-bold text-gray-500">画像</span>
             <div className="mt-1 flex items-center gap-2">
-              <input type="file" accept="image/*" capture="environment" onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                if (!file.type.startsWith('image/')) { alert('画像ファイルを選択してください。'); return; }
-                if (file.size > 10 * 1024 * 1024) { alert('画像は10MB以下にしてください。'); return; }
-                setNewPartnerImage(file);
-                setNewPartnerImagePreview(URL.createObjectURL(file));
-              }} className="block w-full text-xs text-gray-500" />
+              <input
+                id="partner-image-input"
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  if (!file.type.startsWith('image/')) { alert('画像ファイルを選択してください。'); e.target.value = ''; return; }
+                  if (file.size > 10 * 1024 * 1024) { alert('画像は10MB以下にしてください。'); e.target.value = ''; return; }
+                  setNewPartnerImage(file);
+                  setNewPartnerImagePreview(URL.createObjectURL(file));
+                  e.target.value = '';
+                }}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => document.getElementById('partner-image-input')?.click()}
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-gray-100 border border-gray-200 text-gray-700 text-xs font-bold hover:bg-gray-200"
+              >
+                <ImagePlus size={16} />
+                画像を追加
+              </button>
+              {newPartnerImage && (
+                <span className="text-[9px] text-gray-500 truncate max-w-[180px]">{newPartnerImage.name}</span>
+              )}
             </div>
             {newPartnerImagePreview && <img src={newPartnerImagePreview} alt="添付画像プレビュー" className="mt-2 h-24 w-auto rounded-lg object-cover border border-gray-200" />}
             {!newPartnerImagePreview && editingItemId && (partnerItems || []).find(item => item.id === editingItemId)?.imageUrl && (
               <p className="text-[9px] text-gray-400 mt-1">保存済み画像があります。新しい画像を選ぶと差し替えます。</p>
             )}
-          </label>
+          </div>
 
           <label className="block">
             <span className="text-[10px] font-bold text-gray-500">内容</span>
