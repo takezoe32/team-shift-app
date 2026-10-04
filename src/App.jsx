@@ -3,7 +3,7 @@ import { GoogleOAuthProvider, GoogleLogin, googleLogout } from '@react-oauth/goo
 import { jwtDecode } from 'jwt-decode';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, onSnapshot, setDoc } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+
 import { 
   Calendar as CalendarIcon, 
   CheckSquare, 
@@ -44,7 +44,21 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const storage = getStorage(app);
+const CLOUDINARY_CLOUD_NAME = 'hfkn6ad1';
+const CLOUDINARY_UPLOAD_PRESET = 'teamshift_tasks';
+const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+
+const uploadTaskImageToCloudinary = async (file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+  const response = await fetch(CLOUDINARY_UPLOAD_URL, { method: 'POST', body: formData });
+  const result = await response.json();
+  if (!response.ok || !result.secure_url) {
+    throw new Error(result?.error?.message || 'Cloudinaryへの画像アップロードに失敗しました。');
+  }
+  return result;
+};
 
 const INITIAL_ROLES = {
   admin: { level: 40, name: '管理者' },
@@ -565,19 +579,21 @@ const DailyDetailView = ({
     try {
       let imageUrl = '';
       let imageName = '';
+      let imagePublicId = '';
+      let imageBytes = 0;
       if (newTaskImage) {
-        const safeName = newTaskImage.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-        const imageRef = ref(storage, `task-images/${selectedDate}/${selectedUserUid}/${Date.now()}_${safeName}`);
-        const uploadResult = await uploadBytes(imageRef, newTaskImage, { contentType: newTaskImage.type });
-        imageUrl = await getDownloadURL(uploadResult.ref);
+        const result = await uploadTaskImageToCloudinary(newTaskImage);
+        imageUrl = result.secure_url || result.url || '';
         imageName = newTaskImage.name;
+        imagePublicId = result.public_id || '';
+        imageBytes = Number(result.bytes || newTaskImage.size || 0);
       }
-      addTask(selectedDate, selectedUserUid, newTaskText.trim(), imageUrl, imageName);
+      addTask(selectedDate, selectedUserUid, newTaskText.trim(), imageUrl, imageName, imagePublicId, imageBytes);
       setNewTaskText('');
       clearNewTaskImage();
     } catch (error) {
       console.error('画像のアップロードに失敗しました:', error);
-      alert('画像の保存に失敗しました。Firebase Storageの設定を確認してください。');
+      alert(`画像の保存に失敗しました。\n${error?.message || 'Cloudinaryへのアップロードに失敗しました。'}`);
     } finally {
       setIsUploading(false);
     }
@@ -1660,7 +1676,7 @@ export default function App() {
               />
             ) : activeTab === 'daily' ? (
               <DailyDetailView 
-                addTask={(dateStr, targetUid, text, imageUrl = '', imageName = '') => {
+                addTask={(dateStr, targetUid, text, imageUrl = '', imageName = '', imagePublicId = '', imageBytes = 0) => {
                   const dayTasks = teamData.tasks[dateStr] || {};
                   const userTasks = dayTasks[targetUid] || [];
                   const updatedTeamData = {
@@ -1675,7 +1691,13 @@ export default function App() {
                             id: Date.now().toString(),
                             text,
                             completed: false,
-                            ...(imageUrl ? { imageUrl, imageName } : {})
+                            ...(imageUrl ? {
+                              imageUrl,
+                              imageName,
+                              imagePublicId,
+                              imageBytes,
+                              imageUploadedAt: new Date().toISOString()
+                            } : {})
                           }
                         ]
                       }
