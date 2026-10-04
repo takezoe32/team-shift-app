@@ -746,7 +746,42 @@ const DailyDetailView = ({
   const TaskItem = ({ task }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [editVal, setEditVal] = useState(task.text || '');
+    const [selectedAssigneeIds, setSelectedAssigneeIds] = useState(
+      Array.isArray(task.assigneeIds) && task.assigneeIds.length ? task.assigneeIds : [task.ownerUid || selectedUserUid]
+    );
+    const [isUpdatingAssignees, setIsUpdatingAssignees] = useState(false);
+    const [assigneeUpdateMessage, setAssigneeUpdateMessage] = useState('');
     const isSelected = selectedTaskId === task.id;
+
+    const handleAssigneeChange = (uid) => {
+      setSelectedAssigneeIds(prev =>
+        prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]
+      );
+      setAssigneeUpdateMessage('');
+    };
+
+    const handleSaveAssignees = async () => {
+      if (!selectedAssigneeIds.length) {
+        alert('担当者を1名以上選択してください。');
+        return;
+      }
+      setIsUpdatingAssignees(true);
+      setAssigneeUpdateMessage('');
+      try {
+        await updateTaskAssignees(
+          task.ownerUid || selectedUserUid,
+          selectedDate,
+          task.id,
+          selectedAssigneeIds
+        );
+        setAssigneeUpdateMessage('担当者を更新しました');
+      } catch (error) {
+        console.error('担当者更新エラー:', error);
+        setAssigneeUpdateMessage('担当者の更新に失敗しました。');
+      } finally {
+        setIsUpdatingAssignees(false);
+      }
+    };
 
     if (isEditing) {
       return (
@@ -804,8 +839,46 @@ const DailyDetailView = ({
               {task.text}
             </span>
           )}
-          {Array.isArray(task.assigneeIds) && task.assigneeIds.length > 0 && (
-            <div className="mt-1 text-[9px] text-purple-600">担当: {task.assigneeIds.map(id => users[id]?.name?.split(' ')[0] || '').filter(Boolean).join('・')}</div>
+          <div className="mt-1 text-[9px] text-purple-600">担当: {selectedAssigneeIds.map(id => users[id]?.name?.split(' ')[0] || '').filter(Boolean).join('・') || '未設定'}</div>
+
+          {isSelected && (
+            <div className="mt-3 pt-3 border-t border-purple-100" onClick={(e) => e.stopPropagation()}>
+              <div className="text-[10px] font-bold text-gray-600 mb-2">担当者（複数選択可）</div>
+              <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                {(sortedUsers || []).map(member => {
+                  const checked = selectedAssigneeIds.includes(member.id);
+                  return (
+                    <label
+                      key={member.id}
+                      className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer ${checked ? 'border-purple-400 bg-purple-50' : 'border-gray-200 bg-white'}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => handleAssigneeChange(member.id)}
+                        className="shrink-0"
+                      />
+                      <span className="text-xs font-bold text-gray-700 truncate">{member.name.split(' ')[0]}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  type="button"
+                  onClick={handleSaveAssignees}
+                  disabled={!selectedAssigneeIds.length || isUpdatingAssignees}
+                  className="flex-1 py-2 rounded-lg bg-purple-600 text-white text-xs font-bold disabled:opacity-40 flex items-center justify-center gap-1.5"
+                >
+                  {isUpdatingAssignees ? <Loader2 size={14} className="animate-spin"/> : <Save size={14}/>}
+                  {isUpdatingAssignees ? '更新中…' : '担当者を更新'}
+                </button>
+              </div>
+              {assigneeUpdateMessage && (
+                <p className="text-[9px] text-green-600 font-bold mt-1.5">{assigneeUpdateMessage}</p>
+              )}
+              <p className="text-[9px] text-gray-400 mt-1">1名なら担当変更、2名以上なら共同作業です。</p>
+            </div>
           )}
           {task.imageUrl && (
             <img
