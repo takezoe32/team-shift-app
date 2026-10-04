@@ -2107,11 +2107,15 @@ export default function App() {
           if (list.length <= 1) return;
 
           needsCleanup = true;
+          // 設定画面で登録・編集した名前を正として扱う。
+          // u_ で始まるユーザーは設定画面から追加したメンバーなので、
+          // Googleプロフィール名を持つログインIDより優先する。
+          const settingsUser = list.find(u => u.id.startsWith('u_'));
           const orderedUser = currentUserOrder
             .map(id => list.find(u => u.id === id))
             .find(Boolean);
           const googleIdUser = list.find(u => !u.id.startsWith('u_'));
-          const realUser = orderedUser || googleIdUser || list[0];
+          const realUser = settingsUser || orderedUser || googleIdUser || list[0];
           const duplicateUsers = list.filter(u => u.id !== realUser.id);
 
           duplicateUsers.forEach(dUser => {
