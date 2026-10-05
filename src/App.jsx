@@ -2910,7 +2910,7 @@ export default function App() {
                       ? { ...t, completed: nextCompleted, completedAt: nextCompletedAt }
                       : t
                   );
-                  pendingTaskCompletionOverridesRef.current[dateStr + '-' + ownerUid + '-' + taskId] = {
+                  pendingTaskCompletionOverridesRef.current[dateStr + '-' + targetUid + '-' + taskId] = {
                     dateStr,
                     ownerUid,
                     taskId,
