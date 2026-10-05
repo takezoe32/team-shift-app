@@ -757,11 +757,26 @@ const DailyDetailView = ({
           onClick={(e) => e.stopPropagation()}
           onChange={async (e) => {
             e.stopPropagation();
+            await debugLog('daily.task.checkbox.change', {
+              taskId: task.id,
+              taskDate: task.taskDate || selectedDate,
+              selectedDate,
+              ownerUid: task.ownerUid || selectedUserUid,
+              currentUserUid,
+              currentUserName: currentUser?.name || '',
+              isAdmin: !!isAdmin,
+              canEditTask,
+              completedBefore: !!task.completed,
+              checked: e.target.checked
+            });
             const taskDate = task.taskDate || selectedDate;
             const ownerUid = task.ownerUid || selectedUserUid;
             try {
+              await debugLog('daily.task.checkbox.toggle.start', { taskId: task.id, taskDate, ownerUid, currentUserUid, canEditTask, isAdmin });
               await toggleTask(taskDate, ownerUid, task.id);
+              await debugLog('daily.task.checkbox.toggle.success', { taskId: task.id, taskDate, ownerUid });
             } catch (error) {
+              await debugLog('daily.task.checkbox.toggle.error', { taskId: task.id, taskDate, ownerUid, message: error?.message || String(error), stack: error?.stack || '' });
               console.error('タスクチェック処理に失敗しました:', error);
             }
           }}
