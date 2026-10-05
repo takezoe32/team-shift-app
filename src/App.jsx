@@ -614,9 +614,14 @@ const DailyDetailView = ({
     .sort((a, b) => b.localeCompare(a))
     .flatMap(dateStr =>
       Object.entries(teamData.tasks[dateStr] || {})
-        .filter(([ownerUid]) => ownerUid === selectedUserUid)
         .flatMap(([ownerUid, tasks]) => (tasks || [])
-          .filter(task => !task.completed)
+          .filter(task => {
+            if (task.completed) return false;
+            const assignees = Array.isArray(task.assigneeIds) && task.assigneeIds.length
+              ? task.assigneeIds
+              : [ownerUid];
+            return assignees.includes(selectedUserUid);
+          })
           .map(task => ({ ...task, ownerUid, taskDate: dateStr })))
     );
   const selectedDateShifts = teamData.shifts[selectedDate] || {};
