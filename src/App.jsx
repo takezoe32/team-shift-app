@@ -685,8 +685,11 @@ const DailyDetailView = ({
     );
     const [isUpdatingAssignees, setIsUpdatingAssignees] = useState(false);
     const [assigneeUpdateMessage, setAssigneeUpdateMessage] = useState('');
+    const [showPastFinishConfirm, setShowPastFinishConfirm] = useState(false);
     const isSelected = selectedTaskId === task.id;
     const canEditTask = isAdmin || task.ownerUid === currentUserUid;
+    const taskDate = task.taskDate || selectedDate;
+    const isPastTask = taskDate < formatDate(new Date());
 
     const handleAssigneeChange = (uid) => {
       setSelectedAssigneeIds(prev =>
@@ -775,7 +778,8 @@ const DailyDetailView = ({
                 currentUserName: currentUser?.name || '',
                 isAdmin: !!isAdmin,
                 canEditTask,
-                completedBefore: !!task.completed
+                completedBefore: !!task.completed,
+                isPastTask
               }
             });
             if (!canEditTask) {
@@ -786,6 +790,15 @@ const DailyDetailView = ({
                 details: { taskId: task.id, taskDate, ownerUid, currentUserUid, isAdmin: !!isAdmin }
               });
               alert('他のメンバーが登録したタスクは操作できません。');
+              return;
+            }
+            if (isPastTask && !task.completed) {
+              setShowPastFinishConfirm(true);
+              await writeDebugLog({
+                event: 'daily.task.checkbox.past.confirm.show',
+                user: currentUser,
+                details: { taskId: task.id, taskDate, ownerUid }
+              });
               return;
             }
             try {
@@ -829,6 +842,34 @@ const DailyDetailView = ({
             </span>
           )}
           <div className="mt-1 text-[9px] text-purple-600">担当: {selectedAssigneeIds.map(id => users[id]?.name?.split(' ')[0] || '').filter(Boolean).join('・') || '未設定'}</div>
+
+          {showPastFinishConfirm && isPastTask && !task.completed && canEditTask && (
+            <label
+              className="mt-2 flex items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-bold text-orange-700 cursor-pointer"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <input
+                type="checkbox"
+                onChange={async (e) => {
+                  e.stopPropagation();
+                  if (!e.target.checked) return;
+                  await writeDebugLog({
+                    event: 'daily.task.checkbox.past.confirmed',
+                    user: currentUser,
+                    details: { taskId: task.id, taskDate, ownerUid: task.ownerUid || selectedUserUid }
+                  });
+                  setShowPastFinishConfirm(false);
+                  try {
+                    await toggleTask(taskDate, task.ownerUid || selectedUserUid, task.id);
+                  } catch (error) {
+                    console.error('過去タスクの終了処理に失敗しました:', error);
+                  }
+                }}
+                className="shrink-0 w-4 h-4"
+              />
+              <span>終了しますか？</span>
+            </label>
+          )}
 
           {isSelected && (
             <div className="mt-3 pt-3 border-t border-purple-100" onClick={(e) => e.stopPropagation()}>
