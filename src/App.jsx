@@ -2396,6 +2396,8 @@ export default function App() {
   const [debugLogs, setDebugLogs] = useState([]);
   const [shiftLogs, setShiftLogs] = useState({});
   const currentUserRef = useRef(null);
+  // Firestoreのリアルタイム更新のたびに、現在の画面をログイン初期画面へ戻さないためのフラグ。
+  const loginRestoreCompletedRef = useRef(false);
   const lastDebugActionRef = useRef('app.loaded');
 
   const debugLog = async (level, event, details = {}) => {
@@ -2667,8 +2669,14 @@ export default function App() {
               u => (u.email || '').trim().toLowerCase() === savedEmail
             );
             if (restoredUser) {
-              setCurrentUser(restoredUser);
-              setActiveTab(localStorage.getItem('teamshift_skip_help_on_login') === 'true' ? 'calendar' : 'help');
+              // 初回のログイン復元時だけ初期画面を決める。
+              // 以降のFirestore更新では、日別タスクの保存・削除などで
+              // 現在の画面がカレンダーへ戻らないようにする。
+              if (!loginRestoreCompletedRef.current) {
+                setCurrentUser(restoredUser);
+                setActiveTab(localStorage.getItem('teamshift_skip_help_on_login') === 'true' ? 'calendar' : 'help');
+                loginRestoreCompletedRef.current = true;
+              }
               localStorage.setItem('google_user', JSON.stringify(restoredUser));
             } else {
               localStorage.removeItem('google_user');
