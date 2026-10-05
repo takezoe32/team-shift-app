@@ -1151,7 +1151,7 @@ const HelpView = () => {
           <h2 className="text-2xl font-black text-gray-800 mb-5">② シフト管理</h2>
           <p className="text-base sm:text-lg leading-relaxed text-gray-700">出勤・休みを確認したり、変更するときに使います。</p>
           <GuideMockup title="シフト管理" active="シフト管理" steps={['下の「シフト管理」を押します。','変更したい人・日付を探します。','変更する場所を押して、出勤・休みを選びます。','最後に、変更できているか確認します。']}>
-            <div className="space-y-2">{['竹添','平川','田中'].map((n,i)=><div key={n} className="flex items-center gap-2"><div className="w-16 text-xs font-bold">{n}</div>{['〇','/','〇','◎','/'].map((s,j)=><div key={j} className={i===0&&j===2?'relative border-4 border-red-500 rounded-lg bg-blue-50 w-10 py-2 text-center font-black':'w-10 py-2 rounded-lg bg-gray-100 text-center font-bold'}>{s}{i===0&&j===2&&<span className="absolute -top-7 -right-8 bg-red-500 text-white rounded px-2 py-1 text-[9px] whitespace-nowrap">←ここを押す</span>}</div>)}</div>)}</div>
+            <div className="space-y-2">{['竹添','平川','田中'].map((n,i)=><div key={n} className="flex items-center gap-2"><div className="w-16 text-xs font-bold">{n}</div>{['出勤','休み','出勤','出勤','休み'].map((s,j)=><div key={j} className={i===0&&j===2?'relative border-4 border-red-500 rounded-lg bg-blue-50 w-10 py-2 text-center font-black':'w-10 py-2 rounded-lg bg-gray-100 text-center font-bold'}>{s}{i===0&&j===2&&<span className="absolute -top-7 -right-8 bg-red-500 text-white rounded px-2 py-1 text-[9px] whitespace-nowrap">←ここを押す</span>}</div>)}</div>)}</div>
           </GuideMockup>
           <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-2xl p-4 text-base sm:text-lg font-bold">シフトを変更すると、他の人にも同じ内容が表示されます。</div>
         </section>
