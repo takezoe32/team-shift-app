@@ -1146,6 +1146,102 @@ const HelpView = () => {
           </div>
         </section>
 
+        <section className="bg-green-50 border-2 border-green-200 rounded-3xl p-6 sm:p-8 shadow-sm">
+          <h2 className="text-2xl sm:text-3xl font-black text-green-800 mb-4">まず、この流れで使ってください</h2>
+          <div className="space-y-3">
+            {[
+              ['1', '今日・明日の自分の仕事を確認する', '「日別タスク」を開いて、今日または明日に自分がやらなければならない作業を確認します。'],
+              ['2', '自分がやる作業を日別タスクに書く', 'まだ登録されていない作業があれば、自分の名前を選んで、作業内容を書き、「保存」を押します。'],
+              ['3', 'パートナーから連絡があったら記録する', '「パートナー」を開いて、相手・日時・主担当を確認し、「今回の申し送り・追記」に連絡内容を書いて保存します。'],
+              ['4', '終わった作業はチェックする', '日別タスクの作業が終わったら、左の□を押して終了にします。'],
+              ['5', '次の人が見ても分かる状態にする', '作業の状況やパートナーからの連絡を残しておくことで、次の人も「何が残っているか」を確認できます。']
+            ].map(([number, title, text]) => (
+              <div key={number} className="flex gap-3 items-start bg-white rounded-2xl border border-green-100 p-4">
+                <div className="shrink-0 w-9 h-9 rounded-full bg-green-600 text-white flex items-center justify-center font-black">{number}</div>
+                <div>
+                  <h3 className="text-lg sm:text-xl font-black text-gray-800">{title}</h3>
+                  <p className="text-base sm:text-lg text-gray-700 leading-relaxed mt-1">{text}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="bg-white rounded-3xl border-2 border-blue-100 shadow-sm p-6 sm:p-8">
+          <h2 className="text-2xl font-black text-blue-700 mb-4">今日・明日の「自分がやる仕事」を登録する方法</h2>
+          <p className="text-base sm:text-lg leading-relaxed text-gray-700">
+            「あとでやる」「明日やる」「今日中にやらなければならない」など、<strong>自分が担当する作業</strong>は日別タスクに書いてください。
+          </p>
+          <GuideMockup title="日別タスク：自分の仕事を入力" active="日別タスク" steps={[
+            '下の「日別タスク」を押します。',
+            '上の「◀」「▶」で、今日または明日の日付にします。',
+            '上の名前から、自分の名前を押します。',
+            '入力欄に「自分がやる作業」を具体的に書きます。',
+            '右の「保存」を押します。これで、その日の自分のタスクとして登録されます。'
+          ]}>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-black text-gray-700">2026/10/05</span>
+                <span className="text-xs text-gray-500">← 今日・明日を選ぶ</span>
+              </div>
+              <div className="flex gap-2">
+                <div className="rounded-xl border-4 border-red-500 bg-blue-50 px-4 py-2 text-sm font-black relative">
+                  竹添
+                  <span className="absolute -top-7 left-1/2 -translate-x-1/2 bg-red-500 text-white rounded px-2 py-1 text-[9px] whitespace-nowrap">←自分を押す</span>
+                </div>
+                <div className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-bold text-gray-500">平川</div>
+                <div className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-bold text-gray-500">田中</div>
+              </div>
+              <div className="flex gap-2 items-end">
+                <div className="flex-1 border-4 border-red-500 rounded-xl bg-white px-3 py-3 text-sm font-bold text-gray-700">
+                  明日の開店準備をする
+                  <div className="text-[9px] text-red-500 mt-1">←ここに作業を書く</div>
+                </div>
+                <div className="bg-blue-600 text-white rounded-xl px-4 py-3 font-black text-sm">保存</div>
+              </div>
+            </div>
+          </GuideMockup>
+          <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-2xl p-4 text-base sm:text-lg font-bold leading-relaxed">
+            <strong>ポイント：</strong>「自分がやらなければならない作業」を、できるだけ具体的に書いてください。<br />
+            例：「○○さんへ電話する」「明日の資料を準備する」「入口の備品を確認する」
+          </div>
+        </section>
+
+        <section className="bg-white rounded-3xl border-2 border-purple-100 shadow-sm p-6 sm:p-8">
+          <h2 className="text-2xl font-black text-purple-700 mb-4">パートナーから連絡があったときの記録方法</h2>
+          <p className="text-base sm:text-lg leading-relaxed text-gray-700">
+            パートナーから電話・口頭・メッセージなどで連絡があったら、忘れないうちに「パートナー」に記録してください。
+          </p>
+          <GuideMockup title="パートナー：申し送りを追加" active="パートナー" steps={[
+            '下の「パートナー」を押します。',
+            '連絡を受けたパートナーを選びます。',
+            '「編集」を押します。必要なら日付・時間・主担当も確認します。',
+            '「今回の申し送り・追記」に、連絡内容をそのまま分かるように書きます。',
+            '「変更を保存」を押します。前の申し送りは消さず、新しい内容として追加します。'
+          ]}>
+            <div className="space-y-2">
+              <div className="rounded-xl border-2 border-gray-200 p-3">
+                <div className="text-sm font-black">パートナーA</div>
+                <div className="text-xs text-blue-600 font-bold mt-1">主担当：竹添</div>
+              </div>
+              <div className="rounded-xl border border-gray-200 p-3 text-xs">
+                <div className="font-black text-gray-500 mb-1">これまでの申し送り</div>
+                <div>（竹添）10/5 来店予定です。</div>
+                <div>（平川）10/5 15時ごろ到着しました。</div>
+              </div>
+              <div className="relative rounded-xl border-4 border-red-500 bg-purple-50 p-3">
+                <div className="text-xs font-black text-purple-700">今回の申し送り・追記</div>
+                <div className="mt-2 text-sm font-bold text-gray-700">「明日10時に来店予定。入口で対応してください。」</div>
+                <span className="absolute -right-2 -top-7 bg-red-500 text-white rounded px-2 py-1 text-[9px] font-black">←ここに書く</span>
+              </div>
+              <div className="text-right"><span className="inline-block bg-blue-600 text-white rounded-xl px-5 py-2 font-black">変更を保存</span></div>
+            </div>
+          </GuideMockup>
+          <div className="mt-4 bg-red-50 border border-red-200 rounded-2xl p-4 text-base sm:text-lg font-bold leading-relaxed">
+            <strong>大事：</strong>以前の申し送りは削除しません。誰が・いつ・何を伝えたかが分かるように、今回の内容を追加してください。
+          </div>
+        </section>
+
         <section className="bg-white rounded-3xl border border-gray-200 shadow-sm p-6 sm:p-8">
           <h2 className="text-2xl font-black text-gray-800 mb-5">まず覚えるのは、この4つです</h2>
           <div className="grid gap-4">
