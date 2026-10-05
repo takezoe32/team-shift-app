@@ -225,7 +225,7 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partne
     const dateStr=formatDate(new Date(year,month,i));
     const myShiftId=(teamData.shifts[dateStr]||{})[currentUserUid]||'none';
     const myShift=shiftTypes.find(s=>s.id===myShiftId)||shiftTypes.find(s=>s.id==='none');
-    const hasMyTask=teamData.tasks[dateStr]?.[currentUserUid]?.length>0;
+    const hasMyTask=teamData.tasks[dateStr]?.[currentUserUid]?.some(task => task?.visibility !== 'private' || task?.ownerUid === currentUserUid);
     days.push(<div key={i} onClick={()=>setSelectedCalendarTaskDate(dateStr)} className="p-1 border-b border-r border-gray-100 min-h-[80px] cursor-pointer active:bg-gray-50 flex flex-col">
       <div className="flex justify-between items-start p-1"><span className={`text-sm font-bold ${new Date().getDate()===i&&new Date().getMonth()===month?'bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center':'text-gray-700'}`}>{i}</span>{hasMyTask&&<div className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-1.5"></div>}</div>
       <div className="mt-1 flex-1 px-1">{myShift.id!=='none'&&<div className={`text-[10px] font-bold px-1.5 py-0.5 rounded truncate ${myShift.color}`}>{myShift.label}</div>}</div>
@@ -233,7 +233,7 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partne
   }
   const activePartnerItems=(partnerItems||[]).filter(i=>!i.completed).sort((a,b)=>`${a.date||''}T${a.time||'00:00'}`.localeCompare(`${b.date||''}T${b.time||'00:00'}`));
   const datesToShow=Array.from(new Set([...Object.keys(teamData.tasks||{}).filter(d=>d<todayStr),selectedCalendarTaskDate])).sort();
-  const selectedTasks=datesToShow.flatMap(taskDate=>(sortedUsers||[]).flatMap(member=>(teamData.tasks[taskDate]?.[member.id]||[]).filter(t=>!t.completed).map(task=>({...task,ownerUid:member.id,member,taskDate,assigneeIds:Array.isArray(task.assigneeIds)&&task.assigneeIds.length?task.assigneeIds:[member.id]}))));
+  const selectedTasks=datesToShow.flatMap(taskDate=>(sortedUsers||[]).flatMap(member=>(teamData.tasks[taskDate]?.[member.id]||[]).filter(t=>(t.visibility!=='private'||member.id===currentUserUid)&&!t.completed).map(task=>({...task,ownerUid:member.id,member,taskDate,assigneeIds:Array.isArray(task.assigneeIds)&&task.assigneeIds.length?task.assigneeIds:[member.id]}))));
   const startPartnerEdit=()=>{const [h='',m='']=String(detailPartner?.time||'').split(':');setPartnerEditName(detailPartner?.partnerName||'');setPartnerEditAssigneeUid(detailPartner?.assigneeUid||'');setPartnerEditDate(detailPartner?.date||'');setPartnerEditHour(h);setPartnerEditMinute(m);setPartnerEditContent(detailPartner?.content||'');setPartnerEditNote('');setIsEditingPartner(true);};
   const savePartnerEdit=async()=>{if(!detailPartner||!updatePartnerItem)return;if(!partnerEditName||!partnerEditAssigneeUid||!partnerEditDate||!partnerEditHour||!partnerEditMinute){alert('パートナー名・主担当者・日付・時間を入力してください。');return;}setIsSaving(true);try{const changes={partnerName:partnerEditName,assigneeUid:partnerEditAssigneeUid,date:partnerEditDate,time:`${partnerEditHour}:${partnerEditMinute}`};const noteText=partnerEditNote.trim();if(noteText){const updates=[...getPartnerUpdates(detailPartner),createPartnerUpdate(noteText,currentUser)];changes.updates=updates;changes.content=updates[updates.length-1]?.text||detailPartner.content||'';}await updatePartnerItem(detailPartner.id,changes);setDetailPartner(p=>p?{...p,...changes}:p);setIsEditingPartner(false);setPartnerEditNote('');}catch(e){alert('パートナータスクの更新に失敗しました。')}finally{setIsSaving(false);}};
   const saveTaskEdit=async()=>{if(!detailTask||!canEditTask)return;setIsSaving(true);try{const text=editingTaskText.trim();await updateTaskText(detailTask.taskDate,detailTask.ownerUid,detailTask.id,text);setDetailTask(p=>p?{...p,text}:p);setIsEditingTask(false);}catch(e){alert('タスクの更新に失敗しました。');}finally{setIsSaving(false);}};
@@ -625,6 +625,7 @@ const DailyDetailView = ({
   addTask, toggleTask, deleteTask, updateTaskText, updateTaskAssignees, users, roles, sortedUsers
 }) => {
   const [newTaskText, setNewTaskText] = useState('');
+  const [newTaskVisibility, setNewTaskVisibility] = useState('public');
   const [selectedUserUid, setSelectedUserUid] = useState(currentUserUid);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [pastFinishConfirmTaskKey, setPastFinishConfirmTaskKey] = useState(null);
@@ -637,7 +638,8 @@ const DailyDetailView = ({
   const viewUser = users[selectedUserUid] || currentUser;
   const canManageShift = checkCanManageShift(currentUser, roles);
   const isAdmin = !!currentUser && !!roles[currentUser.role] && (roles[currentUser.role].level || 0) >= 40;
-  const selectedDateTasks = Object.entries(teamData.tasks[selectedDate] || {}).flatMap(([ownerUid, tasks]) => (tasks || []).filter(task => { const assignees = Array.isArray(task.assigneeIds) && task.assigneeIds.length ? task.assigneeIds : [ownerUid]; return assignees.includes(selectedUserUid); }).map(task => ({ ...task, ownerUid, taskDate: selectedDate })));
+  const canViewTask = (task, ownerUid) => task?.visibility !== 'private' || ownerUid === currentUserUid;
+  const selectedDateTasks = Object.entries(teamData.tasks[selectedDate] || {}).flatMap(([ownerUid, tasks]) => (tasks || []).filter(task => { if (!canViewTask(task, ownerUid)) return false; const assignees = Array.isArray(task.assigneeIds) && task.assigneeIds.length ? task.assigneeIds : [ownerUid]; return assignees.includes(selectedUserUid); }).map(task => ({ ...task, ownerUid, taskDate: selectedDate })));
   const unfinishedPastTasks = Object.keys(teamData.tasks || {})
     .filter(dateStr => dateStr < selectedDate)
     .sort((a, b) => b.localeCompare(a))
@@ -645,6 +647,7 @@ const DailyDetailView = ({
       Object.entries(teamData.tasks[dateStr] || {})
         .flatMap(([ownerUid, tasks]) => (tasks || [])
           .filter(task => {
+            if (!canViewTask(task, ownerUid)) return false;
             if (task.completed) return false;
             const assignees = Array.isArray(task.assigneeIds) && task.assigneeIds.length
               ? task.assigneeIds
@@ -694,7 +697,12 @@ const DailyDetailView = ({
         imagePublicId = result.public_id || '';
         imageBytes = Number(result.bytes || newTaskImage.size || 0);
       }
-      addTask(selectedDate, selectedUserUid, newTaskText.trim(), imageUrl, imageName, imagePublicId, imageBytes);
+      if (newTaskVisibility === 'private' && selectedUserUid !== currentUserUid) {
+        alert('個人メモは、自分の名前を選んでいるときだけ登録できます。');
+        return;
+      }
+      addTask(selectedDate, selectedUserUid, newTaskText.trim(), imageUrl, imageName, imagePublicId, imageBytes, newTaskVisibility);
+      setNewTaskVisibility('public');
       setNewTaskText('');
       clearNewTaskImage();
     } catch (error) {
@@ -1003,6 +1011,12 @@ const DailyDetailView = ({
         {/* スマホで使いやすいよう、タスク入力欄を一覧の上へ移動 */}
         <div className="bg-white border-b border-gray-200 p-3 shrink-0 shadow-sm">
           <div className="max-w-3xl mx-auto">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="text-xs font-black text-gray-600">このタスクを</span>
+              <button type="button" onClick={() => setNewTaskVisibility('public')} className={`px-3 py-1.5 rounded-full text-xs font-black border transition-all ${newTaskVisibility === 'public' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-500 border-gray-200'}`}>👥 みんなに公開</button>
+              <button type="button" onClick={() => setNewTaskVisibility('private')} disabled={selectedUserUid !== currentUserUid} className={`px-3 py-1.5 rounded-full text-xs font-black border transition-all ${newTaskVisibility === 'private' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-500 border-gray-200'} ${selectedUserUid !== currentUserUid ? 'opacity-40 cursor-not-allowed' : ''}`}>🔒 個人メモ</button>
+              {newTaskVisibility === 'private' && <span className="text-[10px] font-bold text-purple-600">自分だけに表示されます</span>}
+            </div>
             <div className="flex gap-2 items-end">
               <textarea
                 value={newTaskText}
@@ -3122,7 +3136,7 @@ export default function App() {
               />
             ) : activeTab === 'daily' ? (
               <DailyDetailView 
-                addTask={(dateStr, targetUid, text, imageUrl = '', imageName = '', imagePublicId = '', imageBytes = 0) => {
+                addTask={(dateStr, targetUid, text, imageUrl = '', imageName = '', imagePublicId = '', imageBytes = 0, visibility = 'public') => {
                   const dayTasks = teamData.tasks[dateStr] || {};
                   const userTasks = dayTasks[targetUid] || [];
                   const updatedTeamData = {
@@ -3140,6 +3154,7 @@ export default function App() {
                             createdAt: new Date().toISOString(),
                             ownerUid: targetUid,
                             assigneeIds: [targetUid],
+                            visibility: visibility === 'private' ? 'private' : 'public',
                             completedAt: null,
                             ...(imageUrl ? {
                               imageUrl,
