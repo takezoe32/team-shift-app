@@ -766,6 +766,28 @@ const DailyDetailView = ({
             e.stopPropagation();
             const taskDate = task.taskDate || selectedDate;
             const ownerUid = task.ownerUid || selectedUserUid;
+
+            if (!canEditTask) {
+              alert('他のメンバーが登録したタスクは操作できません。');
+              void writeDebugLog({
+                level: 'WARN',
+                event: 'daily.task.checkbox.denied',
+                user: currentUser,
+                details: { taskId: task.id, taskDate, ownerUid, currentUserUid, isAdmin: !!isAdmin }
+              });
+              return;
+            }
+
+            if (isPastTask && !task.completed) {
+              setShowPastFinishConfirm(true);
+              void writeDebugLog({
+                event: 'daily.task.checkbox.past.confirm.show',
+                user: currentUser,
+                details: { taskId: task.id, taskDate, ownerUid }
+              });
+              return;
+            }
+
             await writeDebugLog({
               event: 'daily.task.checkbox.click',
               user: currentUser,
@@ -782,25 +804,6 @@ const DailyDetailView = ({
                 isPastTask
               }
             });
-            if (!canEditTask) {
-              await writeDebugLog({
-                level: 'WARN',
-                event: 'daily.task.checkbox.denied',
-                user: currentUser,
-                details: { taskId: task.id, taskDate, ownerUid, currentUserUid, isAdmin: !!isAdmin }
-              });
-              alert('他のメンバーが登録したタスクは操作できません。');
-              return;
-            }
-            if (isPastTask && !task.completed) {
-              setShowPastFinishConfirm(true);
-              await writeDebugLog({
-                event: 'daily.task.checkbox.past.confirm.show',
-                user: currentUser,
-                details: { taskId: task.id, taskDate, ownerUid }
-              });
-              return;
-            }
             try {
               await writeDebugLog({
                 event: 'daily.task.checkbox.toggle.start',
