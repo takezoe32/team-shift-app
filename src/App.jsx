@@ -2139,6 +2139,8 @@ export default function App() {
   // Firestoreから古いsnapshotが返ってきても、直前に設定画面で変更した
   // ユーザー名を一瞬でも古い名前へ戻さないためのローカル上書き。
   const pendingUserOverridesRef = useRef({});
+  // Firestoreの古いsnapshotで、直前に完了へ変更したタスクが一瞬未完了へ戻るのを防ぐ。
+  const pendingTaskCompletionOverridesRef = useRef({});
 
   const saveToFirestore = async (updates) => {
     try {
@@ -2190,6 +2192,27 @@ export default function App() {
         let currentUsers = { ...(data.users || {}) };
         let currentShifts = { ...(data.teamData?.shifts || {}) };
         let currentTasks = { ...(data.teamData?.tasks || {}) };
+
+        // タスク完了直後に届く古いsnapshotより、画面上で直前に変更した状態を優先する。
+        Object.entries(pendingTaskCompletionOverridesRef.current).forEach(([key, override]) => {
+          const { dateStr, ownerUid, taskId, completed, completedAt } = override;
+          const ownerTasks = Array.isArray(currentTasks[dateStr]?.[ownerUid])
+            ? currentTasks[dateStr][ownerUid]
+            : [];
+          const targetIndex = ownerTasks.findIndex(task => task?.id === taskId);
+          if (targetIndex === -1) return;
+          const firestoreTask = ownerTasks[targetIndex];
+          if (!!firestoreTask.completed === completed && (firestoreTask.completedAt || null) === (completedAt || null)) {
+            delete pendingTaskCompletionOverridesRef.current[key];
+            return;
+          }
+          currentTasks[dateStr] = {
+            ...(currentTasks[dateStr] || {}),
+            [ownerUid]: ownerTasks.map((task, index) => index === targetIndex
+              ? { ...task, completed, completedAt: completedAt || null }
+              : task)
+          };
+        });
         let currentUserOrder = [...(data.userOrder || [])];
         let currentPartnerItems = Array.isArray(data.partnerItems) ? data.partnerItems : [];
         let currentPartnerNames = Array.isArray(data.partnerNames) ? data.partnerNames : [];
@@ -2670,11 +2693,19 @@ export default function App() {
                   const targetTask = ownerTasks.find(t => t.id === taskId);
                   if (!targetTask) return;
                   const nextCompleted = !targetTask.completed;
+                  const nextCompletedAt = nextCompleted ? new Date().toISOString() : null;
                   const updatedOwnerTasks = ownerTasks.map(t =>
                     t.id === taskId
-                      ? { ...t, completed: nextCompleted, completedAt: nextCompleted ? new Date().toISOString() : null }
+                      ? { ...t, completed: nextCompleted, completedAt: nextCompletedAt }
                       : t
                   );
+                  pendingTaskCompletionOverridesRef.current[\`${dateStr}-${ownerUid}-${taskId}\`] = {
+                    dateStr,
+                    ownerUid,
+                    taskId,
+                    completed: nextCompleted,
+                    completedAt: nextCompletedAt
+                  };
                   const updatedTeamData = {
                     ...teamData,
                     tasks: {
@@ -2873,11 +2904,19 @@ export default function App() {
                   }
 
                   const nextCompleted = !targetTask.completed;
+                  const nextCompletedAt = nextCompleted ? new Date().toISOString() : null;
                   const updatedOwnerTasks = ownerTasks.map(t =>
                     t.id === taskId
-                      ? { ...t, completed: nextCompleted, completedAt: nextCompleted ? new Date().toISOString() : null }
+                      ? { ...t, completed: nextCompleted, completedAt: nextCompletedAt }
                       : t
                   );
+                  pendingTaskCompletionOverridesRef.current[\`${dateStr}-${ownerUid}-${taskId}\`] = {
+                    dateStr,
+                    ownerUid,
+                    taskId,
+                    completed: nextCompleted,
+                    completedAt: nextCompletedAt
+                  };
                   const updatedTeamData = {
                     ...teamData,
                     tasks: {
