@@ -27,7 +27,8 @@ import {
   FileSpreadsheet,
   Image as ImageIcon,
   Paperclip,
-  Loader2
+  Loader2,
+  BookOpen
 } from 'lucide-react';
 
 // Google OAuth Client ID
@@ -1078,6 +1079,146 @@ const DailyDetailView = ({
             </div>
           ) : selectedDateTasks.map(task => <TaskItem key={task.id} task={task}/>) }
         </div>
+      </div>
+    </div>
+  );
+};
+
+const HelpView = () => {
+  return (
+    <div className="flex-1 overflow-y-auto bg-gray-50 pb-24">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 space-y-5">
+        <section className="bg-blue-600 text-white rounded-3xl p-6 sm:p-8 shadow-sm">
+          <div className="flex items-center gap-3 mb-4">
+            <BookOpen size={34} />
+            <h1 className="text-2xl sm:text-3xl font-black">TeamShift App 使い方</h1>
+          </div>
+          <p className="text-lg sm:text-xl font-bold leading-relaxed">
+            このページを見れば、このアプリで何をすればよいかが分かります。
+          </p>
+        </section>
+
+        <section className="bg-white rounded-3xl border border-blue-100 shadow-sm p-6 sm:p-8">
+          <h2 className="text-2xl font-black text-blue-700 mb-4">このツールの目的</h2>
+          <div className="bg-blue-50 rounded-2xl p-5 sm:p-6">
+            <p className="text-lg sm:text-xl font-bold text-gray-800 leading-loose">
+              このツールは何の作業が残っているの？どうゆう状況なの？明日のシフトは？などをまとめて確認できるようにするために作成したツールです。不具合等があれば竹添に伝えてください。
+            </p>
+          </div>
+        </section>
+
+        <section className="bg-white rounded-3xl border border-gray-200 shadow-sm p-6 sm:p-8">
+          <h2 className="text-2xl font-black text-gray-800 mb-5">まず覚えるのは、この4つです</h2>
+          <div className="grid gap-4">
+            {[
+              ['1', 'カレンダー', '今日・明日などのシフトと、パートナーの予定を確認します。'],
+              ['2', 'シフト管理', 'スタッフの出勤・休みを確認、変更します。※使える人だけ表示されます。'],
+              ['3', '日別タスク', 'その日にやる仕事を確認し、終わったらチェックします。'],
+              ['4', 'パートナー', 'パートナーの予定や申し送りを確認・追加します。']
+            ].map(([number, title, text]) => (
+              <div key={number} className="flex gap-4 items-start border border-gray-200 rounded-2xl p-4">
+                <div className="shrink-0 w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center text-lg font-black">{number}</div>
+                <div>
+                  <h3 className="text-xl font-black text-gray-800">{title}</h3>
+                  <p className="text-base sm:text-lg text-gray-600 leading-relaxed mt-1">{text}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="bg-white rounded-3xl border border-gray-200 shadow-sm p-6 sm:p-8">
+          <h2 className="text-2xl font-black text-gray-800 mb-5">① カレンダー</h2>
+          <div className="space-y-4 text-base sm:text-lg leading-relaxed text-gray-700">
+            <p><strong>一番最初に見る場所です。</strong> 日付ごとのシフトとパートナーの予定を確認できます。</p>
+            <div className="bg-gray-50 rounded-2xl p-4">
+              <p className="font-black text-gray-800 mb-2">こんな時に使います</p>
+              <ul className="list-disc pl-6 space-y-2">
+                <li>「明日は誰が出勤？」を確認したい。</li>
+                <li>「この日は休み？」を確認したい。</li>
+                <li>パートナーが何時に来るか確認したい。</li>
+                <li>パートナーの申し送り内容を確認したい。</li>
+              </ul>
+            </div>
+            <p><strong>日付を押す</strong>と、その日の詳しい内容を見ることができます。</p>
+          </div>
+        </section>
+
+        <section className="bg-white rounded-3xl border border-gray-200 shadow-sm p-6 sm:p-8">
+          <h2 className="text-2xl font-black text-gray-800 mb-5">② シフト管理</h2>
+          <div className="space-y-4 text-base sm:text-lg leading-relaxed text-gray-700">
+            <p>スタッフの「出勤」「休み」などを確認する画面です。</p>
+            <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4">
+              <p className="font-black text-gray-800">注意</p>
+              <p className="mt-1">シフトを変更した場合は、その変更が他の人にも共有されます。間違えないように確認してから変更してください。</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="bg-white rounded-3xl border border-gray-200 shadow-sm p-6 sm:p-8">
+          <h2 className="text-2xl font-black text-gray-800 mb-5">③ 日別タスク</h2>
+          <div className="space-y-4 text-base sm:text-lg leading-relaxed text-gray-700">
+            <p><strong>その日にやる仕事</strong>を確認する場所です。</p>
+            <ol className="list-decimal pl-6 space-y-3">
+              <li>その日の仕事を確認します。</li>
+              <li>仕事が終わったら、チェックを入れます。</li>
+              <li>まだ終わっていない仕事は、そのまま残しておきます。</li>
+            </ol>
+            <div className="bg-green-50 border border-green-200 rounded-2xl p-4">
+              <p className="font-black text-gray-800">ポイント</p>
+              <p className="mt-1">「何が残っているか」をみんなで分かるようにするための画面です。</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="bg-white rounded-3xl border border-gray-200 shadow-sm p-6 sm:p-8">
+          <h2 className="text-2xl font-black text-gray-800 mb-5">④ パートナー</h2>
+          <div className="space-y-4 text-base sm:text-lg leading-relaxed text-gray-700">
+            <p>パートナーの来店予定や、申し送りを確認・登録する場所です。</p>
+            <div className="bg-blue-50 rounded-2xl p-4">
+              <p className="font-black text-gray-800">申し送りは、前の人の文章を消しません。</p>
+              <p className="mt-1">新しく書いた内容は、誰が書いたか・いつ書いたかと一緒に記録されます。</p>
+            </div>
+            <p><strong>例：</strong></p>
+            <div className="bg-gray-50 rounded-2xl p-4 space-y-2 text-base">
+              <p>（竹添）パートナーが何時に作業に入ります。</p>
+              <p>（竹添）パートナーが来ました。</p>
+              <p>（平川）パートナーが作業終了して帰りました。</p>
+            </div>
+            <p>あとから見る人も、これまでの状況を順番に確認できます。</p>
+          </div>
+        </section>
+
+        <section className="bg-white rounded-3xl border border-gray-200 shadow-sm p-6 sm:p-8">
+          <h2 className="text-2xl font-black text-gray-800 mb-5">パートナーの申し送りを追加する方法</h2>
+          <ol className="list-decimal pl-6 space-y-4 text-base sm:text-lg leading-relaxed text-gray-700">
+            <li>「パートナー」を押します。</li>
+            <li>追加・編集したいパートナーを選びます。</li>
+            <li>「今回の申し送り・追記」に、今回伝えたいことを書きます。</li>
+            <li>保存します。</li>
+          </ol>
+          <p className="mt-5 bg-red-50 border border-red-200 rounded-2xl p-4 text-base sm:text-lg font-bold text-gray-800">
+            過去の申し送りを消す必要はありません。新しい内容を追加してください。
+          </p>
+        </section>
+
+        <section className="bg-white rounded-3xl border border-gray-200 shadow-sm p-6 sm:p-8">
+          <h2 className="text-2xl font-black text-gray-800 mb-5">困ったときは</h2>
+          <div className="space-y-4 text-base sm:text-lg leading-relaxed text-gray-700">
+            <p>分からないときは、まずこの「使い方」を確認してください。</p>
+            <p>それでも分からない場合や、画面がおかしい・保存できないなどの<strong>不具合</strong>があれば、<strong>竹添に伝えてください。</strong></p>
+            <div className="bg-blue-600 text-white rounded-2xl p-5 text-center">
+              <p className="text-xl font-black">「おかしいかな？」と思ったら、無理に操作を続けず竹添へ。</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="bg-gray-800 text-white rounded-3xl p-6 sm:p-8">
+          <h2 className="text-xl font-black mb-3">最後に</h2>
+          <p className="text-base sm:text-lg leading-relaxed">
+            このアプリは、「今どうなっているか」「次に何をするか」をみんなで分かるようにするためのものです。迷ったら、まずカレンダーと日別タスクを確認してください。
+          </p>
+        </section>
       </div>
     </div>
   );
@@ -2571,20 +2712,32 @@ export default function App() {
                   <span className="text-2xl sm:text-3xl font-normal text-blue-600 tracking-tight leading-none">App</span>
                 </div>
               </div>
-              <button 
-                onClick={handleLogout}
-                className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 px-3.5 py-1.5 rounded-full transition-colors active:scale-95"
-              >
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setActiveTab('help')}
+                  className="flex items-center gap-2 bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-2 rounded-full transition-colors active:scale-95"
+                  aria-label="使い方"
+                >
+                  <BookOpen size={17}/>
+                  <span className="text-sm font-black">使い方</span>
+                </button>
+                <button 
+                  onClick={handleLogout}
+                  className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 px-3.5 py-1.5 rounded-full transition-colors active:scale-95"
+                >
                 <img src={currentUser.picture} alt="Avatar" className="w-6 h-6 rounded-full" />
                 <div className="text-right flex items-center">
                   <span className="text-xs font-bold text-gray-500 mr-1.5">{roleNames[currentUser.role] || roles[currentUser.role]?.name || '管理者'}</span>
                   <span className="text-xs font-bold text-gray-800">{currentUser.name.split(' ')[0]}</span>
                 </div>
-                <LogOut className="text-gray-500 ml-1" size={15}/>
-              </button>
+                  <LogOut className="text-gray-500 ml-1" size={15}/>
+                </button>
+              </div>
             </div>
 
-            {activeTab === 'partner' ? (
+            {activeTab === 'help' ? (
+              <HelpView />
+            ) : activeTab === 'partner' ? (
               <PartnerView
                 currentUser={currentUser}
                 debugLog={debugLog}
