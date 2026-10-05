@@ -2674,7 +2674,7 @@ export default function App() {
 
                   const monthKey = dateStr.slice(0, 7).replace('-', '_');
                   const logEntry = {
-                    id: \`shiftlog_\${Date.now()}_\${Math.random().toString(36).slice(2, 8)}\`,
+                    id: `shiftlog_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
                     timestamp: new Date().toISOString(),
                     type: 'manual',
                     actorUid: currentUser.id,
@@ -2690,7 +2690,7 @@ export default function App() {
                   const nextLogs = [...(shiftLogs?.[monthKey] || []), logEntry];
                   setShiftLogs({ ...shiftLogs, [monthKey]: nextLogs });
                   await updateDoc(doc(db, 'app_data', 'shared_state'), {
-                    [\`shiftLogs.\${monthKey}\`]: arrayUnion(logEntry)
+                    [`shiftLogs.${monthKey}`]: arrayUnion(logEntry)
                   });
                 }} 
                 sortedUsers={sortedUsers}
@@ -2702,21 +2702,21 @@ export default function App() {
                   const updatedTeamData = { ...teamData, shifts: newShifts };
                   setTeamData(updatedTeamData);
                   saveToFirestore({ teamData: updatedTeamData });
-                  const monthKey = \`\${currentDate.getFullYear()}-\${String(currentDate.getMonth() + 1).padStart(2, '0')}\`;
+                  const monthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
                   const logEntry = {
-                    id: \`shiftlog_\${Date.now()}_\${Math.random().toString(36).slice(2, 8)}\`,
+                    id: `shiftlog_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
                     timestamp: new Date().toISOString(),
                     type: 'bulk',
                     actorUid: currentUser.id,
                     actorName: currentUser.name || '不明なユーザー',
                     monthKey,
-                    monthLabel: \`\${currentDate.getMonth() + 1}月\`,
+                    monthLabel: `${currentDate.getMonth() + 1}月`,
                     changedCount: changedCount || 0
                   };
                   const nextLogs = [...(shiftLogs?.[monthKey] || []), logEntry];
                   setShiftLogs({ ...shiftLogs, [monthKey]: nextLogs });
                   await updateDoc(doc(db, 'app_data', 'shared_state'), {
-                    [\`shiftLogs.\${monthKey}\`]: arrayUnion(logEntry)
+                    [`shiftLogs.${monthKey}`]: arrayUnion(logEntry)
                   });
                   return true;
                 }}
