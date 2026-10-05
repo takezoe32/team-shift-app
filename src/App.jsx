@@ -2345,7 +2345,7 @@ const BottomNav = ({ activeTab, setActiveTab, currentUser, roles }) => {
         )}
 
         <button 
-          onClick={() => setActiveTab('daily')}
+          onClick={() => { setSelectedDate(formatDate(new Date())); setActiveTab('daily'); }}
           className={`flex-1 flex flex-col items-center justify-center space-y-1.5 relative ${activeTab === 'daily' ? 'text-blue-600' : 'text-gray-400'}`}
         >
           <CheckSquare className="w-6 h-6"/>
