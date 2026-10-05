@@ -2699,7 +2699,7 @@ export default function App() {
                       ? { ...t, completed: nextCompleted, completedAt: nextCompletedAt }
                       : t
                   );
-                  pendingTaskCompletionOverridesRef.current[\`${dateStr}-${ownerUid}-${taskId}\`] = {
+                  pendingTaskCompletionOverridesRef.current[dateStr + '-' + ownerUid + '-' + taskId] = {
                     dateStr,
                     ownerUid,
                     taskId,
@@ -2910,7 +2910,7 @@ export default function App() {
                       ? { ...t, completed: nextCompleted, completedAt: nextCompletedAt }
                       : t
                   );
-                  pendingTaskCompletionOverridesRef.current[\`${dateStr}-${ownerUid}-${taskId}\`] = {
+                  pendingTaskCompletionOverridesRef.current[dateStr + '-' + ownerUid + '-' + taskId] = {
                     dateStr,
                     ownerUid,
                     taskId,
