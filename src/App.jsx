@@ -749,42 +749,72 @@ const DailyDetailView = ({
             : task.completed ? 'border-gray-100 bg-gray-50/50' : 'border-gray-200 shadow-sm hover:border-gray-300'
         } flex items-start gap-3`}
       >
-        <input
-          type="checkbox"
-          checked={!!task.completed}
-          disabled={!canEditTask}
+        <button
+          type="button"
           aria-label={task.completed ? 'タスクを未完了に戻す' : 'タスクを完了にする'}
-          onClick={(e) => e.stopPropagation()}
-          onChange={async (e) => {
+          title={canEditTask ? (task.completed ? '未完了に戻す' : '完了にする') : '他のメンバーが登録したタスクは操作できません'}
+          onClick={async (e) => {
+            e.preventDefault();
             e.stopPropagation();
-            await debugLog('daily.task.checkbox.change', {
-              taskId: task.id,
-              taskDate: task.taskDate || selectedDate,
-              selectedDate,
-              ownerUid: task.ownerUid || selectedUserUid,
-              currentUserUid,
-              currentUserName: currentUser?.name || '',
-              isAdmin: !!isAdmin,
-              canEditTask,
-              completedBefore: !!task.completed,
-              checked: e.target.checked
-            });
             const taskDate = task.taskDate || selectedDate;
             const ownerUid = task.ownerUid || selectedUserUid;
+            await writeDebugLog({
+              event: 'daily.task.checkbox.click',
+              user: currentUser,
+              details: {
+                taskId: task.id,
+                taskDate,
+                selectedDate,
+                ownerUid,
+                currentUserUid,
+                currentUserName: currentUser?.name || '',
+                isAdmin: !!isAdmin,
+                canEditTask,
+                completedBefore: !!task.completed
+              }
+            });
+            if (!canEditTask) {
+              await writeDebugLog({
+                level: 'WARN',
+                event: 'daily.task.checkbox.denied',
+                user: currentUser,
+                details: { taskId: task.id, taskDate, ownerUid, currentUserUid, isAdmin: !!isAdmin }
+              });
+              alert('他のメンバーが登録したタスクは操作できません。');
+              return;
+            }
             try {
-              await debugLog('daily.task.checkbox.toggle.start', { taskId: task.id, taskDate, ownerUid, currentUserUid, canEditTask, isAdmin });
+              await writeDebugLog({
+                event: 'daily.task.checkbox.toggle.start',
+                user: currentUser,
+                details: { taskId: task.id, taskDate, ownerUid, currentUserUid, canEditTask, isAdmin: !!isAdmin }
+              });
               await toggleTask(taskDate, ownerUid, task.id);
-              await debugLog('daily.task.checkbox.toggle.success', { taskId: task.id, taskDate, ownerUid });
+              await writeDebugLog({
+                event: 'daily.task.checkbox.toggle.success',
+                user: currentUser,
+                details: { taskId: task.id, taskDate, ownerUid }
+              });
             } catch (error) {
-              await debugLog('daily.task.checkbox.toggle.error', { taskId: task.id, taskDate, ownerUid, message: error?.message || String(error), stack: error?.stack || '' });
+              await writeDebugLog({
+                level: 'ERROR',
+                event: 'daily.task.checkbox.toggle.error',
+                user: currentUser,
+                details: { taskId: task.id, taskDate, ownerUid, message: error?.message || String(error), stack: error?.stack || '' }
+              });
               console.error('タスクチェック処理に失敗しました:', error);
             }
           }}
-          className={`appearance-none relative z-20 shrink-0 mt-0.5 w-7 h-7 rounded-full border-2 flex items-center justify-center cursor-pointer pointer-events-auto touch-manipulation checked:bg-green-500 checked:border-green-500 disabled:cursor-not-allowed disabled:opacity-50 ${
-            task.completed ? 'bg-green-500 border-green-500' : 'bg-white border-gray-300 hover:border-blue-400'
+          className={`relative z-20 shrink-0 mt-0.5 w-7 h-7 rounded-full border-2 flex items-center justify-center cursor-pointer touch-manipulation transition-colors ${
+            task.completed
+              ? 'bg-green-500 border-green-500 text-white'
+              : canEditTask
+                ? 'bg-white border-gray-300 hover:border-blue-400'
+                : 'bg-gray-100 border-gray-300 text-gray-400'
           }`}
-        />
-
+        >
+          {task.completed && <span className="text-white text-sm font-black leading-none">✓</span>}
+        </button>
         <div className="flex-1 min-w-0">
           {task.text && (
             <span className={`text-sm block whitespace-pre-wrap leading-tight ${
