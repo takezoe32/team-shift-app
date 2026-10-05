@@ -2814,36 +2814,41 @@ export default function App() {
         <div className="min-h-screen bg-gray-100 flex flex-col w-full">
           <div className="w-full flex-1 flex flex-col bg-white min-h-screen relative overflow-hidden font-sans">
             
-            <div className="bg-white border-b border-gray-100 pt-safe px-6 py-3 flex justify-between items-center z-20 shrink-0 shadow-sm">
-              <div>
-                <div className="flex items-center gap-2">
-                  <div className="flex flex-col text-[9px] sm:text-[10px] font-black text-gray-900 tracking-tight leading-[0.9] text-right">
+            <div className="bg-white border-b border-gray-100 pt-safe px-3 sm:px-6 py-2.5 sm:py-3 z-20 shrink-0 shadow-sm">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
+                  <div className="flex flex-col shrink-0 text-[7px] xs:text-[8px] sm:text-[10px] font-black text-gray-900 tracking-tight leading-[0.9] text-right">
                     <span>LUIGANS</span>
                     <span>OPERATIONS</span>
                     <span>CREW</span>
                   </div>
-                  <span className="text-2xl sm:text-3xl font-normal text-blue-600 tracking-tight leading-none">App</span>
+                  <span className="text-xl sm:text-3xl font-normal text-blue-600 tracking-tight leading-none shrink-0">App</span>
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
+
                 <button
                   onClick={() => setActiveTab('help')}
-                  className="flex items-center gap-2 bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-2 rounded-full transition-colors active:scale-95"
+                  className="shrink-0 flex items-center justify-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 px-2.5 sm:px-3 py-2 rounded-full transition-colors active:scale-95"
                   aria-label="使い方"
                 >
-                  <BookOpen size={17}/>
-                  <span className="text-sm font-black">使い方</span>
+                  <BookOpen size={16} className="sm:w-[17px] sm:h-[17px]"/>
+                  <span className="hidden sm:inline text-sm font-black">使い方</span>
                 </button>
-                <button 
+
+                <button
                   onClick={handleLogout}
-                  className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 px-3.5 py-1.5 rounded-full transition-colors active:scale-95"
+                  className="shrink-0 flex items-center gap-1.5 bg-gray-100 hover:bg-gray-200 px-2 sm:px-3.5 py-1.5 rounded-full transition-colors active:scale-95 max-w-[42vw] sm:max-w-none"
+                  aria-label="ログアウト"
                 >
-                <img src={currentUser.picture} alt="Avatar" className="w-6 h-6 rounded-full" />
-                <div className="text-right flex items-center">
-                  <span className="text-xs font-bold text-gray-500 mr-1.5">{roleNames[currentUser.role] || roles[currentUser.role]?.name || '管理者'}</span>
-                  <span className="text-xs font-bold text-gray-800">{currentUser.name.split(' ')[0]}</span>
-                </div>
-                  <LogOut className="text-gray-500 ml-1" size={15}/>
+                  <img src={currentUser.picture} alt="Avatar" className="w-6 h-6 rounded-full shrink-0" />
+                  <div className="min-w-0 text-right">
+                    <div className="hidden sm:block text-[10px] font-bold text-gray-500 leading-tight truncate">
+                      {roleNames[currentUser.role] || roles[currentUser.role]?.name || '管理者'}
+                    </div>
+                    <div className="text-xs font-bold text-gray-800 truncate">
+                      {currentUser.name.split(' ')[0]}
+                    </div>
+                  </div>
+                  <LogOut className="text-gray-500 shrink-0" size={14}/>
                 </button>
               </div>
             </div>
