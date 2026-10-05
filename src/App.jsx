@@ -599,6 +599,7 @@ const DailyDetailView = ({
   const [newTaskText, setNewTaskText] = useState('');
   const [selectedUserUid, setSelectedUserUid] = useState(currentUserUid);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const [pastFinishConfirmTaskKey, setPastFinishConfirmTaskKey] = useState(null);
   const [newTaskImage, setNewTaskImage] = useState(null);
   const [newTaskImagePreview, setNewTaskImagePreview] = useState('');
   const [isUploading, setIsUploading] = useState(false);
@@ -779,7 +780,7 @@ const DailyDetailView = ({
             }
 
             if (isPastTask && !task.completed) {
-              setShowPastFinishConfirm(true);
+              setPastFinishConfirmTaskKey(`${taskDate}-${ownerUid}-${task.id}`);
               void writeDebugLog({
                 event: 'daily.task.checkbox.past.confirm.show',
                 user: currentUser,
@@ -846,7 +847,7 @@ const DailyDetailView = ({
           )}
           <div className="mt-1 text-[9px] text-purple-600">担当: {selectedAssigneeIds.map(id => users[id]?.name?.split(' ')[0] || '').filter(Boolean).join('・') || '未設定'}</div>
 
-          {showPastFinishConfirm && isPastTask && !task.completed && canEditTask && (
+          {pastFinishConfirmTaskKey === `${taskDate}-${task.ownerUid || selectedUserUid}-${task.id}` && isPastTask && !task.completed && canEditTask && (
             <label
               className="mt-2 flex items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-bold text-orange-700 cursor-pointer"
               onClick={(e) => e.stopPropagation()}
@@ -861,7 +862,7 @@ const DailyDetailView = ({
                     user: currentUser,
                     details: { taskId: task.id, taskDate, ownerUid: task.ownerUid || selectedUserUid }
                   });
-                  setShowPastFinishConfirm(false);
+                  setPastFinishConfirmTaskKey(null);
                   try {
                     await toggleTask(taskDate, task.ownerUid || selectedUserUid, task.id);
                   } catch (error) {
