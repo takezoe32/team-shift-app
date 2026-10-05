@@ -768,7 +768,7 @@ const DailyDetailView = ({
               rows={4}
               autoFocus
             />
-            <button
+            <button type="button"
               onClick={() => {
                 updateTaskText(task.taskDate || selectedDate, task.ownerUid || selectedUserUid, task.id, editVal);
                 setIsEditing(false);
@@ -960,14 +960,14 @@ const DailyDetailView = ({
         </div>
 
         <div className="shrink-0 flex gap-1" onClick={(e) => e.stopPropagation()}>
-          <button
+          <button type="button"
             onClick={() => setIsEditing(true)}
             className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-gray-100 rounded-lg active:scale-95"
             title="編集"
           >
             <Edit2 size={16}/>
           </button>
-          <button
+          <button type="button"
             onClick={() => deleteTask(task.taskDate || selectedDate, task.ownerUid || selectedUserUid, task.id)}
             className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg active:scale-95"
             title="削除"
@@ -983,9 +983,9 @@ const DailyDetailView = ({
     <div className="flex-1 flex flex-col bg-gray-50 pb-[68px] h-full overflow-hidden">
       <div className="flex-1 overflow-y-auto flex flex-col relative">
         <div className="bg-white px-4 py-2 flex items-center justify-between border-b border-gray-100 shrink-0 sticky top-0 z-20 shadow-sm">
-          <button onClick={() => changeDay(-1)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full active:scale-95"><ChevronLeft className="w-5 h-5"/></button>
+          <button type="button" onClick={() => changeDay(-1)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full active:scale-95"><ChevronLeft className="w-5 h-5"/></button>
           <h2 className="text-sm font-bold text-gray-800">{selectedDate.replace(/-/g, '/')}</h2>
-          <button onClick={() => changeDay(1)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full active:scale-95"><ChevronRight className="w-5 h-5"/></button>
+          <button type="button" onClick={() => changeDay(1)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full active:scale-95"><ChevronRight className="w-5 h-5"/></button>
         </div>
 
         <div className="bg-white px-3 py-2 border-b border-gray-200 flex overflow-x-auto gap-2 no-scrollbar shadow-sm shrink-0 items-center min-h-[56px] sticky top-[53px] z-10">
@@ -995,7 +995,7 @@ const DailyDetailView = ({
               const shiftId = selectedDateShifts[member.id] || 'none';
               const shiftObj = shiftTypes.find(s => s.id === shiftId) || shiftTypes.find(s => s.id === 'none');
               return (
-                <button
+                <button type="button"
                   key={member.id}
                   onClick={() => { setSelectedUserUid(member.id); setSelectedTaskId(null); }}
                   className={`flex flex-col items-center px-3 py-1.5 rounded-xl border transition-all shrink-0 active:scale-95 ${isSelected ? 'bg-purple-50 border-purple-400 ring-2 ring-purple-400/20 shadow-sm' : 'bg-white border-gray-200 hover:bg-gray-50'}`}
@@ -1036,7 +1036,7 @@ const DailyDetailView = ({
               >
                 <ImageIcon size={21}/>
               </button>
-              <button
+              <button type="button"
                 onClick={handleAddTask}
                 disabled={isUploading || (!newTaskText.trim() && !newTaskImage)}
                 className="shrink-0 bg-blue-600 text-white px-4 py-3 rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:bg-gray-400 transition-colors shadow-sm active:scale-95 font-bold text-sm flex items-center gap-1.5"
