@@ -1110,7 +1110,7 @@ const HelpView = () => {
         <section className="bg-blue-600 text-white rounded-3xl p-6 sm:p-8 shadow-sm">
           <div className="flex items-center gap-3 mb-4">
             <BookOpen size={34} />
-            <h1 className="text-2xl sm:text-3xl font-black">TeamShift App 使い方</h1>
+            <h1 className="text-2xl sm:text-3xl font-black">LUIGANSOPERATIONSCREW App 使い方</h1>
           </div>
           <p className="text-lg sm:text-xl font-bold leading-relaxed">
             このページを見れば、このアプリで何をすればよいかが分かります。
