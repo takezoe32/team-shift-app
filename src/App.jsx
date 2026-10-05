@@ -626,7 +626,6 @@ const DailyDetailView = ({
           .map(task => ({ ...task, ownerUid, taskDate: dateStr })))
     );
   const selectedDateShifts = teamData.shifts[selectedDate] || {};
-  const myCurrentShift = selectedDateShifts[currentUserUid] || 'none';
 
   const handleImageChange = (e) => {
     const file = e.target.files?.[0];
@@ -951,17 +950,6 @@ const DailyDetailView = ({
           <button onClick={() => changeDay(-1)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full active:scale-95"><ChevronLeft className="w-5 h-5"/></button>
           <h2 className="text-sm font-bold text-gray-800">{selectedDate.replace(/-/g, '/')}</h2>
           <button onClick={() => changeDay(1)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full active:scale-95"><ChevronRight className="w-5 h-5"/></button>
-        </div>
-
-        <div className="bg-white p-3 border-b border-gray-100 shrink-0">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-gray-500">あなたの今日のシフト:</span>
-            {shiftTypes.map(shift => myCurrentShift === shift.id && (
-              <div key={shift.id} className={`px-3 py-1 rounded-md border text-xs font-bold ${shift.color}`}>{shift.label}</div>
-            ))}
-            {myCurrentShift === 'none' && <span className="text-xs text-gray-400">未定</span>}
-          </div>
-          {!canManageShift && <p className="text-[10px] text-gray-400 mt-1">※シフトの編集は管理者および権限を付与されたメンバーのみ可能です</p>}
         </div>
 
         <div className="bg-white px-3 py-2 border-b border-gray-200 flex overflow-x-auto gap-2 no-scrollbar shadow-sm shrink-0 items-center min-h-[56px] sticky top-[53px] z-10">
