@@ -2746,12 +2746,12 @@ export default function App() {
                   const oldShift = shiftTypes.find(s => s.id === oldShiftId) || shiftTypes.find(s => s.id === 'none');
                   const newShift = shiftTypes.find(s => s.id === shiftId) || shiftTypes.find(s => s.id === 'none');
                   if (oldShiftId === shiftId) return;
-                  const updatedTeamData = {
-                    ...teamData,
-                    shifts: { ...teamData.shifts, [dateStr]: { ...(teamData.shifts[dateStr] || {}), [targetUid]: shiftId } }
+
+                  const updatedShifts = {
+                    ...teamData.shifts,
+                    [dateStr]: { ...(teamData.shifts[dateStr] || {}), [targetUid]: shiftId }
                   };
-                  setTeamData(updatedTeamData);
-                  saveToFirestore({ teamData: updatedTeamData });
+                  const updatedTeamData = { ...teamData, shifts: updatedShifts };
 
                   const monthKey = dateStr.slice(0, 7).replace('-', '_');
                   const logEntry = {
@@ -2769,10 +2769,21 @@ export default function App() {
                     newLabel: newShift?.label || '未定'
                   };
                   const nextLogs = [...(shiftLogs?.[monthKey] || []), logEntry];
+
+                  // 画面を先に更新し、Firestoreにはシフト変更とログを同じ書き込みで保存する。
+                  setTeamData(updatedTeamData);
                   setShiftLogs({ ...shiftLogs, [monthKey]: nextLogs });
-                  await updateDoc(doc(db, 'app_data', 'shared_state'), {
-                    [`shiftLogs.${monthKey}`]: arrayUnion(logEntry)
-                  });
+                  try {
+                    await updateDoc(doc(db, 'app_data', 'shared_state'), {
+                      [`teamData.shifts.${dateStr}.${targetUid}`]: shiftId,
+                      [`shiftLogs.${monthKey}`]: arrayUnion(logEntry)
+                    });
+                  } catch (error) {
+                    console.error('シフト変更ログの保存に失敗しました:', error);
+                    setTeamData(teamData);
+                    setShiftLogs(shiftLogs);
+                    alert('シフト変更を保存できませんでした。もう一度お試しください。');
+                  }
                 }} 
                 sortedUsers={sortedUsers}
                 bulkImportShifts={async (newShifts, changedCount) => {
@@ -2781,9 +2792,7 @@ export default function App() {
                     return false;
                   }
                   const updatedTeamData = { ...teamData, shifts: newShifts };
-                  setTeamData(updatedTeamData);
-                  saveToFirestore({ teamData: updatedTeamData });
-                  const monthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+                  const monthKey = `${currentDate.getFullYear()}_${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
                   const logEntry = {
                     id: `shiftlog_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
                     timestamp: new Date().toISOString(),
@@ -2795,10 +2804,21 @@ export default function App() {
                     changedCount: changedCount || 0
                   };
                   const nextLogs = [...(shiftLogs?.[monthKey] || []), logEntry];
+
+                  setTeamData(updatedTeamData);
                   setShiftLogs({ ...shiftLogs, [monthKey]: nextLogs });
-                  await updateDoc(doc(db, 'app_data', 'shared_state'), {
-                    [`shiftLogs.${monthKey}`]: arrayUnion(logEntry)
-                  });
+                  try {
+                    await updateDoc(doc(db, 'app_data', 'shared_state'), {
+                      teamData: updatedTeamData,
+                      [`shiftLogs.${monthKey}`]: arrayUnion(logEntry)
+                    });
+                  } catch (error) {
+                    console.error('一括取り込みログの保存に失敗しました:', error);
+                    setTeamData(teamData);
+                    setShiftLogs(shiftLogs);
+                    alert('一括取り込みを保存できませんでした。もう一度お試しください。');
+                    return false;
+                  }
                   return true;
                 }}
                 updateShiftTypes={(newShiftTypes) => {
