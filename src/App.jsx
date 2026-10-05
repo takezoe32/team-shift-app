@@ -2912,7 +2912,7 @@ export default function App() {
                   );
                   pendingTaskCompletionOverridesRef.current[dateStr + '-' + targetUid + '-' + taskId] = {
                     dateStr,
-                    ownerUid,
+                    ownerUid: targetUid,
                     taskId,
                     completed: nextCompleted,
                     completedAt: nextCompletedAt
