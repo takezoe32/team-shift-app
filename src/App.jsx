@@ -1097,6 +1097,13 @@ const GuideMockup = ({ title, active, steps, children }) => (
 );
 
 const HelpView = () => {
+  const [skipHelpOnLogin, setSkipHelpOnLogin] = useState(() => localStorage.getItem('teamshift_skip_help_on_login') === 'true');
+
+  const handleSkipHelpChange = (checked) => {
+    setSkipHelpOnLogin(checked);
+    localStorage.setItem('teamshift_skip_help_on_login', checked ? 'true' : 'false');
+  };
+
   return (
     <div className="flex-1 overflow-y-auto bg-gray-50 pb-24">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 space-y-5">
@@ -1107,6 +1114,26 @@ const HelpView = () => {
           </div>
           <p className="text-lg sm:text-xl font-bold leading-relaxed">
             このページを見れば、このアプリで何をすればよいかが分かります。
+          </p>
+          <label className="mt-5 flex items-start gap-3 bg-white/15 rounded-2xl p-4 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={skipHelpOnLogin}
+              onChange={(e) => handleSkipHelpChange(e.target.checked)}
+              className="mt-1 w-5 h-5 rounded"
+            />
+            <span className="text-base sm:text-lg font-bold leading-relaxed">
+              次回から、ログインしたときに最初に「使い方」を開かない
+            </span>
+          </label>
+        </section>
+
+        <section className="bg-yellow-50 border-2 border-yellow-200 rounded-3xl p-5 sm:p-6 shadow-sm">
+          <p className="text-base sm:text-lg font-black text-gray-800 leading-relaxed">
+            「使い方」から戻るときは、画面の下にある「カレンダー」「シフト管理」「日別タスク」「パートナー」などのアイコンを押してください。
+          </p>
+          <p className="text-sm sm:text-base font-bold text-gray-600 mt-2">
+            押したアイコンの画面に戻ります。
           </p>
         </section>
 
@@ -2531,6 +2558,7 @@ export default function App() {
             );
             if (restoredUser) {
               setCurrentUser(restoredUser);
+              setActiveTab(localStorage.getItem('teamshift_skip_help_on_login') === 'true' ? 'calendar' : 'help');
               localStorage.setItem('google_user', JSON.stringify(restoredUser));
             } else {
               localStorage.removeItem('google_user');
@@ -2652,6 +2680,7 @@ export default function App() {
     }
 
     setCurrentUser(loggedInUser);
+    setActiveTab(localStorage.getItem('teamshift_skip_help_on_login') === 'true' ? 'calendar' : 'help');
     currentUserRef.current = loggedInUser;
     lastDebugActionRef.current = 'login.success';
     void writeDebugLog({ level: 'INFO', event: 'login.success', user: loggedInUser, details: { matchedUserId: loggedInUser.id } });
