@@ -227,7 +227,7 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partne
     const myShift=shiftTypes.find(s=>s.id===myShiftId)||shiftTypes.find(s=>s.id==='none');
     const hasMyTask=teamData.tasks[dateStr]?.[currentUserUid]?.some(task => task?.visibility !== 'private');
     const isPastDate=dateStr<todayStr;
-    days.push(<div key={i} onClick={()=>setSelectedCalendarTaskDate(dateStr)} className={`p-1 border-b border-r border-gray-100 min-h-[80px] cursor-pointer active:bg-gray-50 flex flex-col ${isPastDate?'bg-gray-100 opacity-70':''}`}>
+    days.push(<div key={i} onClick={()=>setSelectedCalendarTaskDate(dateStr)} className={`p-1 border-b border-r border-gray-100 min-h-[80px] cursor-pointer active:bg-gray-50 flex flex-col ${isPastDate?'bg-gray-200':''}`}>
       <div className="flex justify-between items-start p-1"><span className={`text-sm font-bold ${new Date().getDate()===i&&new Date().getMonth()===month?'bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center':isPastDate?'text-gray-400':'text-gray-700'}`}>{i}</span>{hasMyTask&&<div className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-1.5"></div>}</div>
       <div className="mt-1 flex-1 px-1">{myShift.id!=='none'&&<div className={`text-[10px] font-bold px-1.5 py-0.5 rounded truncate ${myShift.color}`}>{myShift.label}</div>}</div>
     </div>);
@@ -508,7 +508,7 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
                        <td 
                          key={d.day} 
                          onClick={() => setEditingCell({ dateStr: d.dateStr, uid: u.id, userName: u.name })}
-                         className={`p-1 border-r border-b border-gray-100 text-center cursor-pointer active:bg-gray-100 transition-colors ${d.dateStr < formatDate(new Date()) ? 'bg-gray-100 opacity-70' : ''}`}
+                         className={`p-1 border-r border-b border-gray-100 text-center cursor-pointer active:bg-gray-100 transition-colors ${d.dateStr < formatDate(new Date()) ? 'bg-gray-200' : ''}`}
                        >
                          <div className={`w-full h-8 flex items-center justify-center rounded-md font-bold text-[10px] ${shiftId !== 'none' ? shift.color : 'text-gray-300'}`}>
                            {shift.label.substring(0, 2)}
@@ -2317,7 +2317,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
   );
 };
 
-const BottomNav = ({ activeTab, setActiveTab, currentUser, roles }) => {
+const BottomNav = ({ activeTab, setActiveTab, setSelectedDate, currentUser, roles }) => {
   const canManageShift = checkCanManageShift(currentUser, roles);
   const userRoleObj = roles[currentUser.role] || { level: 10 };
   const canManageSettings = userRoleObj.level >= 30;
@@ -3335,7 +3335,7 @@ export default function App() {
               />
             )}
 
-            <BottomNav activeTab={activeTab} currentUser={currentUser} roles={roles} setActiveTab={setActiveTab}/>
+            <BottomNav activeTab={activeTab} currentUser={currentUser} roles={roles} setActiveTab={setActiveTab} setSelectedDate={setSelectedDate}/>
           </div>
         </div>
       )}
