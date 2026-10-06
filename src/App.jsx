@@ -209,7 +209,7 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partne
   const [isEditingPartner, setIsEditingPartner] = useState(false);
   const [partnerEditName, setPartnerEditName] = useState('');
   const [partnerEditSubject, setPartnerEditSubject] = useState('');
-  const [partnerEditAssigneeUid/, setPartnerEditAssigneeUid] = useState('');
+  const [partnerEditAssigneeUid, setPartnerEditAssigneeUid] = useState('');
   const [partnerEditDate, setPartnerEditDate] = useState('');
   const [partnerEditHour, setPartnerEditHour] = useState('');
   const [partnerEditMinute, setPartnerEditMinute] = useState('');
@@ -2012,7 +2012,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
   const time = timeHour && timeMinute ? `${timeHour}:${timeMinute}` : '';
   const [partnerName, setPartnerName] = useState('');
   const [subject, setSubject] = useState('');
-  const [assigneeUid/, setAssigneeUid] = useState('');
+  const [assigneeUid, setAssigneeUid] = useState('');
   const [content, setContent] = useState('');
   const [newPartnerName, setNewPartnerName] = useState('');
   const [newPartnerImage, setNewPartnerImage] = useState(null);
@@ -2115,7 +2115,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
       }
       setContent('');
       setSubject('');
-      setTimeHour/(''); setTimeMinute('');
+      setTimeHour(''); setTimeMinute('');
       setPartnerName('');
       setAssigneeUid('');
       setNewPartnerImage(null);
