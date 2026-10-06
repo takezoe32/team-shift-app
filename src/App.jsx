@@ -218,7 +218,9 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partne
   const [isSaving, setIsSaving] = useState(false);
   const [selectedPartnerImage, setSelectedPartnerImage] = useState(null);
   const [partnerImageScale, setPartnerImageScale] = useState(1);
+  const [partnerImagePosition, setPartnerImagePosition] = useState({ x: 0, y: 0 });
   const partnerPinchRef = useRef(null);
+  const partnerPanRef = useRef(null);
   const isAdmin = currentUser?.role === 'admin' || (roles?.[currentUser?.role]?.level || 0) >= 40;
   const canEditTask = detailTask && (isAdmin || detailTask.ownerUid === currentUserUid);
   const todayStr = formatDate(new Date());
@@ -244,12 +246,59 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partne
   const startPartnerEdit=()=>{const [h='',m='']=String(detailPartner?.time||'').split(':');setPartnerEditName(detailPartner?.partnerName||'');setPartnerEditAssigneeUid(detailPartner?.assigneeUid||'');setPartnerEditDate(detailPartner?.date||'');setPartnerEditHour(h);setPartnerEditMinute(m);setPartnerEditContent(detailPartner?.content||'');setPartnerEditNote('');setIsEditingPartner(true);};
   const handlePartnerEditImageChange=(e)=>{const file=e.target.files?.[0];if(!file)return;if(!file.type.startsWith('image/')){alert('画像ファイルを選択してください。');e.target.value='';return;}if(file.size>10*1024*1024){alert('画像は10MB以下にしてください。');e.target.value='';return;}if(partnerEditImagePreview)URL.revokeObjectURL(partnerEditImagePreview);setPartnerEditImage(file);setPartnerEditImagePreview(URL.createObjectURL(file));};
   const clearPartnerEditImage=()=>{if(partnerEditImagePreview)URL.revokeObjectURL(partnerEditImagePreview);setPartnerEditImage(null);setPartnerEditImagePreview('');};
-  const openPartnerImage=(imageUrl,imageName='添付画像')=>{setSelectedPartnerImage({imageUrl,imageName});setPartnerImageScale(1);};
-  const closePartnerImage=()=>{setSelectedPartnerImage(null);setPartnerImageScale(1);partnerPinchRef.current=null;};
+  const openPartnerImage=(imageUrl,imageName='添付画像')=>{setSelectedPartnerImage({imageUrl,imageName});setPartnerImageScale(1);setPartnerImagePosition({x:0,y:0});};
+  const closePartnerImage=()=>{setSelectedPartnerImage(null);setPartnerImageScale(1);setPartnerImagePosition({x:0,y:0});partnerPinchRef.current=null;partnerPanRef.current=null;};
   const getPartnerTouchDistance=(touches)=>{if(touches.length<2)return 0;const dx=touches[0].clientX-touches[1].clientX;const dy=touches[0].clientY-touches[1].clientY;return Math.hypot(dx,dy);};
-  const handlePartnerImageTouchStart=(e)=>{if(e.touches.length===2){const distance=getPartnerTouchDistance(e.touches);partnerPinchRef.current={distance,scale:partnerImageScale};}};
-  const handlePartnerImageTouchMove=(e)=>{if(e.touches.length!==2||!partnerPinchRef.current)return;const distance=getPartnerTouchDistance(e.touches);if(!distance)return;e.preventDefault();const ratio=distance/partnerPinchRef.current.distance;setPartnerImageScale(Math.min(4,Math.max(0.5,Number((partnerPinchRef.current.scale*ratio).toFixed(2)))));};
-  const handlePartnerImageTouchEnd=(e)=>{if(e.touches.length<2)partnerPinchRef.current=null;};
+  const getPartnerTouchCenter=(touches)=>({x:(touches[0].clientX+touches[1].clientX)/2,y:(touches[0].clientY+touches[1].clientY)/2});
+  const handlePartnerImageTouchStart=(e)=>{
+    if(e.touches.length===2){
+      const distance=getPartnerTouchDistance(e.touches);
+      const center=getPartnerTouchCenter(e.touches);
+      partnerPinchRef.current={distance,scale:partnerImageScale,center,startPosition:{...partnerImagePosition}};
+      partnerPanRef.current=null;
+    }else if(e.touches.length===1&&partnerImageScale>1){
+      partnerPanRef.current={startX:e.touches[0].clientX,startY:e.touches[0].clientY,startPosition:{...partnerImagePosition}};
+    }
+  };
+  const handlePartnerImageTouchMove=(e)=>{
+    if(e.touches.length===2&&partnerPinchRef.current){
+      const distance=getPartnerTouchDistance(e.touches);
+      if(!distance)return;
+      e.preventDefault();
+      const ratio=distance/partnerPinchRef.current.distance;
+      const nextScale=Math.min(4,Math.max(0.5,Number((partnerPinchRef.current.scale*ratio).toFixed(2))));
+      const center=getPartnerTouchCenter(e.touches);
+      const dx=center.x-partnerPinchRef.current.center.x;
+      const dy=center.y-partnerPinchRef.current.center.y;
+      setPartnerImageScale(nextScale);
+      setPartnerImagePosition({x:partnerPinchRef.current.startPosition.x+dx,y:partnerPinchRef.current.startPosition.y+dy});
+    }else if(e.touches.length===1&&partnerPanRef.current&&partnerImageScale>1){
+      e.preventDefault();
+      const dx=e.touches[0].clientX-partnerPanRef.current.startX;
+      const dy=e.touches[0].clientY-partnerPanRef.current.startY;
+      setPartnerImagePosition({x:partnerPanRef.current.startPosition.x+dx,y:partnerPanRef.current.startPosition.y+dy});
+    }
+  };
+  const handlePartnerImageTouchEnd=(e)=>{
+    if(e.touches.length<2)partnerPinchRef.current=null;
+    if(e.touches.length===0)partnerPanRef.current=null;
+    else if(e.touches.length===1&&partnerImageScale>1){
+      partnerPanRef.current={startX:e.touches[0].clientX,startY:e.touches[0].clientY,startPosition:{...partnerImagePosition}};
+    }
+  };
+  const handlePartnerImageMouseDown=(e)=>{
+    if(partnerImageScale<=1)return;
+    e.preventDefault();
+    partnerPanRef.current={startX:e.clientX,startY:e.clientY,startPosition:{...partnerImagePosition}};
+  };
+  const handlePartnerImageMouseMove=(e)=>{
+    if(!partnerPanRef.current||partnerImageScale<=1)return;
+    e.preventDefault();
+    const dx=e.clientX-partnerPanRef.current.startX;
+    const dy=e.clientY-partnerPanRef.current.startY;
+    setPartnerImagePosition({x:partnerPanRef.current.startPosition.x+dx,y:partnerPanRef.current.startPosition.y+dy});
+  };
+  const handlePartnerImageMouseUp=()=>{partnerPanRef.current=null;};
   const savePartnerEdit=async()=>{if(!detailPartner||!updatePartnerItem)return;if(!partnerEditName||!partnerEditAssigneeUid||!partnerEditDate||!partnerEditHour||!partnerEditMinute){alert('パートナー名・主担当者・日付・時間を入力してください。');return;}const noteText=partnerEditNote.trim();if(!noteText&&!partnerEditImage){alert('申し送り内容または画像を入力してください。');return;}setIsSaving(true);try{const changes={partnerName:partnerEditName,assigneeUid:partnerEditAssigneeUid,date:partnerEditDate,time:`${partnerEditHour}:${partnerEditMinute}`};let imageData=null;if(partnerEditImage){const result=await uploadTaskImageToCloudinary(partnerEditImage);imageData={imageUrl:result.secure_url||result.url||'',imageName:partnerEditImage.name,imagePublicId:result.public_id||'',imageBytes:Number(result.bytes||partnerEditImage.size||0)};}const updates=[...getPartnerUpdates(detailPartner),createPartnerUpdate(noteText,currentUser,imageData)];changes.updates=updates;changes.content=updates[updates.length-1]?.text||detailPartner.content||'';await updatePartnerItem(detailPartner.id,changes);setDetailPartner(p=>p?{...p,...changes}:p);setIsEditingPartner(false);setPartnerEditNote('');clearPartnerEditImage();}catch(e){console.error('パートナー申し送り画像の保存に失敗しました:',e);alert(`パートナータスクの更新に失敗しました。\n${e?.message||'画像のアップロードに失敗しました。'}`);}finally{setIsSaving(false);}};
   const saveTaskEdit=async()=>{if(!detailTask||!canEditTask)return;setIsSaving(true);try{const text=editingTaskText.trim();await updateTaskText(detailTask.taskDate,detailTask.ownerUid,detailTask.id,text);setDetailTask(p=>p?{...p,text}:p);setIsEditingTask(false);}catch(e){alert('タスクの更新に失敗しました。');}finally{setIsSaving(false);}};
   const removeTask=async()=>{if(!detailTask||!canEditTask)return;if(!window.confirm('このタスクを削除してもよろしいですか？'))return;await deleteTask(detailTask.taskDate,detailTask.ownerUid,detailTask.id);setDetailTask(null);};
@@ -269,16 +318,20 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partne
       <div className="shrink-0 flex items-center justify-between px-3 py-2 text-white bg-black/60" onClick={e=>e.stopPropagation()}>
         <div className="text-xs font-bold truncate pr-2">{selectedPartnerImage.imageName||'添付画像'}</div>
         <div className="flex items-center gap-1">
-          <button type="button" onClick={()=>setPartnerImageScale(1)} className="px-2 h-9 rounded-lg bg-white/15 text-[10px] font-bold">{Math.round(partnerImageScale*100)}%</button>
-          <span className="hidden sm:inline text-[10px] text-white/70 px-1">2本指で拡大・縮小</span>
+          <button type="button" onClick={()=>{setPartnerImageScale(1);setPartnerImagePosition({x:0,y:0});}} className="px-2 h-9 rounded-lg bg-white/15 text-[10px] font-bold">{Math.round(partnerImageScale*100)}%</button>
+          <span className="hidden sm:inline text-[10px] text-white/70 px-1">拡大後はドラッグで移動 / 2本指で拡大・縮小</span>
           <button type="button" onClick={closePartnerImage} className="w-9 h-9 rounded-lg bg-white/15 text-lg font-bold">×</button>
         </div>
       </div>
       <div className="flex-1 min-h-0 overflow-auto flex items-center justify-center p-3" onClick={e=>e.stopPropagation()}>
         <img src={selectedPartnerImage.imageUrl} alt={selectedPartnerImage.imageName||'添付画像'}
-          style={{transform:'scale('+partnerImageScale+')',transformOrigin:'center center'}}
-          className="max-w-none max-h-none object-contain transition-transform duration-150 cursor-zoom-out touch-none select-none"
-          onDoubleClick={()=>setPartnerImageScale(s=>s===1?2:1)}
+          style={{transform:'translate('+partnerImagePosition.x+'px, '+partnerImagePosition.y+'px) scale('+partnerImageScale+')',transformOrigin:'center center'}}
+          className={`max-w-none max-h-none object-contain transition-transform duration-150 touch-none select-none ${partnerImageScale>1?'cursor-grab active:cursor-grabbing':'cursor-zoom-in'}`}
+          onDoubleClick={()=>{const nextScale=partnerImageScale===1?2:1;setPartnerImageScale(nextScale);if(nextScale===1)setPartnerImagePosition({x:0,y:0});}}
+          onMouseDown={handlePartnerImageMouseDown}
+          onMouseMove={handlePartnerImageMouseMove}
+          onMouseUp={handlePartnerImageMouseUp}
+          onMouseLeave={handlePartnerImageMouseUp}
           onTouchStart={handlePartnerImageTouchStart}
           onTouchMove={handlePartnerImageTouchMove}
           onTouchEnd={handlePartnerImageTouchEnd}
