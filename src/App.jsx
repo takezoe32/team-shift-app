@@ -2148,7 +2148,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
             <div className="flex items-center justify-between bg-blue-50 border border-blue-100 rounded-xl px-3 py-2">
               <span className="text-[10px] font-bold text-blue-700">パートナー予定を編集中</span>
               <button type="button" onClick={() => {
-                setEditingItemId(null); setPartnerName(''); setSubject(''); setAssigneeUid/(''); setDate(formatDate(new Date())); setTimeHour(''); setTimeMinute(''); setContent(''); setNewPartnerImage(null); setNewPartnerImagePreview('');
+                setEditingItemId(null); setPartnerName(''); setSubject(''); setAssigneeUid(''); setDate(formatDate(new Date())); setTimeHour(''); setTimeMinute(''); setContent(''); setNewPartnerImage(null); setNewPartnerImagePreview('');
               }} className="text-[10px] font-bold text-gray-500 hover:text-gray-800">キャンセル</button>
             </div>
           )}
