@@ -225,15 +225,16 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partne
     const dateStr=formatDate(new Date(year,month,i));
     const myShiftId=(teamData.shifts[dateStr]||{})[currentUserUid]||'none';
     const myShift=shiftTypes.find(s=>s.id===myShiftId)||shiftTypes.find(s=>s.id==='none');
-    const hasMyTask=teamData.tasks[dateStr]?.[currentUserUid]?.some(task => task?.visibility !== 'private' || task?.ownerUid === currentUserUid);
-    days.push(<div key={i} onClick={()=>setSelectedCalendarTaskDate(dateStr)} className="p-1 border-b border-r border-gray-100 min-h-[80px] cursor-pointer active:bg-gray-50 flex flex-col">
-      <div className="flex justify-between items-start p-1"><span className={`text-sm font-bold ${new Date().getDate()===i&&new Date().getMonth()===month?'bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center':'text-gray-700'}`}>{i}</span>{hasMyTask&&<div className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-1.5"></div>}</div>
+    const hasMyTask=teamData.tasks[dateStr]?.[currentUserUid]?.some(task => task?.visibility !== 'private');
+    const isPastDate=dateStr<todayStr;
+    days.push(<div key={i} onClick={()=>setSelectedCalendarTaskDate(dateStr)} className={`p-1 border-b border-r border-gray-100 min-h-[80px] cursor-pointer active:bg-gray-50 flex flex-col ${isPastDate?'bg-gray-100 opacity-70':''}`}>
+      <div className="flex justify-between items-start p-1"><span className={`text-sm font-bold ${new Date().getDate()===i&&new Date().getMonth()===month?'bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center':isPastDate?'text-gray-400':'text-gray-700'}`}>{i}</span>{hasMyTask&&<div className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-1.5"></div>}</div>
       <div className="mt-1 flex-1 px-1">{myShift.id!=='none'&&<div className={`text-[10px] font-bold px-1.5 py-0.5 rounded truncate ${myShift.color}`}>{myShift.label}</div>}</div>
     </div>);
   }
   const activePartnerItems=(partnerItems||[]).filter(i=>!i.completed).sort((a,b)=>`${a.date||''}T${a.time||'00:00'}`.localeCompare(`${b.date||''}T${b.time||'00:00'}`));
   const datesToShow=Array.from(new Set([...Object.keys(teamData.tasks||{}).filter(d=>d<todayStr),selectedCalendarTaskDate])).sort();
-  const selectedTasks=datesToShow.flatMap(taskDate=>(sortedUsers||[]).flatMap(member=>(teamData.tasks[taskDate]?.[member.id]||[]).filter(t=>(t.visibility!=='private'||member.id===currentUserUid)&&!t.completed).map(task=>({...task,ownerUid:member.id,member,taskDate,assigneeIds:Array.isArray(task.assigneeIds)&&task.assigneeIds.length?task.assigneeIds:[member.id]}))));
+  const selectedTasks=datesToShow.flatMap(taskDate=>(sortedUsers||[]).flatMap(member=>(teamData.tasks[taskDate]?.[member.id]||[]).filter(t=>t.visibility!=='private'&&!t.completed).map(task=>({...task,ownerUid:member.id,member,taskDate,assigneeIds:Array.isArray(task.assigneeIds)&&task.assigneeIds.length?task.assigneeIds:[member.id]}))));
   const startPartnerEdit=()=>{const [h='',m='']=String(detailPartner?.time||'').split(':');setPartnerEditName(detailPartner?.partnerName||'');setPartnerEditAssigneeUid(detailPartner?.assigneeUid||'');setPartnerEditDate(detailPartner?.date||'');setPartnerEditHour(h);setPartnerEditMinute(m);setPartnerEditContent(detailPartner?.content||'');setPartnerEditNote('');setIsEditingPartner(true);};
   const savePartnerEdit=async()=>{if(!detailPartner||!updatePartnerItem)return;if(!partnerEditName||!partnerEditAssigneeUid||!partnerEditDate||!partnerEditHour||!partnerEditMinute){alert('パートナー名・主担当者・日付・時間を入力してください。');return;}setIsSaving(true);try{const changes={partnerName:partnerEditName,assigneeUid:partnerEditAssigneeUid,date:partnerEditDate,time:`${partnerEditHour}:${partnerEditMinute}`};const noteText=partnerEditNote.trim();if(noteText){const updates=[...getPartnerUpdates(detailPartner),createPartnerUpdate(noteText,currentUser)];changes.updates=updates;changes.content=updates[updates.length-1]?.text||detailPartner.content||'';}await updatePartnerItem(detailPartner.id,changes);setDetailPartner(p=>p?{...p,...changes}:p);setIsEditingPartner(false);setPartnerEditNote('');}catch(e){alert('パートナータスクの更新に失敗しました。')}finally{setIsSaving(false);}};
   const saveTaskEdit=async()=>{if(!detailTask||!canEditTask)return;setIsSaving(true);try{const text=editingTaskText.trim();await updateTaskText(detailTask.taskDate,detailTask.ownerUid,detailTask.id,text);setDetailTask(p=>p?{...p,text}:p);setIsEditingTask(false);}catch(e){alert('タスクの更新に失敗しました。');}finally{setIsSaving(false);}};
@@ -486,7 +487,7 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
                 メンバー
               </th>
               {days.map(d => (
-                <th key={d.day} className={`min-w-[48px] p-1.5 border-r border-b border-gray-200 text-center font-medium ${d.weekDay === '日' ? 'text-red-500' : d.weekDay === '土' ? 'text-blue-500' : 'text-gray-500'}`}>
+                <th key={d.day} className={`min-w-[48px] p-1.5 border-r border-b border-gray-200 text-center font-medium ${d.dateStr < formatDate(new Date()) ? 'bg-gray-200 text-gray-400' : d.weekDay === '日' ? 'text-red-500' : d.weekDay === '土' ? 'text-blue-500' : 'text-gray-500'}`}>
                   {d.day}<br/>
                   <span className="text-[10px]">{d.weekDay}</span>
                 </th>
@@ -507,7 +508,7 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
                        <td 
                          key={d.day} 
                          onClick={() => setEditingCell({ dateStr: d.dateStr, uid: u.id, userName: u.name })}
-                         className="p-1 border-r border-b border-gray-100 text-center cursor-pointer active:bg-gray-100 transition-colors"
+                         className={`p-1 border-r border-b border-gray-100 text-center cursor-pointer active:bg-gray-100 transition-colors ${d.dateStr < formatDate(new Date()) ? 'bg-gray-100 opacity-70' : ''}`}
                        >
                          <div className={`w-full h-8 flex items-center justify-center rounded-md font-bold text-[10px] ${shiftId !== 'none' ? shift.color : 'text-gray-300'}`}>
                            {shift.label.substring(0, 2)}
