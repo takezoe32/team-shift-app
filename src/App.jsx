@@ -2538,7 +2538,33 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
         const entries = [...monthGroups[monthKey]].sort((a, b) =>
           String(b.completedAt || b.date || '').localeCompare(String(a.completedAt || a.date || ''))
         );
+        const memberEntries = entries.filter(entry => entry.type === 'member');
+        const partnerEntries = entries.filter(entry => entry.type === 'partner');
         const isOpen = openMonths[monthKey] !== false;
+
+        const renderEntry = (entry) => (
+          <div key={entry.type + '-' + entry.id} className="p-3">
+            <div className="min-w-0">
+              <div className="text-sm font-bold text-gray-800 break-words">{entry.title}</div>
+              <div className="mt-1 text-[10px] text-gray-500">
+                {entry.type === 'partner' && entry.partnerName ? entry.partnerName + ' ・ ' : ''}
+                担当: {entry.ownerName}
+                {entry.assigneeNames.length > 1 ? '（' + entry.assigneeNames.join('・') + '）' : ''}
+              </div>
+              <div className="text-[10px] text-gray-400">
+                対象日: {entry.date || '不明'} ・ 終了: {formatCompletedAt(entry.completedAt)}
+              </div>
+              {entry.type === 'partner' && entry.content && (
+                <div className="mt-2 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600 whitespace-pre-wrap break-words">{entry.content}</div>
+              )}
+              {entry.type === 'member' && entry.title && (
+                <div className="mt-2 text-xs text-gray-600 whitespace-pre-wrap break-words">{entry.title}</div>
+              )}
+              {entry.imageUrl && <img src={entry.imageUrl} alt="添付画像" className="mt-2 max-h-40 max-w-full rounded-lg border object-contain"/>}
+            </div>
+          </div>
+        );
+
         return <section key={monthKey} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <button
             type="button"
@@ -2550,39 +2576,42 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
               {entries.length}件 {isOpen ? <ChevronUp size={15}/> : <ChevronDown size={15}/>}
             </span>
           </button>
-          {isOpen && <div className="divide-y divide-gray-100">
-            {entries.map(entry => (
-              <div key={entry.type + '-' + entry.id} className="p-3">
-                <div className="flex items-start gap-2">
-                  <div className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ${entry.type === 'partner' ? 'bg-purple-50 text-purple-700' : 'bg-blue-50 text-blue-700'}`}>
-                    {entry.type === 'partner' ? 'パートナー' : 'メンバー'}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-bold text-gray-800 break-words">{entry.title}</div>
-                    <div className="mt-1 text-[10px] text-gray-500">
-                      {entry.type === 'partner' && entry.partnerName ? entry.partnerName + ' ・ ' : ''}
-                      担当: {entry.ownerName}
-                      {entry.assigneeNames.length > 1 ? '（' + entry.assigneeNames.join('・') + '）' : ''}
-                    </div>
-                    <div className="text-[10px] text-gray-400">
-                      対象日: {entry.date || '不明'} ・ 終了: {formatCompletedAt(entry.completedAt)}
-                    </div>
-                    {entry.type === 'partner' && entry.content && (
-                      <div className="mt-2 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600 whitespace-pre-wrap break-words">{entry.content}</div>
-                    )}
-                    {entry.type === 'member' && entry.title && (
-                      <div className="mt-2 text-xs text-gray-600 whitespace-pre-wrap break-words">{entry.title}</div>
-                    )}
-                    {entry.imageUrl && <img src={entry.imageUrl} alt="添付画像" className="mt-2 max-h-40 max-w-full rounded-lg border object-contain"/>}
-                  </div>
+
+          {isOpen && (
+            <div className="grid grid-cols-2 divide-x divide-gray-100">
+              <div className="min-w-0">
+                <div className="px-3 py-2 bg-blue-50 border-b border-blue-100 text-xs font-black text-blue-700 flex items-center justify-between">
+                  <span>メンバー</span>
+                  <span className="text-[10px] font-bold">{memberEntries.length}件</span>
                 </div>
+                {memberEntries.length ? (
+                  <div className="divide-y divide-gray-100">
+                    {memberEntries.map(renderEntry)}
+                  </div>
+                ) : (
+                  <div className="p-4 text-center text-[10px] text-gray-400">完了タスクなし</div>
+                )}
               </div>
-            ))}
-          </div>}
+
+              <div className="min-w-0">
+                <div className="px-3 py-2 bg-purple-50 border-b border-purple-100 text-xs font-black text-purple-700 flex items-center justify-between">
+                  <span>パートナー</span>
+                  <span className="text-[10px] font-bold">{partnerEntries.length}件</span>
+                </div>
+                {partnerEntries.length ? (
+                  <div className="divide-y divide-gray-100">
+                    {partnerEntries.map(renderEntry)}
+                  </div>
+                ) : (
+                  <div className="p-4 text-center text-[10px] text-gray-400">完了タスクなし</div>
+                )}
+              </div>
+            </div>
+          )}
         </section>;
       })}
     </div>
-  </div>;
+  </div>
 };
 
 const BottomNav = ({ activeTab, setActiveTab, setSelectedDate, currentUser, roles }) => {
