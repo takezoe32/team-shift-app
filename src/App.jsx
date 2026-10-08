@@ -2423,6 +2423,168 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
   );
 };
 
+const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUid }) => {
+  const [memberFilter, setMemberFilter] = useState('all');
+  const [openMonths, setOpenMonths] = useState({});
+
+  const members = Array.isArray(sortedUsers) ? sortedUsers : [];
+  const memberMap = Object.fromEntries(members.map(member => [member.id, member]));
+  const completedEntries = [];
+
+  Object.entries(teamData?.tasks || {}).forEach(([dateStr, tasksByUser]) => {
+    Object.entries(tasksByUser || {}).forEach(([ownerUid, tasks]) => {
+      (tasks || []).filter(task => task?.completed).forEach(task => {
+        completedEntries.push({
+          type: 'member',
+          id: task.id,
+          date: dateStr,
+          completedAt: task.completedAt || task.updatedAt || task.createdAt || null,
+          ownerUid,
+          ownerName: memberMap[ownerUid]?.name || '不明なメンバー',
+          assigneeNames: (Array.isArray(task.assigneeIds) ? task.assigneeIds : [ownerUid])
+            .map(uid => memberMap[uid]?.name)
+            .filter(Boolean),
+          title: task.text || '内容なし',
+          imageUrl: task.imageUrl || ''
+        });
+      });
+    });
+  });
+
+  (partnerItems || []).filter(item => item?.completed).forEach(item => {
+    const assigneeUid = item.assigneeUid || '';
+    completedEntries.push({
+      type: 'partner',
+      id: item.id,
+      date: item.date || String(item.completedAt || '').slice(0, 10),
+      completedAt: item.completedAt || null,
+      ownerUid: assigneeUid,
+      ownerName: memberMap[assigneeUid]?.name || '未割り当て',
+      assigneeNames: assigneeUid && memberMap[assigneeUid]?.name ? [memberMap[assigneeUid].name] : [],
+      title: item.subject || item.partnerName || 'パートナータスク',
+      content: item.content || '',
+      partnerName: item.partnerName || '',
+      imageUrl: item.imageUrl || ''
+    });
+  });
+
+  const filteredEntries = memberFilter === 'all'
+    ? completedEntries
+    : completedEntries.filter(entry => entry.ownerUid === memberFilter);
+
+  const monthGroups = filteredEntries.reduce((groups, entry) => {
+    const monthKey = String(entry.date || entry.completedAt || '').slice(0, 7) || '日付未設定';
+    if (!groups[monthKey]) groups[monthKey] = [];
+    groups[monthKey].push(entry);
+    return groups;
+  }, {});
+
+  const sortedMonthKeys = Object.keys(monthGroups).sort((a, b) => b.localeCompare(a));
+
+  const formatMonth = (key) => {
+    if (!/^\d{4}-\d{2}$/.test(key)) return key;
+    const [year, month] = key.split('-');
+    return year + '年' + Number(month) + '月';
+  };
+
+  const formatCompletedAt = (value) => {
+    if (!value) return '終了日時不明';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? '終了日時不明' : date.toLocaleString('ja-JP');
+  };
+
+  const toggleMonth = (monthKey) => {
+    setOpenMonths(prev => ({ ...prev, [monthKey]: prev[monthKey] === false }));
+  };
+
+  useEffect(() => {
+    if (sortedMonthKeys.length && Object.keys(openMonths).length === 0) {
+      setOpenMonths({ [sortedMonthKeys[0]]: true });
+    }
+  }, [sortedMonthKeys.join('|')]);
+
+  return <div className="flex-1 flex flex-col bg-gray-50 pb-[68px] overflow-hidden">
+    <div className="bg-white px-4 py-3 border-b border-gray-100 shadow-sm shrink-0">
+      <div className="flex items-center gap-2">
+        <ClipboardList className="text-green-600" size={20}/>
+        <div>
+          <div className="text-sm font-black text-gray-800">終了したタスク</div>
+          <div className="text-[10px] text-gray-400">メンバー・パートナーの完了履歴</div>
+        </div>
+      </div>
+      <div className="mt-3 overflow-x-auto">
+        <div className="flex gap-2 min-w-max">
+          <button
+            onClick={() => setMemberFilter('all')}
+            className={`px-3 py-1.5 rounded-full text-xs font-bold ${memberFilter === 'all' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}
+          >全員</button>
+          {members.map(member => (
+            <button
+              key={member.id}
+              onClick={() => setMemberFilter(member.id)}
+              className={`px-3 py-1.5 rounded-full text-xs font-bold ${memberFilter === member.id ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}
+            >{member.name?.split(' ')[0] || '名前未設定'}</button>
+          ))}
+        </div>
+      </div>
+    </div>
+
+    <div className="flex-1 overflow-y-auto p-3 space-y-3">
+      {!sortedMonthKeys.length ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-sm text-gray-400">
+          終了したタスクはありません。
+        </div>
+      ) : sortedMonthKeys.map(monthKey => {
+        const entries = [...monthGroups[monthKey]].sort((a, b) =>
+          String(b.completedAt || b.date || '').localeCompare(String(a.completedAt || a.date || ''))
+        );
+        const isOpen = openMonths[monthKey] !== false;
+        return <section key={monthKey} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => toggleMonth(monthKey)}
+            className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 border-b border-gray-100"
+          >
+            <span className="text-sm font-black text-gray-800">{formatMonth(monthKey)}</span>
+            <span className="flex items-center gap-2 text-[10px] text-gray-500 font-bold">
+              {entries.length}件 {isOpen ? <ChevronUp size={15}/> : <ChevronDown size={15}/>}
+            </span>
+          </button>
+          {isOpen && <div className="divide-y divide-gray-100">
+            {entries.map(entry => (
+              <div key={entry.type + '-' + entry.id} className="p-3">
+                <div className="flex items-start gap-2">
+                  <div className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ${entry.type === 'partner' ? 'bg-purple-50 text-purple-700' : 'bg-blue-50 text-blue-700'}`}>
+                    {entry.type === 'partner' ? 'パートナー' : 'メンバー'}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-bold text-gray-800 break-words">{entry.title}</div>
+                    <div className="mt-1 text-[10px] text-gray-500">
+                      {entry.type === 'partner' && entry.partnerName ? entry.partnerName + ' ・ ' : ''}
+                      担当: {entry.ownerName}
+                      {entry.assigneeNames.length > 1 ? '（' + entry.assigneeNames.join('・') + '）' : ''}
+                    </div>
+                    <div className="text-[10px] text-gray-400">
+                      対象日: {entry.date || '不明'} ・ 終了: {formatCompletedAt(entry.completedAt)}
+                    </div>
+                    {entry.type === 'partner' && entry.content && (
+                      <div className="mt-2 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600 whitespace-pre-wrap break-words">{entry.content}</div>
+                    )}
+                    {entry.type === 'member' && entry.title && (
+                      <div className="mt-2 text-xs text-gray-600 whitespace-pre-wrap break-words">{entry.title}</div>
+                    )}
+                    {entry.imageUrl && <img src={entry.imageUrl} alt="添付画像" className="mt-2 max-h-40 max-w-full rounded-lg border object-contain"/>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>}
+        </section>;
+      })}
+    </div>
+  </div>;
+};
+
 const BottomNav = ({ activeTab, setActiveTab, setSelectedDate, currentUser, roles }) => {
   const canManageShift = checkCanManageShift(currentUser, roles);
   const userRoleObj = roles[currentUser.role] || { level: 10 };
@@ -2467,6 +2629,15 @@ const BottomNav = ({ activeTab, setActiveTab, setSelectedDate, currentUser, role
           <Handshake className="w-6 h-6"/>
           <span className="text-[10px] font-bold">パートナー</span>
           {activeTab === 'partner' && <div className="absolute top-0 w-1/2 h-0.5 bg-blue-600 rounded-b-full"></div>}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('completed')}
+          className={`flex-1 flex flex-col items-center justify-center space-y-1.5 relative ${activeTab === 'completed' ? 'text-green-600' : 'text-gray-400'}`}
+        >
+          <ClipboardList className="w-6 h-6"/>
+          <span className="text-[10px] font-bold">終了履歴</span>
+          {activeTab === 'completed' && <div className="absolute top-0 w-1/2 h-0.5 bg-green-600 rounded-b-full"></div>}
         </button>
 
         {canManageSettings && (
@@ -3248,6 +3419,13 @@ export default function App() {
                   setShiftTypes(newShiftTypes);
                   saveToFirestore({ shiftTypes: newShiftTypes });
                 }}
+              />
+            ) : activeTab === 'completed' ? (
+              <CompletedTasksView
+                teamData={teamData}
+                partnerItems={partnerItems}
+                sortedUsers={sortedUsers}
+                currentUserUid={currentUser.id}
               />
             ) : activeTab === 'daily' ? (
               <DailyDetailView 
