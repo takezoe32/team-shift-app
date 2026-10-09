@@ -2100,8 +2100,8 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
   };
 
   const handleSave = async () => {
-    if (!partnerName || !subject.trim() || !assigneeUid || !date || !time || !endTime || !content.trim()) {
-      alert('パートナー名・件名・主担当者・日付・開始時間・終了予定時刻・内容を入力してください。');
+    if (!partnerName || !subject.trim() || !assigneeUid || !date || !time || !content.trim()) {
+      alert('パートナー名・件名・主担当者・日付・開始時間・内容を入力してください。');
       return;
     }
 
