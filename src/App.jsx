@@ -1026,7 +1026,7 @@ const DailyDetailView = ({
 
           {isSelected && (
             <div className="mt-3 pt-3 border-t border-purple-100" onClick={(e) => e.stopPropagation()}>
-              {Array.isArray(task.updates) && task.updates.length > 0 && <div className="mb-3 space-y-2"><div className="text-[10px] font-bold text-gray-600">申し送り履歴</div>{task.updates.map(update=><div key={update.id} className="rounded-lg bg-gray-50 border border-gray-100 p-2"><div className="text-[9px] text-gray-500 font-bold">{update.authorName||'不明なユーザー'}{update.createdAt?' ・ '+new Date(update.createdAt).toLocaleString('ja-JP'):''}</div><div className="text-xs text-gray-700 whitespace-pre-wrap break-words">{update.text}</div>{update.imageUrl&&<img src={update.imageUrl} alt={update.imageName||'添付画像'} className="mt-1 max-h-36 rounded-lg object-contain"/>}</div>)}</div>
+              {Array.isArray(task.updates) && task.updates.length > 0 && <div className="mb-3 space-y-2"><div className="text-[10px] font-bold text-gray-600">申し送り履歴</div>{task.updates.map(update=><div key={update.id} className="rounded-lg bg-gray-50 border border-gray-100 p-2"><div className="text-[9px] text-gray-500 font-bold">{update.authorName||'不明なユーザー'}{update.createdAt?' ・ '+new Date(update.createdAt).toLocaleString('ja-JP'):''}</div><div className="text-xs text-gray-700 whitespace-pre-wrap break-words">{update.text}</div>{update.imageUrl&&<img src={update.imageUrl} alt={update.imageName||'添付画像'} className="mt-1 max-h-36 rounded-lg object-contain"/>}</div>)}</div>}
               <div className="text-[10px] font-bold text-gray-600 mb-2">担当者（複数選択可）</div>
               <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
                 {(sortedUsers || []).map(member => {
