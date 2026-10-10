@@ -2462,11 +2462,52 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
     }
   };
 
+  const [showCompletedPartnerItems, setShowCompletedPartnerItems] = useState(false);
   const sortedItems = [...(partnerItems || [])].sort((a, b) => {
     const aKey = `${a.date || ''}T${a.time || '00:00'}`;
     const bKey = `${b.date || ''}T${b.time || '00:00'}`;
     return aKey.localeCompare(bKey);
   });
+  const activePartnerItems = sortedItems.filter(item => !item.completed);
+  const completedPartnerItems = sortedItems.filter(item => item.completed).sort((a, b) => String(b.completedAt || '').localeCompare(String(a.completedAt || '')));
+  const renderPartnerItem = (item) => (
+              <div key={item.id} className={`bg-white rounded-xl border ${item.completed ? 'border-green-200' : 'border-gray-200'} px-3 py-2 flex items-start gap-2`}>
+                <button type="button" onClick={() => togglePartnerItem(item.id)}
+                  className={`shrink-0 mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center ${item.completed ? 'border-green-500 bg-green-500 text-white' : 'border-gray-300 hover:border-blue-400'}`}
+                  title={item.completed ? '未完了に戻す' : '終了にする'}>
+                  {item.completed && <CheckSquare className="stroke-[3]" size={12}/>}
+                </button>
+                <div className="shrink-0 text-center min-w-[68px]">
+                  <div className={`text-[10px] font-bold ${item.completed ? 'text-gray-400 line-through' : 'text-blue-600'}`}>{item.date?.replace(/-/g, '/')}</div>
+                  <div className={`text-[11px] font-bold mt-0.5 ${item.completed ? 'text-gray-400 line-through' : 'text-gray-700'}`}>{item.time || '--:--'}</div>{item.endTime&&<div className="text-[9px] text-orange-600 mt-0.5">終了予定 {item.endTime}</div>}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className={`text-[10px] font-bold mb-0.5 ${item.completed ? 'text-gray-400 line-through' : 'text-purple-600'}`}>{item.partnerName || 'パートナー未設定'}</div>
+                  <div className="text-xs text-blue-600 font-bold mb-1">主担当: {(sortedUsers || []).find(user => user.id === item.assigneeUid)?.name || '未設定'}</div>
+                  <div className="text-sm font-bold text-gray-800 mb-1">{item.subject || (item.content || '').split(/\r?\n/)[0] || '件名未設定'}</div>
+                  <div className="space-y-1.5">{getPartnerUpdates(item).slice(-3).map(update => <div key={update.id} className="text-xs text-gray-700 whitespace-pre-wrap break-words"><span className="text-[9px] font-bold text-gray-500">（{update.authorName || '不明なユーザー'}）</span> {update.text}</div>)}</div>
+                  {item.completedAt && <div className="text-[8px] text-green-600 mt-0.5">終了 {new Date(item.completedAt).toLocaleString('ja-JP')}</div>}
+                </div>
+                <div className="shrink-0 flex gap-0.5">
+                  <button type="button" onClick={() => {
+                    setEditingItemId(item.id);
+                    setPartnerName(item.partnerName || '');
+                    setSubject(item.subject || (item.content || '').split(/\r?\n/)[0] || '');
+                    setAssigneeUid(item.assigneeUid || '');
+                    setDate(item.date || formatDate(new Date()));
+                    const [editHour, editMinute] = (item.time || '').split(':');
+                    setTimeHour(editHour || '');
+                    setTimeMinute(editMinute || '');
+                    setEndTime(item.endTime || '');
+                    setContent('');
+                    setNewPartnerImage(null);
+                    setNewPartnerImagePreview('');
+                  }} className="p-1 text-gray-300 hover:text-blue-500 rounded-md" title="編集"><Edit2 size={14}/></button>
+                  <button type="button" onClick={() => deletePartnerItem(item.id)}
+                    className="p-1 text-gray-300 hover:text-red-500 rounded-md" title="削除"><Trash2 size={14}/></button>
+                </div>
+              </div>
+  );
 
   return (
     <div ref={partnerPageRef} className="flex-1 bg-gray-50 pb-[68px] overflow-y-auto">
@@ -2700,47 +2741,20 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
         </div>
 
         <div className="space-y-2">
-          {sortedItems.length === 0 ? (
+          {activePartnerItems.length === 0 && completedPartnerItems.length === 0 ? (
             <div className="text-center text-[11px] text-gray-400 py-8">登録された内容はありません</div>
           ) : (
-            sortedItems.map(item => (
-              <div key={item.id} className={`bg-white rounded-xl border ${item.completed ? 'border-green-200' : 'border-gray-200'} px-3 py-2 flex items-start gap-2`}>
-                <button type="button" onClick={() => togglePartnerItem(item.id)}
-                  className={`shrink-0 mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center ${item.completed ? 'border-green-500 bg-green-500 text-white' : 'border-gray-300 hover:border-blue-400'}`}
-                  title={item.completed ? '未完了に戻す' : '終了にする'}>
-                  {item.completed && <CheckSquare className="stroke-[3]" size={12}/>}
+              activePartnerItems.map(renderPartnerItem)
+            )}
+            {completedPartnerItems.length > 0 && (
+              <div className="rounded-xl border border-green-200 bg-green-50/60 overflow-hidden">
+                <button type="button" onClick={() => setShowCompletedPartnerItems(value => !value)} className="w-full flex items-center justify-between gap-2 px-3 py-3 text-left hover:bg-green-100/70">
+                  <span className="flex items-center gap-2 min-w-0"><CheckSquare size={16} className="text-green-600 shrink-0"/><span className="text-sm font-bold text-green-800">終了したタスク</span><span className="text-xs text-green-700">（{completedPartnerItems.length}件）</span></span>
+                  {showCompletedPartnerItems ? <ChevronUp size={18} className="text-green-700 shrink-0"/> : <ChevronDown size={18} className="text-green-700 shrink-0"/>}
                 </button>
-                <div className="shrink-0 text-center min-w-[68px]">
-                  <div className={`text-[10px] font-bold ${item.completed ? 'text-gray-400 line-through' : 'text-blue-600'}`}>{item.date?.replace(/-/g, '/')}</div>
-                  <div className={`text-[11px] font-bold mt-0.5 ${item.completed ? 'text-gray-400 line-through' : 'text-gray-700'}`}>{item.time || '--:--'}</div>{item.endTime&&<div className="text-[9px] text-orange-600 mt-0.5">終了予定 {item.endTime}</div>}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className={`text-[10px] font-bold mb-0.5 ${item.completed ? 'text-gray-400 line-through' : 'text-purple-600'}`}>{item.partnerName || 'パートナー未設定'}</div>
-                  <div className="text-xs text-blue-600 font-bold mb-1">主担当: {(sortedUsers || []).find(user => user.id === item.assigneeUid)?.name || '未設定'}</div>
-                  <div className="text-sm font-bold text-gray-800 mb-1">{item.subject || (item.content || '').split(/\r?\n/)[0] || '件名未設定'}</div>
-                  <div className="space-y-1.5">{getPartnerUpdates(item).slice(-3).map(update => <div key={update.id} className="text-xs text-gray-700 whitespace-pre-wrap break-words"><span className="text-[9px] font-bold text-gray-500">（{update.authorName || '不明なユーザー'}）</span> {update.text}</div>)}</div>
-                  {item.completedAt && <div className="text-[8px] text-green-600 mt-0.5">終了 {new Date(item.completedAt).toLocaleString('ja-JP')}</div>}
-                </div>
-                <div className="shrink-0 flex gap-0.5">
-                  <button type="button" onClick={() => {
-                    setEditingItemId(item.id);
-                    setPartnerName(item.partnerName || '');
-                    setSubject(item.subject || (item.content || '').split(/\r?\n/)[0] || '');
-                    setAssigneeUid(item.assigneeUid || '');
-                    setDate(item.date || formatDate(new Date()));
-                    const [editHour, editMinute] = (item.time || '').split(':');
-                    setTimeHour(editHour || '');
-                    setTimeMinute(editMinute || '');
-                    setEndTime(item.endTime || '');
-                    setContent('');
-                    setNewPartnerImage(null);
-                    setNewPartnerImagePreview('');
-                  }} className="p-1 text-gray-300 hover:text-blue-500 rounded-md" title="編集"><Edit2 size={14}/></button>
-                  <button type="button" onClick={() => deletePartnerItem(item.id)}
-                    className="p-1 text-gray-300 hover:text-red-500 rounded-md" title="削除"><Trash2 size={14}/></button>
-                </div>
+                {showCompletedPartnerItems && <div className="border-t border-green-200 p-2 space-y-2">{completedPartnerItems.map(renderPartnerItem)}</div>}
               </div>
-            ))
+            )}
           )}
         </div>
       </div>
