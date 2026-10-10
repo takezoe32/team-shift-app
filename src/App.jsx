@@ -2728,7 +2728,7 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
   }, [sortedMonthKeys.join('|')]);
 
   const formatDateKey = (key) => {
-    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(key)) return key;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return key;
     const date = new Date(key + 'T12:00:00');
     return Number.isNaN(date.getTime())
       ? key
