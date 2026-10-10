@@ -3017,19 +3017,26 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
 };
 
 
-const InventoryView = ({ inventoryItems = [], addInventoryItem, adjustInventoryStock }) => {
+const normalizeInventoryName = (value) => String(value ?? '').normalize('NFKC').trim();
+
+const InventoryView = ({ inventoryItems = [], addInventoryItem, adjustInventoryStock, editInventoryItem, deleteInventoryItem }) => {
   const [newName, setNewName] = useState('');
   const [newStock, setNewStock] = useState('5');
+  const [editingId, setEditingId] = useState(null);
+  const [editingName, setEditingName] = useState('');
+  const [stockDrafts, setStockDrafts] = useState({});
   const [isSaving, setIsSaving] = useState(false);
   const handleAdd = async () => {
-    const name = newName.trim();
+    const name = normalizeInventoryName(newName);
+    const stock = Number(newStock);
     if (!name) { alert('商品名を入力してください。'); return; }
-    if (inventoryItems.some(item => String(item.name || '').trim().toLowerCase() === name.toLowerCase())) {
+    if (!Number.isInteger(stock) || stock < 0) { alert('在庫数は0以上の整数を入力してください。'); return; }
+    if (inventoryItems.some(item => normalizeInventoryName(item.name).toLowerCase() === name.toLowerCase())) {
       alert('同じ商品名がすでに登録されています。'); return;
     }
     setIsSaving(true);
     try {
-      await addInventoryItem({ id: 'inventory_' + Date.now(), name, stock: Number(newStock) || 0 });
+      await addInventoryItem({ id: 'inventory_' + Date.now(), name, stock });
       setNewName('');
       setNewStock('5');
     } catch (error) {
@@ -3037,26 +3044,84 @@ const InventoryView = ({ inventoryItems = [], addInventoryItem, adjustInventoryS
       alert('商品を登録できませんでした。もう一度お試しください。');
     } finally { setIsSaving(false); }
   };
-  const sortedItems = [...inventoryItems].sort((a,b) => String(a.name||'').localeCompare(String(b.name||''), 'ja'));
+  const startEdit = (item) => { setEditingId(item.id); setEditingName(normalizeInventoryName(item.name)); };
+  const handleEdit = async (item) => {
+    const name = normalizeInventoryName(editingName);
+    if (!name) { alert('商品名を入力してください。'); return; }
+    if (inventoryItems.some(other => other.id !== item.id && normalizeInventoryName(other.name).toLowerCase() === name.toLowerCase())) {
+      alert('同じ商品名がすでに登録されています。'); return;
+    }
+    setIsSaving(true);
+    try {
+      await editInventoryItem(item.id, name);
+      setEditingId(null);
+      setEditingName('');
+    } catch (error) {
+      console.error('商品名の更新に失敗しました:', error);
+      alert('商品名を更新できませんでした。もう一度お試しください。');
+    } finally { setIsSaving(false); }
+  };
+  const handleStockSave = async (item) => {
+    const raw = stockDrafts[item.id] ?? String(Math.max(0, Number(item.stock) || 0));
+    const stock = Number(raw);
+    if (raw.trim() === '' || !Number.isInteger(stock) || stock < 0) {
+      alert('在庫数は0以上の整数を入力してください。');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await adjustInventoryStock(item.id, stock, true);
+      setStockDrafts(current => { const next = { ...current }; delete next[item.id]; return next; });
+    } catch (error) {
+      console.error('在庫数の保存に失敗しました:', error);
+      alert('在庫数を保存できませんでした。もう一度お試しください。');
+    } finally { setIsSaving(false); }
+  };
+  const handleDelete = async (item) => {
+    if (!window.confirm(`「${normalizeInventoryName(item.name)}」を在庫一覧から削除しますか？\\n関連する過去のタスク記録は残ります。`)) return;
+    setIsSaving(true);
+    try {
+      await deleteInventoryItem(item.id);
+    } catch (error) {
+      console.error('商品の削除に失敗しました:', error);
+      alert('商品を削除できませんでした。もう一度お試しください。');
+    } finally { setIsSaving(false); }
+  };
+  const sortedItems = [...inventoryItems].sort((a,b) => normalizeInventoryName(a.name).localeCompare(normalizeInventoryName(b.name), 'ja'));
   return <div className="flex-1 overflow-y-auto bg-gray-50 pb-[84px]">
     <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-4">
       <div className="flex items-center gap-3"><div className="w-11 h-11 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center"><Package size={24}/></div><div><h2 className="text-xl font-black text-gray-800">在庫管理</h2><p className="text-xs text-gray-500">日別タスクで商品を選ぶと在庫が1個減ります。</p></div></div>
       <form onSubmit={e => { e.preventDefault(); void handleAdd(); }} className="rounded-2xl border border-gray-200 bg-white p-4 space-y-3 shadow-sm">
         <h3 className="text-sm font-black text-gray-700">商品を追加</h3>
         <input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="商品名を入力" className="w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base" maxLength={120}/>
-        <div className="flex items-center gap-3"><label className="text-sm font-bold text-gray-600 flex-1" htmlFor="inventory-new-stock">初期在庫数</label><select id="inventory-new-stock" value={newStock} onChange={e=>setNewStock(e.target.value)} className="min-h-11 border border-gray-300 rounded-xl px-3 py-2 text-base">{Array.from({length:11},(_,i)=><option key={i} value={String(i)}>{i}個</option>)}</select></div>
+        <div className="flex items-center gap-3"><label className="text-sm font-bold text-gray-600 flex-1" htmlFor="inventory-new-stock">初期在庫数</label><input id="inventory-new-stock" type="number" inputMode="numeric" min="0" step="1" value={newStock} onChange={e=>setNewStock(e.target.value)} className="w-28 min-h-11 border border-gray-300 rounded-xl px-3 py-2 text-base text-right"/></div>
         <button type="submit" disabled={isSaving || !newName.trim()} className="w-full min-h-11 rounded-xl bg-blue-600 text-white font-bold text-sm disabled:opacity-50">{isSaving?'登録中…':'商品を追加'}</button>
+        <p className="text-[11px] text-gray-500">商品名は全角英数字で入力しても、登録時に半角英数字へ統一します。</p>
       </form>
       <div className="flex items-center justify-between"><h3 className="text-sm font-black text-gray-700">登録商品</h3><span className="text-xs text-gray-500">{sortedItems.length}商品</span></div>
       {sortedItems.length===0 ? <div className="rounded-xl bg-white border border-gray-200 p-6 text-center text-sm text-gray-500">商品が登録されていません。</div> : <div className="space-y-2">{sortedItems.map(item => {
+        const name = normalizeInventoryName(item.name);
         const stock = Math.max(0, Number(item.stock) || 0);
         const low = stock <= 2;
-        return <div key={item.id} className={`rounded-xl border p-3 sm:p-4 flex items-center gap-3 ${low?'border-red-300 bg-red-50':'border-gray-200 bg-white'}`}>
-          <div className={`min-w-0 flex-1 ${low?'text-red-700':'text-gray-800'}`}><div className="font-bold text-sm break-words">{item.name}</div>{low && <div className="mt-1 text-[11px] font-black text-red-600">在庫わずか・補充してください</div>}</div>
-          <div className="flex items-center gap-2 shrink-0"><button type="button" aria-label={item.name+'の在庫を1個減らす'} disabled={stock<=0} onClick={()=>void adjustInventoryStock(item.id,-1)} className="w-11 h-11 rounded-xl border border-gray-300 bg-white text-xl font-bold disabled:opacity-30">−</button><div className={`w-12 text-center font-black tabular-nums ${low?'text-red-600':'text-gray-800'}`}><span className="text-xl">{stock}</span><span className="text-xs ml-0.5">個</span></div><button type="button" aria-label={item.name+'の在庫を1個増やす'} onClick={()=>void adjustInventoryStock(item.id,1)} className="w-11 h-11 rounded-xl border border-gray-300 bg-white text-xl font-bold">＋</button></div>
+        const stockValue = stockDrafts[item.id] ?? String(stock);
+        return <div key={item.id} className={`rounded-xl border p-3 sm:p-4 space-y-3 ${low?'border-red-300 bg-red-50':'border-gray-200 bg-white'}`}>
+          <div className="flex items-start gap-2">
+            <div className={`min-w-0 flex-1 ${low?'text-red-700':'text-gray-800'}`}>
+              {editingId === item.id ? <input autoFocus value={editingName} onChange={e=>setEditingName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void handleEdit(item);}if(e.key==='Escape'){setEditingId(null);setEditingName('');}}} maxLength={120} className="w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white text-gray-800"/> : <div className="font-bold text-sm break-words">{name}</div>}
+              {low && <div className="mt-1 text-[11px] font-black text-red-600">在庫わずか・補充してください</div>}
+            </div>
+            {editingId === item.id ? <div className="flex gap-1 shrink-0"><button type="button" disabled={isSaving} onClick={()=>void handleEdit(item)} className="min-h-10 px-3 rounded-lg bg-blue-600 text-white text-xs font-bold disabled:opacity-50">保存</button><button type="button" onClick={()=>{setEditingId(null);setEditingName('');}} className="min-h-10 px-3 rounded-lg border border-gray-300 bg-white text-xs font-bold">取消</button></div> : <div className="flex gap-1 shrink-0"><button type="button" onClick={()=>startEdit(item)} aria-label={name+'の商品名を編集'} className="w-10 h-10 rounded-lg border border-gray-300 bg-white flex items-center justify-center"><Edit2 size={16}/></button><button type="button" onClick={()=>void handleDelete(item)} disabled={isSaving} aria-label={name+'を削除'} className="w-10 h-10 rounded-lg border border-red-200 bg-white text-red-600 flex items-center justify-center disabled:opacity-50"><Trash2 size={16}/></button></div>}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" aria-label={name+'の在庫を1個減らす'} disabled={stock<=0 || isSaving} onClick={()=>void adjustInventoryStock(item.id,-1)} className="w-10 h-10 rounded-xl border border-gray-300 bg-white text-xl font-bold disabled:opacity-30">−</button>
+            <input aria-label={name+'の在庫数'} type="number" inputMode="numeric" min="0" step="1" value={stockValue} onChange={e=>setStockDrafts(current=>({...current,[item.id]:e.target.value}))} className={`w-24 h-10 rounded-lg border px-2 text-center text-base font-black tabular-nums bg-white ${low?'border-red-300 text-red-600':'border-gray-300 text-gray-800'}`}/>
+            <span className={`text-sm font-bold ${low?'text-red-600':'text-gray-600'}`}>個</span>
+            <button type="button" aria-label={name+'の在庫を1個増やす'} disabled={isSaving} onClick={()=>void adjustInventoryStock(item.id,1)} className="w-10 h-10 rounded-xl border border-gray-300 bg-white text-xl font-bold disabled:opacity-50">＋</button>
+            <button type="button" disabled={isSaving || (stockDrafts[item.id] === undefined || stockDrafts[item.id] === String(stock))} onClick={()=>void handleStockSave(item)} className="min-h-10 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold disabled:opacity-40">個数を保存</button>
+          </div>
         </div>;
       })}</div>}
-      <p className="text-[11px] text-gray-500">在庫が2個以下の商品は赤く表示されます。在庫数は「−」「＋」で手動調整できます。</p>
+      <p className="text-[11px] text-gray-500">在庫が2個以下の商品は赤く表示されます。在庫数は直接入力して保存するか、「−」「＋」で1個ずつ調整できます。</p>
     </div>
   </div>;
 };
