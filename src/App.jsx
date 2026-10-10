@@ -733,7 +733,6 @@ const DailyDetailView = ({
   const [newTaskVisibility, setNewTaskVisibility] = useState('public');
   const [selectedUserUid, setSelectedUserUid] = useState(currentUserUid);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
-  const [isCompletedTasksOpen, setIsCompletedTasksOpen] = useState(false);
   const [pastFinishConfirmTaskKey, setPastFinishConfirmTaskKey] = useState(null);
   const [newTaskImage, setNewTaskImage] = useState(null);
   const [newTaskImagePreview, setNewTaskImagePreview] = useState('');
@@ -753,7 +752,6 @@ const DailyDetailView = ({
   const canViewTask = (task, ownerUid) => task?.visibility !== 'private' || ownerUid === currentUserUid;
   const selectedDateTasks = Object.entries(teamData.tasks[selectedDate] || {}).flatMap(([ownerUid, tasks]) => (tasks || []).filter(task => { if (task?.visibility === 'private' || !canViewTask(task, ownerUid)) return false; const assignees = Array.isArray(task.assigneeIds) && task.assigneeIds.length ? task.assigneeIds : [ownerUid]; return assignees.includes(selectedUserUid); }).map(task => ({ ...task, ownerUid, taskDate: selectedDate })));
   const selectedDateActiveTasks = selectedDateTasks.filter(task => !task.completed);
-  const selectedDateCompletedTasks = selectedDateTasks.filter(task => !!task.completed);
   const unfinishedPastTasks = Object.keys(teamData.tasks || {})
     .filter(dateStr => dateStr < selectedDate)
     .sort((a, b) => b.localeCompare(a))
@@ -1069,7 +1067,6 @@ const DailyDetailView = ({
                 details: { taskId: task.id, taskDate, ownerUid, currentUserUid, canEditTask, isAdmin: !!isAdmin }
               });
               await toggleTask(taskDate, ownerUid, task.id);
-              if (!task.completed && taskDate === selectedDate) setIsCompletedTasksOpen(true);
               await writeDebugLog({
                 event: 'daily.task.checkbox.toggle.success',
                 user: currentUser,
@@ -1324,36 +1321,6 @@ const DailyDetailView = ({
               <p className="text-gray-400 text-sm">未終了タスクはありません</p>
             </div>
           ) : selectedDateActiveTasks.map(task => <TaskItem key={task.id} task={task}/>)}
-
-          <section className="rounded-xl border border-green-200 bg-white overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setIsCompletedTasksOpen(open => !open)}
-              aria-expanded={isCompletedTasksOpen}
-              className="w-full flex items-center justify-between gap-3 px-3 py-3 text-left bg-green-50 hover:bg-green-100/70 transition-colors"
-            >
-              <span className="flex min-w-0 items-center gap-2">
-                <span className="shrink-0 flex items-center justify-center w-7 h-7 rounded-full bg-green-100 text-green-700"><CheckSquare size={15}/></span>
-                <span className="min-w-0">
-                  <span className="block text-sm font-black text-green-800">終了済みタスク</span>
-                  <span className="block text-[10px] text-green-700 mt-0.5">{selectedDate.replace(/-/g, '/')} の完了分</span>
-                </span>
-                <span className="shrink-0 rounded-full bg-green-200 text-green-800 px-2.5 py-1 text-[10px] font-black">{selectedDateCompletedTasks.length}件</span>
-              </span>
-              {isCompletedTasksOpen ? <ChevronUp size={18} className="shrink-0 text-green-700"/> : <ChevronDown size={18} className="shrink-0 text-green-700"/>}
-            </button>
-            {isCompletedTasksOpen && (
-              selectedDateCompletedTasks.length === 0 ? (
-                <div className="px-3 py-6 text-center">
-                  <p className="text-xs font-bold text-gray-500">この日付の終了済みタスクはありません</p>
-                </div>
-              ) : (
-                <div className="p-3 space-y-2">
-                  {selectedDateCompletedTasks.map(task => <TaskItem key={task.id} task={task}/>)}
-                </div>
-              )
-            )}
-          </section>
 
           {selectedUserUid === currentUserUid && (
             <section className="mt-4 rounded-2xl border border-purple-200 bg-white overflow-hidden">
@@ -2700,7 +2667,8 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
           assigneeNames: (Array.isArray(task.assigneeIds) ? task.assigneeIds : [ownerUid])
             .map(uid => memberMap[uid]?.name)
             .filter(Boolean),
-          title: task.text || '内容なし',
+          title: task.subject || task.text || '内容なし',
+          content: task.subject && task.text ? task.text : '',
           imageUrl: task.imageUrl || ''
         });
       });
@@ -2759,13 +2727,21 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
     }
   }, [sortedMonthKeys.join('|')]);
 
+  const formatDateKey = (key) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return key;
+    const date = new Date(key + 'T12:00:00');
+    return Number.isNaN(date.getTime())
+      ? key
+      : date.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' });
+  };
+
   return <div className="flex-1 flex flex-col bg-gray-50 pb-[68px] overflow-hidden">
     <div className="bg-white px-4 py-3 border-b border-gray-100 shadow-sm shrink-0">
       <div className="flex items-center gap-2">
         <ClipboardList className="text-green-600" size={20}/>
         <div>
           <div className="text-sm font-black text-gray-800">終了したタスク</div>
-          <div className="text-[10px] text-gray-400">メンバー・パートナーの完了履歴</div>
+          <div className="text-[10px] text-gray-400">月ごと・日ごとにメンバーとパートナーの完了履歴を確認できます</div>
         </div>
       </div>
       <div className="mt-3 overflow-x-auto">
@@ -2794,27 +2770,34 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
         const entries = [...monthGroups[monthKey]].sort((a, b) =>
           String(b.completedAt || b.date || '').localeCompare(String(a.completedAt || a.date || ''))
         );
-        const memberEntries = entries.filter(entry => entry.type === 'member');
-        const partnerEntries = entries.filter(entry => entry.type === 'partner');
+        const dayGroups = entries.reduce((groups, entry) => {
+          const dayKey = String(entry.date || entry.completedAt || '').slice(0, 10) || '日付未設定';
+          if (!groups[dayKey]) groups[dayKey] = [];
+          groups[dayKey].push(entry);
+          return groups;
+        }, {});
+        const sortedDayKeys = Object.keys(dayGroups).sort((a, b) => b.localeCompare(a));
         const isOpen = openMonths[monthKey] !== false;
 
         const renderEntry = (entry) => (
           <div key={entry.type + '-' + entry.id} className="p-3">
             <div className="min-w-0">
-              <div className="text-sm font-bold text-gray-800 break-words">{entry.title}</div>
+              <div className="flex items-start justify-between gap-2">
+                <div className="text-sm font-bold text-gray-800 break-words">{entry.title}</div>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ${entry.type === 'partner' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                  {entry.type === 'partner' ? 'パートナー' : 'メンバー'}
+                </span>
+              </div>
               <div className="mt-1 text-[10px] text-gray-500">
                 {entry.type === 'partner' && entry.partnerName ? entry.partnerName + ' ・ ' : ''}
                 担当: {entry.ownerName}
                 {entry.assigneeNames.length > 1 ? '（' + entry.assigneeNames.join('・') + '）' : ''}
               </div>
               <div className="text-[10px] text-gray-400">
-                対象日: {entry.date || '不明'} ・ 終了: {formatCompletedAt(entry.completedAt)}
+                終了日時: {formatCompletedAt(entry.completedAt)}
               </div>
-              {entry.type === 'partner' && entry.content && (
+              {entry.content && (
                 <div className="mt-2 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600 whitespace-pre-wrap break-words">{entry.content}</div>
-              )}
-              {entry.type === 'member' && entry.title && (
-                <div className="mt-2 text-xs text-gray-600 whitespace-pre-wrap break-words">{entry.title}</div>
               )}
               {entry.imageUrl && <img src={entry.imageUrl} alt="添付画像" className="mt-2 max-h-40 max-w-full rounded-lg border object-contain"/>}
             </div>
@@ -2834,34 +2817,24 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
           </button>
 
           {isOpen && (
-            <div className="grid grid-cols-2 divide-x divide-gray-100">
-              <div className="min-w-0">
-                <div className="px-3 py-2 bg-blue-50 border-b border-blue-100 text-xs font-black text-blue-700 flex items-center justify-between">
-                  <span>メンバー</span>
-                  <span className="text-[10px] font-bold">{memberEntries.length}件</span>
-                </div>
-                {memberEntries.length ? (
-                  <div className="divide-y divide-gray-100">
-                    {memberEntries.map(renderEntry)}
-                  </div>
-                ) : (
-                  <div className="p-4 text-center text-[10px] text-gray-400">完了タスクなし</div>
-                )}
-              </div>
-
-              <div className="min-w-0">
-                <div className="px-3 py-2 bg-purple-50 border-b border-purple-100 text-xs font-black text-purple-700 flex items-center justify-between">
-                  <span>パートナー</span>
-                  <span className="text-[10px] font-bold">{partnerEntries.length}件</span>
-                </div>
-                {partnerEntries.length ? (
-                  <div className="divide-y divide-gray-100">
-                    {partnerEntries.map(renderEntry)}
-                  </div>
-                ) : (
-                  <div className="p-4 text-center text-[10px] text-gray-400">完了タスクなし</div>
-                )}
-              </div>
+            <div className="divide-y divide-gray-100">
+              {sortedDayKeys.map(dayKey => {
+                const dayEntries = [...dayGroups[dayKey]].sort((a, b) =>
+                  String(b.completedAt || '').localeCompare(String(a.completedAt || '')) ||
+                  String(a.title || '').localeCompare(String(b.title || ''), 'ja')
+                );
+                return (
+                  <section key={dayKey}>
+                    <div className="px-4 py-2.5 bg-green-50 border-b border-green-100 flex items-center justify-between gap-2">
+                      <div className="text-xs font-black text-green-800">{formatDateKey(dayKey)}</div>
+                      <span className="shrink-0 rounded-full bg-green-100 text-green-800 px-2 py-0.5 text-[10px] font-black">{dayEntries.length}件</span>
+                    </div>
+                    <div className="divide-y divide-gray-100">
+                      {dayEntries.map(renderEntry)}
+                    </div>
+                  </section>
+                );
+              })}
             </div>
           )}
         </section>;
