@@ -30,7 +30,6 @@ import {
   Loader2,
   BookOpen,
   Package,
-  ScanLine,
   Camera,
   History
 } from 'lucide-react';
@@ -4350,7 +4349,7 @@ export default function App() {
                     ? { [`teamData.tasks.${dateStr}.${targetUid}`]: updatedOwnerTasks, inventoryItems: updatedInventoryItems, inventoryMovements: arrayUnion(restoreMovement) }
                     : { [`teamData.tasks.${dateStr}.${targetUid}`]: updatedOwnerTasks });
                   setTeamData(updatedTeamData);
-                  if (shouldRestock) setInventoryItems(updatedInventoryItems);
+                  if (shouldRestock) { setInventoryItems(updatedInventoryItems); setInventoryMovements(current => [restoreMovement, ...current]); }
                 }} 
                 updateTaskAssignees={async (ownerUid, dateStr, taskId, assigneeIds) => {
                   const dayTasks = teamData.tasks[dateStr] || {};
