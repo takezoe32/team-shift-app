@@ -733,6 +733,7 @@ const DailyDetailView = ({
   const [newTaskVisibility, setNewTaskVisibility] = useState('public');
   const [selectedUserUid, setSelectedUserUid] = useState(currentUserUid);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const [isCompletedTasksOpen, setIsCompletedTasksOpen] = useState(false);
   const [pastFinishConfirmTaskKey, setPastFinishConfirmTaskKey] = useState(null);
   const [newTaskImage, setNewTaskImage] = useState(null);
   const [newTaskImagePreview, setNewTaskImagePreview] = useState('');
@@ -751,6 +752,8 @@ const DailyDetailView = ({
   const isAdmin = !!currentUser && !!roles[currentUser.role] && (roles[currentUser.role].level || 0) >= 40;
   const canViewTask = (task, ownerUid) => task?.visibility !== 'private' || ownerUid === currentUserUid;
   const selectedDateTasks = Object.entries(teamData.tasks[selectedDate] || {}).flatMap(([ownerUid, tasks]) => (tasks || []).filter(task => { if (task?.visibility === 'private' || !canViewTask(task, ownerUid)) return false; const assignees = Array.isArray(task.assigneeIds) && task.assigneeIds.length ? task.assigneeIds : [ownerUid]; return assignees.includes(selectedUserUid); }).map(task => ({ ...task, ownerUid, taskDate: selectedDate })));
+  const selectedDateActiveTasks = selectedDateTasks.filter(task => !task.completed);
+  const selectedDateCompletedTasks = selectedDateTasks.filter(task => !!task.completed);
   const unfinishedPastTasks = Object.keys(teamData.tasks || {})
     .filter(dateStr => dateStr < selectedDate)
     .sort((a, b) => b.localeCompare(a))
@@ -1009,7 +1012,7 @@ const DailyDetailView = ({
         className={`bg-white p-3 rounded-xl border transition-all cursor-pointer ${
           isSelected
             ? 'border-purple-400 bg-purple-50/20 ring-2 ring-purple-400/20 shadow-md'
-            : task.completed ? 'border-gray-100 bg-gray-50/50' : 'border-gray-200 shadow-sm hover:border-gray-300'
+            : task.completed ? 'border-green-200 bg-green-50/60' : 'border-gray-200 shadow-sm hover:border-gray-300'
         } flex items-start gap-3`}
       >
         <button
@@ -1066,6 +1069,7 @@ const DailyDetailView = ({
                 details: { taskId: task.id, taskDate, ownerUid, currentUserUid, canEditTask, isAdmin: !!isAdmin }
               });
               await toggleTask(taskDate, ownerUid, task.id);
+              if (!task.completed && taskDate === selectedDate) setIsCompletedTasksOpen(true);
               await writeDebugLog({
                 event: 'daily.task.checkbox.toggle.success',
                 user: currentUser,
@@ -1092,7 +1096,8 @@ const DailyDetailView = ({
           {task.completed && <span className="text-white text-sm font-black leading-none">✓</span>}
         </button>
         <div className="flex-1 min-w-0">
-          {(task.subject || task.text) && <span className={`text-sm font-bold block whitespace-pre-wrap leading-tight ${task.completed ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{task.subject || task.text}</span>}
+          {task.completed && <span className="inline-flex items-center gap-1 rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-[9px] font-black mb-1"><CheckSquare size={11}/>終了済み</span>}
+          {(task.subject || task.text) && <span className={`text-sm font-bold block whitespace-pre-wrap leading-tight ${task.completed ? 'text-gray-500 line-through' : 'text-gray-800'}`}>{task.subject || task.text}</span>}
           {task.subject && task.text && <span className="text-xs block mt-1 whitespace-pre-wrap text-gray-600">{task.text}</span>}
           {task.endTime && <div className="text-[10px] text-orange-600 font-bold mt-1">終了予定 {task.endTime}</div>}
           {!task.subject && task.text && (
@@ -1313,12 +1318,42 @@ const DailyDetailView = ({
         )}
 
         <div className="flex-1 overflow-y-auto p-4 space-y-3 relative max-w-3xl mx-auto w-full">
-          {selectedDateTasks.length === 0 ? (
-            <div className="text-center py-10">
-              <ClipboardList className="mx-auto text-gray-300 mb-3" size={48}/>
-              <p className="text-gray-400 text-sm">タスクはありません</p>
+          {selectedDateActiveTasks.length === 0 ? (
+            <div className="text-center py-8">
+              <ClipboardList className="mx-auto text-gray-300 mb-2" size={40}/>
+              <p className="text-gray-400 text-sm">未終了タスクはありません</p>
             </div>
-          ) : selectedDateTasks.map(task => <TaskItem key={task.id} task={task}/>) }
+          ) : selectedDateActiveTasks.map(task => <TaskItem key={task.id} task={task}/>)}
+
+          <section className="rounded-xl border border-green-200 bg-white overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setIsCompletedTasksOpen(open => !open)}
+              aria-expanded={isCompletedTasksOpen}
+              className="w-full flex items-center justify-between gap-3 px-3 py-3 text-left bg-green-50 hover:bg-green-100/70 transition-colors"
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="shrink-0 flex items-center justify-center w-7 h-7 rounded-full bg-green-100 text-green-700"><CheckSquare size={15}/></span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-black text-green-800">終了済みタスク</span>
+                  <span className="block text-[10px] text-green-700 mt-0.5">{selectedDate.replace(/-/g, '/')} の完了分</span>
+                </span>
+                <span className="shrink-0 rounded-full bg-green-200 text-green-800 px-2.5 py-1 text-[10px] font-black">{selectedDateCompletedTasks.length}件</span>
+              </span>
+              {isCompletedTasksOpen ? <ChevronUp size={18} className="shrink-0 text-green-700"/> : <ChevronDown size={18} className="shrink-0 text-green-700"/>}
+            </button>
+            {isCompletedTasksOpen && (
+              selectedDateCompletedTasks.length === 0 ? (
+                <div className="px-3 py-6 text-center">
+                  <p className="text-xs font-bold text-gray-500">この日付の終了済みタスクはありません</p>
+                </div>
+              ) : (
+                <div className="p-3 space-y-2">
+                  {selectedDateCompletedTasks.map(task => <TaskItem key={task.id} task={task}/>)}
+                </div>
+              )
+            )}
+          </section>
 
           {selectedUserUid === currentUserUid && (
             <section className="mt-4 rounded-2xl border border-purple-200 bg-white overflow-hidden">
