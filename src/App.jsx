@@ -752,7 +752,7 @@ const DailyDetailView = ({
   const canManageShift = checkCanManageShift(currentUser, roles);
   const isAdmin = !!currentUser && !!roles[currentUser.role] && (roles[currentUser.role].level || 0) >= 40;
   const canViewTask = (task, ownerUid) => task?.visibility !== 'private' || ownerUid === currentUserUid;
-  const selectedDateTasks = Object.entries(teamData.tasks[selectedDate] || {}).flatMap(([ownerUid, tasks]) => (tasks || []).filter(task => { if (!canViewTask(task, ownerUid)) return false; const assignees = Array.isArray(task.assigneeIds) && task.assigneeIds.length ? task.assigneeIds : [ownerUid]; return assignees.includes(selectedUserUid); }).map(task => ({ ...task, ownerUid, taskDate: selectedDate })));
+  const selectedDateTasks = Object.entries(teamData.tasks[selectedDate] || {}).flatMap(([ownerUid, tasks]) => (tasks || []).filter(task => { if (task?.visibility === 'private' || !canViewTask(task, ownerUid)) return false; const assignees = Array.isArray(task.assigneeIds) && task.assigneeIds.length ? task.assigneeIds : [ownerUid]; return assignees.includes(selectedUserUid); }).map(task => ({ ...task, ownerUid, taskDate: selectedDate })));
   const unfinishedPastTasks = Object.keys(teamData.tasks || {})
     .filter(dateStr => dateStr < selectedDate)
     .sort((a, b) => b.localeCompare(a))
@@ -760,7 +760,7 @@ const DailyDetailView = ({
       Object.entries(teamData.tasks[dateStr] || {})
         .flatMap(([ownerUid, tasks]) => (tasks || [])
           .filter(task => {
-            if (!canViewTask(task, ownerUid)) return false;
+            if (task?.visibility === 'private' || !canViewTask(task, ownerUid)) return false;
             if (task.completed) return false;
             const assignees = Array.isArray(task.assigneeIds) && task.assigneeIds.length
               ? task.assigneeIds
