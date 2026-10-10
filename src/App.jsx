@@ -3768,13 +3768,24 @@ export default function App() {
                   setCurrentDate(new Date(d.getFullYear(), d.getMonth(), 1));
                 }} 
                 currentUserUid={currentUser.id} 
-                deleteTask={(dateStr, targetUid, taskId) => {
+                deleteTask={async (dateStr, targetUid, taskId) => {
+                  const dayTasks = teamData.tasks[dateStr] || {};
+                  const updatedOwnerTasks = (dayTasks[targetUid] || []).filter(task => task.id !== taskId);
                   const updatedTeamData = {
                     ...teamData,
-                    tasks: { ...teamData.tasks, [dateStr]: { ...(teamData.tasks[dateStr] || {}), [targetUid]: (teamData.tasks[dateStr]?.[targetUid] || []).filter(t => t.id !== taskId) } }
+                    tasks: {
+                      ...teamData.tasks,
+                      [dateStr]: {
+                        ...dayTasks,
+                        [targetUid]: updatedOwnerTasks
+                      }
+                    }
                   };
+                  // 削除はFirestoreへの保存成功後に画面へ反映し、失敗時は詳細画面で再試行できるようにする。
+                  await updateDoc(doc(db, 'app_data', 'shared_state'), {
+                    [`teamData.tasks.${dateStr}.${targetUid}`]: updatedOwnerTasks
+                  });
                   setTeamData(updatedTeamData);
-                  saveToFirestore({ teamData: updatedTeamData });
                 }} 
                 updateTaskAssignees={async (ownerUid, dateStr, taskId, assigneeIds) => {
                   const dayTasks = teamData.tasks[dateStr] || {};
