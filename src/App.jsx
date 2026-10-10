@@ -3110,7 +3110,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
   const [newName, setNewName] = useState('');
   const [newUsageLocation, setNewUsageLocation] = useState('');
   const [newBarcode, setNewBarcode] = useState('');
-  const [newMinStock, setNewMinStock] = useState('0');
+  const [newMinStock, setNewMinStock] = useState('2');
   const [newStock, setNewStock] = useState('0');
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scanQuantity, setScanQuantity] = useState('1');
@@ -3147,7 +3147,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
       setNewName('');
       setNewUsageLocation('');
       setNewBarcode('');
-      setNewMinStock('0');
+      setNewMinStock('2');
       setNewStock('0');
       setBarcodeLookupMessage('');
     } catch (error) {
@@ -3301,7 +3301,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
         const name = normalizeInventoryName(item.name);
         const usageLocation = normalizeInventoryName(item.usageLocation);
         const stock = Math.max(0, Number(item.stock) || 0);
-        const minStock = Math.max(0, Number(item.minStock) || 0);
+        const minStock = Math.max(0, item.minStock === undefined ? 2 : Number(item.minStock) || 0);
         const low = stock <= minStock;
         const stockValue = stockDrafts[item.id] ?? String(stock);
         return <div key={item.id} className={`rounded-xl border p-3 sm:p-4 space-y-3 ${low?'border-red-300 bg-red-50':'border-gray-200 bg-white'}`}>
@@ -3563,10 +3563,10 @@ export default function App() {
         let currentUserOrder = [...(data.userOrder || [])];
         let currentPartnerItems = Array.isArray(data.partnerItems) ? data.partnerItems : [];
         let currentPartnerNames = Array.isArray(data.partnerNames) ? data.partnerNames : [];
-        let currentInventoryItems = (Array.isArray(data.inventoryItems) ? data.inventoryItems : INVENTORY_SEED_ITEMS).map(item => ({ ...item, kind: normalizeInventoryName(item.kind), name: normalizeInventoryName(item.name), usageLocation: normalizeInventoryName(item.usageLocation), barcode: normalizeInventoryName(item.barcode), minStock: Math.max(0, Number(item.minStock) || 0) }));
+        let currentInventoryItems = (Array.isArray(data.inventoryItems) ? data.inventoryItems : INVENTORY_SEED_ITEMS).map(item => ({ ...item, kind: normalizeInventoryName(item.kind), name: normalizeInventoryName(item.name), usageLocation: normalizeInventoryName(item.usageLocation), barcode: normalizeInventoryName(item.barcode), minStock: Math.max(0, item.minStock === undefined ? 2 : Number(item.minStock) || 0) }));
         if (!Array.isArray(data.inventoryItems)) {
           updateDoc(doc(db, 'app_data', 'shared_state'), { inventoryItems: currentInventoryItems }).catch(error => console.error('初期在庫商品の保存に失敗しました:', error));
-        } else if (currentInventoryItems.some((item, index) => item.name !== data.inventoryItems[index]?.name || item.kind !== data.inventoryItems[index]?.kind || item.usageLocation !== data.inventoryItems[index]?.usageLocation || item.barcode !== (data.inventoryItems[index]?.barcode || '') || item.minStock !== (Number(data.inventoryItems[index]?.minStock) || 0))) {
+        } else if (currentInventoryItems.some((item, index) => item.name !== data.inventoryItems[index]?.name || item.kind !== data.inventoryItems[index]?.kind || item.usageLocation !== data.inventoryItems[index]?.usageLocation || item.barcode !== (data.inventoryItems[index]?.barcode || '') || item.minStock !== (data.inventoryItems[index]?.minStock === undefined ? 2 : (Number(data.inventoryItems[index]?.minStock) || 0)))) {
           updateDoc(doc(db, 'app_data', 'shared_state'), { inventoryItems: currentInventoryItems }).catch(error => console.error('在庫商品情報の正規化に失敗しました:', error));
         }
         let currentDebugLogs = Array.isArray(data.debugLogs) ? data.debugLogs : [];
@@ -4117,7 +4117,7 @@ export default function App() {
                     ? { [`teamData.tasks.${dateStr}.${ownerUid}`]: updatedOwnerTasks, inventoryItems: updatedInventoryItems }
                     : { [`teamData.tasks.${dateStr}.${ownerUid}`]: updatedOwnerTasks });
                   setTeamData(updatedTeamData);
-                  if (shouldRestock) setInventoryItems(updatedInventoryItems);
+                  if (shouldRestock) { setInventoryItems(updatedInventoryItems); setInventoryMovements(current => [restoreMovement, ...current]); }
                 }}
                 toggleTask={async (dateStr, ownerUid, taskId) => {
                   const dayTasks = teamData.tasks[dateStr] || {};
@@ -4276,6 +4276,7 @@ export default function App() {
                     throw new Error('選択した商品の在庫がありません。');
                   }
                   const updatedInventoryItems = product ? inventoryItems.map(item => item.id === productId ? { ...item, stock: Math.max(0, Number(item.stock || 0) - quantity) } : item) : inventoryItems;
+                  const inventoryMovement = product ? { id: 'inv_' + Date.now() + '_' + Math.random().toString(36).slice(2,7), timestamp: new Date().toISOString(), type: 'task_use', typeLabel: '日別タスク登録時の使用', productId: product.id, productName: product.name, delta: -quantity, stockBefore: Number(product.stock || 0), stockAfter: Math.max(0, Number(product.stock || 0) - quantity), reason: 'タスク：' + (subject || text || '') } : null;
                   const dayTasks = teamData.tasks[dateStr] || {};
                   const userTasks = dayTasks[targetUid] || [];
                   const updatedTeamData = {
@@ -4313,7 +4314,8 @@ export default function App() {
                   };
                   setTeamData(updatedTeamData);
                   if (product) setInventoryItems(updatedInventoryItems);
-                  await updateDoc(doc(db, 'app_data', 'shared_state'), product ? { teamData: updatedTeamData, inventoryItems: updatedInventoryItems } : { teamData: updatedTeamData });
+                  await updateDoc(doc(db, 'app_data', 'shared_state'), product ? { teamData: updatedTeamData, inventoryItems: updatedInventoryItems, inventoryMovements: arrayUnion(inventoryMovement) } : { teamData: updatedTeamData });
+                  if (inventoryMovement) setInventoryMovements(current => [inventoryMovement, ...current]);
                 }} 
                 changeDay={(offset) => {
                   const d = new Date(selectedDate);
@@ -4339,10 +4341,13 @@ export default function App() {
                     }
                   };
                   const shouldRestock = !!(targetTask?.inventoryDeducted && targetTask?.productId);
-                  const updatedInventoryItems = shouldRestock ? inventoryItems.map(item => item.id === targetTask.productId ? { ...item, stock: (Number(item.stock) || 0) + 1 } : item) : inventoryItems;
+                  const restoreQuantity = Math.max(1, Number(targetTask?.inventoryQuantity) || 1);
+                  const currentProduct = shouldRestock ? inventoryItems.find(item => item.id === targetTask.productId) : null;
+                  const updatedInventoryItems = shouldRestock ? inventoryItems.map(item => item.id === targetTask.productId ? { ...item, stock: (Number(item.stock) || 0) + restoreQuantity } : item) : inventoryItems;
+                  const restoreMovement = shouldRestock ? { id: 'inv_' + Date.now() + '_' + Math.random().toString(36).slice(2,7), timestamp: new Date().toISOString(), type: 'task_delete_restore', typeLabel: 'タスク削除による在庫戻し', productId: targetTask.productId, productName: currentProduct?.name || targetTask.productName || '', delta: restoreQuantity, stockBefore: Number(currentProduct?.stock || 0), stockAfter: Number(currentProduct?.stock || 0) + restoreQuantity, reason: '削除したタスク：' + (targetTask.subject || targetTask.text || '') } : null;
                   // 削除はFirestoreへの保存成功後に画面へ反映する。使用商品がある場合は在庫も戻す。
                   await updateDoc(doc(db, 'app_data', 'shared_state'), shouldRestock
-                    ? { [`teamData.tasks.${dateStr}.${targetUid}`]: updatedOwnerTasks, inventoryItems: updatedInventoryItems }
+                    ? { [`teamData.tasks.${dateStr}.${targetUid}`]: updatedOwnerTasks, inventoryItems: updatedInventoryItems, inventoryMovements: arrayUnion(restoreMovement) }
                     : { [`teamData.tasks.${dateStr}.${targetUid}`]: updatedOwnerTasks });
                   setTeamData(updatedTeamData);
                   if (shouldRestock) setInventoryItems(updatedInventoryItems);
