@@ -1038,7 +1038,7 @@ const DailyDetailView = ({
       clearNewTaskImage();
     } catch (error) {
       console.error('画像のアップロードに失敗しました:', error);
-      alert(`画像の保存に失敗しました。\n${error?.message || 'Cloudinaryへのアップロードに失敗しました。'}`);
+      alert(`タスクの保存に失敗しました。\n${error?.message || 'もう一度お試しください。'}`);
     } finally {
       setIsUploading(false);
     }
@@ -3788,9 +3788,16 @@ export default function App() {
                 deleteTask={async (dateStr, ownerUid, taskId) => {
                   const dayTasks = teamData.tasks[dateStr] || {};
                   const ownerTasks = dayTasks[ownerUid] || [];
-                  const updatedOwnerTasks = ownerTasks.filter(t => t.id !== taskId);
-                  setTeamData({ ...teamData, tasks: { ...teamData.tasks, [dateStr]: { ...dayTasks, [ownerUid]: updatedOwnerTasks } } });
-                  await updateDoc(doc(db, 'app_data', 'shared_state'), { [`teamData.tasks.${dateStr}.${ownerUid}`]: updatedOwnerTasks });
+                  const targetTask = ownerTasks.find(task => task.id === taskId);
+                  const updatedOwnerTasks = ownerTasks.filter(task => task.id !== taskId);
+                  const updatedTeamData = { ...teamData, tasks: { ...teamData.tasks, [dateStr]: { ...dayTasks, [ownerUid]: updatedOwnerTasks } } };
+                  const shouldRestock = !!(targetTask?.inventoryDeducted && targetTask?.productId);
+                  const updatedInventoryItems = shouldRestock ? inventoryItems.map(item => item.id === targetTask.productId ? { ...item, stock: (Number(item.stock) || 0) + 1 } : item) : inventoryItems;
+                  await updateDoc(doc(db, 'app_data', 'shared_state'), shouldRestock
+                    ? { [`teamData.tasks.${dateStr}.${ownerUid}`]: updatedOwnerTasks, inventoryItems: updatedInventoryItems }
+                    : { [`teamData.tasks.${dateStr}.${ownerUid}`]: updatedOwnerTasks });
+                  setTeamData(updatedTeamData);
+                  if (shouldRestock) setInventoryItems(updatedInventoryItems);
                 }}
                 toggleTask={async (dateStr, ownerUid, taskId) => {
                   const dayTasks = teamData.tasks[dateStr] || {};
@@ -3997,7 +4004,9 @@ export default function App() {
                 currentUserUid={currentUser.id} 
                 deleteTask={async (dateStr, targetUid, taskId) => {
                   const dayTasks = teamData.tasks[dateStr] || {};
-                  const updatedOwnerTasks = (dayTasks[targetUid] || []).filter(task => task.id !== taskId);
+                  const ownerTasks = dayTasks[targetUid] || [];
+                  const targetTask = ownerTasks.find(task => task.id === taskId);
+                  const updatedOwnerTasks = ownerTasks.filter(task => task.id !== taskId);
                   const updatedTeamData = {
                     ...teamData,
                     tasks: {
@@ -4008,11 +4017,14 @@ export default function App() {
                       }
                     }
                   };
-                  // 削除はFirestoreへの保存成功後に画面へ反映し、失敗時は詳細画面で再試行できるようにする。
-                  await updateDoc(doc(db, 'app_data', 'shared_state'), {
-                    [`teamData.tasks.${dateStr}.${targetUid}`]: updatedOwnerTasks
-                  });
+                  const shouldRestock = !!(targetTask?.inventoryDeducted && targetTask?.productId);
+                  const updatedInventoryItems = shouldRestock ? inventoryItems.map(item => item.id === targetTask.productId ? { ...item, stock: (Number(item.stock) || 0) + 1 } : item) : inventoryItems;
+                  // 削除はFirestoreへの保存成功後に画面へ反映する。使用商品がある場合は在庫も戻す。
+                  await updateDoc(doc(db, 'app_data', 'shared_state'), shouldRestock
+                    ? { [`teamData.tasks.${dateStr}.${targetUid}`]: updatedOwnerTasks, inventoryItems: updatedInventoryItems }
+                    : { [`teamData.tasks.${dateStr}.${targetUid}`]: updatedOwnerTasks });
                   setTeamData(updatedTeamData);
+                  if (shouldRestock) setInventoryItems(updatedInventoryItems);
                 }} 
                 updateTaskAssignees={async (ownerUid, dateStr, taskId, assigneeIds) => {
                   const dayTasks = teamData.tasks[dateStr] || {};
