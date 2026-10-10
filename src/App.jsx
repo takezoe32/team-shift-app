@@ -864,7 +864,7 @@ const DailyDetailView = ({
     ) return;
 
     const memoTitle = selectedPersonalMemo.subject || '件名未設定';
-    if (!window.confirm(`個人メモ「${memoTitle}」を削除しますか？\\n削除したメモは元に戻せません。`)) return;
+    if (!window.confirm(`個人メモ「${memoTitle}」を削除しますか？\n削除したメモは元に戻せません。`)) return;
 
     setIsDeletingPersonalMemo(true);
     try {
@@ -872,7 +872,7 @@ const DailyDetailView = ({
       closePersonalMemoDetail();
     } catch (error) {
       console.error('個人メモの削除に失敗しました:', error);
-      alert(`個人メモを削除できませんでした。\\n${error?.message || 'もう一度お試しください。'}`);
+      alert(`個人メモを削除できませんでした。\n${error?.message || 'もう一度お試しください。'}`);
     } finally {
       setIsDeletingPersonalMemo(false);
     }
