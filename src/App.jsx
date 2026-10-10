@@ -2744,9 +2744,9 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
           {activePartnerItems.length === 0 && completedPartnerItems.length === 0 ? (
             <div className="text-center text-[11px] text-gray-400 py-8">登録された内容はありません</div>
           ) : (
-              activePartnerItems.map(renderPartnerItem)
-            )}
-            {completedPartnerItems.length > 0 && (
+            <>
+              {activePartnerItems.length > 0 && <div className="space-y-2"><div className="text-xs font-bold text-gray-500 px-1">対応中・予定（{activePartnerItems.length}件）</div>{activePartnerItems.map(renderPartnerItem)}</div>}
+              {completedPartnerItems.length > 0 && (
               <div className="rounded-xl border border-green-200 bg-green-50/60 overflow-hidden">
                 <button type="button" onClick={() => setShowCompletedPartnerItems(value => !value)} className="w-full flex items-center justify-between gap-2 px-3 py-3 text-left hover:bg-green-100/70">
                   <span className="flex items-center gap-2 min-w-0"><CheckSquare size={16} className="text-green-600 shrink-0"/><span className="text-sm font-bold text-green-800">終了したタスク</span><span className="text-xs text-green-700">（{completedPartnerItems.length}件）</span></span>
@@ -2755,6 +2755,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
                 {showCompletedPartnerItems && <div className="border-t border-green-200 p-2 space-y-2">{completedPartnerItems.map(renderPartnerItem)}</div>}
               </div>
             )}
+            </>
           )}
         </div>
       </div>
