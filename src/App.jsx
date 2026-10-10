@@ -849,7 +849,7 @@ const DailyDetailView = ({
       setPersonalMemoEditImage(null);
     } catch (error) {
       console.error('個人メモの更新に失敗しました:', error);
-      alert(`個人メモを保存できませんでした。\\n${error?.message || 'もう一度お試しください。'}`);
+      alert(`個人メモを保存できませんでした。\n${error?.message || 'もう一度お試しください。'}`);
     } finally {
       setIsSavingPersonalMemo(false);
     }
