@@ -4116,7 +4116,7 @@ export default function App() {
                     ? { [`teamData.tasks.${dateStr}.${ownerUid}`]: updatedOwnerTasks, inventoryItems: updatedInventoryItems }
                     : { [`teamData.tasks.${dateStr}.${ownerUid}`]: updatedOwnerTasks });
                   setTeamData(updatedTeamData);
-                  if (shouldRestock) { setInventoryItems(updatedInventoryItems); setInventoryMovements(current => [restoreMovement, ...current]); }
+                  if (shouldRestock) setInventoryItems(updatedInventoryItems);
                 }}
                 toggleTask={async (dateStr, ownerUid, taskId) => {
                   const dayTasks = teamData.tasks[dateStr] || {};
