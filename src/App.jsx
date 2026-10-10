@@ -3340,9 +3340,11 @@ export default function App() {
         let currentUserOrder = [...(data.userOrder || [])];
         let currentPartnerItems = Array.isArray(data.partnerItems) ? data.partnerItems : [];
         let currentPartnerNames = Array.isArray(data.partnerNames) ? data.partnerNames : [];
-        let currentInventoryItems = Array.isArray(data.inventoryItems) ? data.inventoryItems : INVENTORY_SEED_ITEMS;
+        let currentInventoryItems = (Array.isArray(data.inventoryItems) ? data.inventoryItems : INVENTORY_SEED_ITEMS).map(item => ({ ...item, name: normalizeInventoryName(item.name) }));
         if (!Array.isArray(data.inventoryItems)) {
-          updateDoc(doc(db, 'app_data', 'shared_state'), { inventoryItems: INVENTORY_SEED_ITEMS }).catch(error => console.error('初期在庫商品の保存に失敗しました:', error));
+          updateDoc(doc(db, 'app_data', 'shared_state'), { inventoryItems: currentInventoryItems }).catch(error => console.error('初期在庫商品の保存に失敗しました:', error));
+        } else if (currentInventoryItems.some((item, index) => item.name !== data.inventoryItems[index]?.name)) {
+          updateDoc(doc(db, 'app_data', 'shared_state'), { inventoryItems: currentInventoryItems }).catch(error => console.error('商品名の半角統一に失敗しました:', error));
         }
         let currentDebugLogs = Array.isArray(data.debugLogs) ? data.debugLogs : [];
         let currentShiftLogs = (data.shiftLogs && typeof data.shiftLogs === 'object') ? data.shiftLogs : {};
@@ -3781,19 +3783,33 @@ export default function App() {
               <InventoryView
                 inventoryItems={inventoryItems}
                 addInventoryItem={async (item) => {
-                  const updatedItems = [...inventoryItems, item];
-                  setInventoryItems(updatedItems);
+                  const normalizedItem = { ...item, name: normalizeInventoryName(item.name), stock: Math.max(0, Number(item.stock) || 0) };
+                  const updatedItems = [...inventoryItems, normalizedItem];
                   await updateDoc(doc(db, 'app_data', 'shared_state'), { inventoryItems: updatedItems });
-                }}
-                adjustInventoryStock={async (itemId, delta) => {
-                  const updatedItems = inventoryItems.map(item => item.id === itemId ? { ...item, stock: Math.max(0, (Number(item.stock) || 0) + delta) } : item);
                   setInventoryItems(updatedItems);
+                }}
+                editInventoryItem={async (itemId, name) => {
+                  const normalizedName = normalizeInventoryName(name);
+                  const updatedItems = inventoryItems.map(item => item.id === itemId ? { ...item, name: normalizedName } : item);
+                  const updatedTasks = Object.fromEntries(Object.entries(teamData.tasks || {}).map(([dateStr, owners]) => [dateStr, Object.fromEntries(Object.entries(owners || {}).map(([ownerUid, tasks]) => [ownerUid, (tasks || []).map(task => task.productId === itemId ? { ...task, productName: normalizedName } : task)]))]));
+                  const updatedTeamData = { ...teamData, tasks: updatedTasks };
+                  await updateDoc(doc(db, 'app_data', 'shared_state'), { inventoryItems: updatedItems, teamData: updatedTeamData });
+                  setInventoryItems(updatedItems);
+                  setTeamData(updatedTeamData);
+                }}
+                deleteInventoryItem={async (itemId) => {
+                  const updatedItems = inventoryItems.filter(item => item.id !== itemId);
+                  await updateDoc(doc(db, 'app_data', 'shared_state'), { inventoryItems: updatedItems });
+                  setInventoryItems(updatedItems);
+                }}
+                adjustInventoryStock={async (itemId, value, setExact = false) => {
+                  const updatedItems = inventoryItems.map(item => item.id === itemId ? { ...item, stock: setExact ? Math.max(0, Number(value) || 0) : Math.max(0, (Number(item.stock) || 0) + value) } : item);
                   try {
                     await updateDoc(doc(db, 'app_data', 'shared_state'), { inventoryItems: updatedItems });
+                    setInventoryItems(updatedItems);
                   } catch (error) {
                     console.error('在庫数の保存に失敗しました:', error);
-                    setInventoryItems(inventoryItems);
-                    alert('在庫数を保存できませんでした。もう一度お試しください。');
+                    throw error;
                   }
                 }}
               />
