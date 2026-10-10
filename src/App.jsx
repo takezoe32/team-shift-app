@@ -344,7 +344,9 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partne
     const isPastDate=dateStr<todayStr;
     const holidayName=holidays[dateStr] || '';
     const isHoliday=!!holidayName;
-    days.push(<div key={i} onClick={()=>setSelectedCalendarTaskDate(dateStr)} title={holidayName || undefined} className={`p-1 border-b border-r border-gray-100 min-h-[80px] cursor-pointer active:bg-gray-50 flex flex-col ${isPastDate?'bg-gray-200':isHoliday?'bg-rose-50':''}`}>
+    const dayOfWeek=new Date(year,month,i).getDay();
+    const dayBgClass=isHoliday?'bg-rose-50':dayOfWeek===0?'bg-rose-50':dayOfWeek===6?'bg-sky-50':isPastDate?'bg-gray-200':'';
+    days.push(<div key={i} onClick={()=>setSelectedCalendarTaskDate(dateStr)} title={holidayName || undefined} className={`p-1 border-b border-r border-gray-100 min-h-[80px] cursor-pointer active:bg-gray-50 flex flex-col ${dayBgClass}`}>
       <div className="flex justify-between items-start p-1"><div className="flex items-baseline gap-1 min-w-0"><span className={`text-sm font-bold shrink-0 ${new Date().getDate()===i&&new Date().getMonth()===month?'bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center':isPastDate?'text-gray-400':isHoliday?'text-red-600':'text-gray-700'}`}>{i}</span>{holidayName && <span className="text-[9px] leading-tight font-bold text-red-600">{holidayName}</span>}</div>{hasMyTask&&<div className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-1.5"></div>}</div>
       <div className="mt-1 flex-1 px-1">{myShift.id!=='none'&&<div className={`text-[10px] font-bold px-1.5 py-0.5 rounded truncate ${myShift.color}`}>{myShift.label}</div>}</div>
     </div>);
