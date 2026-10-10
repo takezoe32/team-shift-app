@@ -2598,29 +2598,65 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
                     <div className="max-h-56 overflow-y-auto">
                       {(partnerNames || []).map(name => (
                         <div key={name} className="flex items-center gap-1 border-b border-gray-100 last:border-b-0">
-                          <button
-                            type="button"
-                            onClick={() => { setPartnerName(name); setShowPartnerNameMenu(false); }}
-                            className="min-w-0 flex-1 text-left px-3 py-2.5 text-sm text-gray-700 hover:bg-blue-50 truncate"
-                          >
-                            {name}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleStartEditPartnerName(name)}
-                            className="shrink-0 p-2 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-md"
-                            title="パートナー名を編集"
-                          >
-                            <Edit2 size={14}/>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeletePartnerName(name)}
-                            className="shrink-0 p-2 mr-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-md"
-                            title="パートナー名を削除"
-                          >
-                            <Trash2 size={14}/>
-                          </button>
+                          {editingPartnerName === name ? (
+                            <>
+                              <input
+                                autoFocus
+                                type="text"
+                                value={editingPartnerNameValue}
+                                onChange={(e) => setEditingPartnerNameValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') { e.preventDefault(); handleSavePartnerName(); }
+                                  if (e.key === 'Escape') { setEditingPartnerName(null); setEditingPartnerNameValue(''); }
+                                }}
+                                aria-label="パートナー名を編集"
+                                className="min-w-0 flex-1 border border-blue-300 rounded-lg px-2 py-2 mx-1 my-1 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+                              />
+                              <button
+                                type="button"
+                                onClick={handleSavePartnerName}
+                                disabled={!editingPartnerNameValue.trim()}
+                                className="shrink-0 px-2 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md disabled:opacity-50"
+                                title="変更を保存"
+                              >
+                                保存
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => { setEditingPartnerName(null); setEditingPartnerNameValue(''); }}
+                                className="shrink-0 px-2 py-2 text-xs text-gray-600 hover:bg-gray-100 rounded-md"
+                                title="編集をキャンセル"
+                              >
+                                取消
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => { setPartnerName(name); setShowPartnerNameMenu(false); }}
+                                className="min-w-0 flex-1 text-left px-3 py-2.5 text-sm text-gray-700 hover:bg-blue-50 truncate"
+                              >
+                                {name}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleStartEditPartnerName(name)}
+                                className="shrink-0 p-2 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-md"
+                                title="パートナー名を編集"
+                              >
+                                <Edit2 size={14}/>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeletePartnerName(name)}
+                                className="shrink-0 p-2 mr-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-md"
+                                title="パートナー名を削除"
+                              >
+                                <Trash2 size={14}/>
+                              </button>
+                            </>
+                          )}
                         </div>
                       ))}
                     </div>
