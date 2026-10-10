@@ -847,6 +847,9 @@ const DailyDetailView = ({
   const [newTaskText, setNewTaskText] = useState('');
   const [newTaskEndTime, setNewTaskEndTime] = useState('');
   const [newTaskProductId, setNewTaskProductId] = useState('');
+  const [newTaskProductQuantity, setNewTaskProductQuantity] = useState('1');
+  const [productScannerOpen, setProductScannerOpen] = useState(false);
+  const [productScanMessage, setProductScanMessage] = useState('');
   const [newTaskVisibility, setNewTaskVisibility] = useState('public');
   const [selectedUserUid, setSelectedUserUid] = useState(currentUserUid);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
@@ -1013,6 +1016,16 @@ const DailyDetailView = ({
     if (imageInputRef.current) imageInputRef.current.value = '';
   };
 
+  const handleProductBarcodeDetected = (code) => {
+    setProductScannerOpen(false);
+    const barcode = normalizeInventoryName(code);
+    const product = inventoryItems.find(item => normalizeInventoryName(item.barcode) === barcode);
+    if (!product) { setProductScanMessage('このバーコードの商品は未登録です。在庫管理で商品登録してください。'); return; }
+    if (Number(product.stock || 0) <= 0) { setProductScanMessage('この商品の在庫がありません。'); return; }
+    setNewTaskProductId(product.id);
+    setProductScanMessage('選択しました：' + product.name);
+  };
+
   const handleAddTask = async () => {
     if (newTaskVisibility === 'private' ? (!newTaskText.trim() && !newTaskImage) : (!newTaskSubject.trim() || (!newTaskText.trim() && !newTaskImage))) { alert(newTaskVisibility === 'private' ? '内容または画像を追加してください。' : '件名と内容または画像を入力してください。'); return; }
     setIsUploading(true);
@@ -1032,12 +1045,16 @@ const DailyDetailView = ({
         alert('個人メモは、自分の名前を選んでいるときだけ登録できます。');
         return;
       }
-      await addTask(selectedDate, selectedUserUid, newTaskText.trim(), imageUrl, imageName, imagePublicId, imageBytes, newTaskVisibility, newTaskVisibility === 'private' ? '' : newTaskSubject.trim(), newTaskVisibility === 'private' ? '' : newTaskEndTime, newTaskVisibility === 'private' ? '' : newTaskProductId);
+      const productQuantity = Number(newTaskProductQuantity);
+      if (newTaskProductId && (!Number.isInteger(productQuantity) || productQuantity < 1)) { alert('使用数量は1以上の整数を入力してください。'); return; }
+      await addTask(selectedDate, selectedUserUid, newTaskText.trim(), imageUrl, imageName, imagePublicId, imageBytes, newTaskVisibility, newTaskVisibility === 'private' ? '' : newTaskSubject.trim(), newTaskVisibility === 'private' ? '' : newTaskEndTime, newTaskVisibility === 'private' ? '' : newTaskProductId, newTaskProductId ? productQuantity : 1);
       setNewTaskVisibility('public');
       setNewTaskSubject('');
       setNewTaskText('');
       setNewTaskEndTime('');
       setNewTaskProductId('');
+      setNewTaskProductQuantity('1');
+      setProductScanMessage('');
       clearNewTaskImage();
     } catch (error) {
       console.error('画像のアップロードに失敗しました:', error);
@@ -1364,7 +1381,7 @@ const DailyDetailView = ({
             <div className="space-y-2 mb-2">
               {newTaskVisibility !== 'private' && <input type="text" value={newTaskSubject} onChange={e=>setNewTaskSubject(e.target.value)} placeholder="件名（例：備品の補充）" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm" disabled={isUploading}/>}
               {newTaskVisibility !== 'private' && <label className="flex items-center gap-2 text-xs text-gray-600"><span className="font-bold">終了予定時刻</span><div className="flex items-center gap-1"><select aria-label="終了予定時刻の時" value={newTaskEndTime ? newTaskEndTime.split(':')[0] : ''} onChange={e=>setNewTaskEndTime(e.target.value ? e.target.value+':'+((newTaskEndTime||'').split(':')[1]||'00') : '')} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" disabled={isUploading}><option value="">時</option>{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(v=><option key={v} value={v}>{v}</option>)}</select><span>:</span><select aria-label="終了予定時刻の分" value={newTaskEndTime ? newTaskEndTime.split(':')[1] : ''} onChange={e=>setNewTaskEndTime(((newTaskEndTime||'').split(':')[0]||'00')+':'+e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" disabled={isUploading}><option value="">分</option>{['00','15','30','45'].map(v=><option key={v} value={v}>{v}</option>)}</select></div></label>}
-              {newTaskVisibility !== 'private' && <label className="block text-xs text-gray-600"><span className="block font-bold mb-1">使用する商品（任意・選択すると在庫を1個減らします）</span><select value={newTaskProductId} onChange={e=>setNewTaskProductId(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white" disabled={isUploading}><option value="">商品を選択しない</option>{inventoryItems.map(item=><option key={item.id} value={item.id} disabled={Number(item.stock||0)<=0}>{item.kind ? item.kind + '：' : ''}{item.name}{item.usageLocation ? '／使用箇所：' + item.usageLocation : ''}（在庫 {Number(item.stock||0)} 個）</option>)}</select></label>}
+              {newTaskVisibility !== 'private' && <div className="space-y-2"><label className="block text-xs text-gray-600"><span className="block font-bold mb-1">使用する商品（任意）</span><select value={newTaskProductId} onChange={e=>setNewTaskProductId(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white" disabled={isUploading}><option value="">商品を選択しない</option>{inventoryItems.map(item=><option key={item.id} value={item.id} disabled={Number(item.stock||0)<=0}>{item.kind ? item.kind + '：' : ''}{item.name}{item.usageLocation ? '／使用箇所：' + item.usageLocation : ''}（在庫 {Number(item.stock||0)} 個）</option>)}</select></label><div className="flex gap-2"><button type="button" onClick={()=>setProductScannerOpen(true)} disabled={isUploading} className="min-h-10 px-3 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-bold inline-flex items-center gap-1"><Camera size={15}/>バーコード読取</button><label className="flex-1 text-xs text-gray-600 flex items-center gap-2">使用数量<input type="number" min="1" step="1" value={newTaskProductQuantity} onChange={e=>setNewTaskProductQuantity(e.target.value)} className="min-h-10 w-20 rounded-lg border border-gray-200 px-2 text-center text-sm"/></label></div>{productScanMessage && <p className="text-xs text-blue-700">{productScanMessage}</p>}</div>}
             </div>
             <div className="flex gap-2 items-end">
               <textarea
@@ -1536,6 +1553,7 @@ const DailyDetailView = ({
         </div>
       )}
     </div>
+    {productScannerOpen && <BarcodeScannerModal onDetected={handleProductBarcodeDetected} onClose={()=>setProductScannerOpen(false)}/>}
   );
 };
 
@@ -4081,7 +4099,8 @@ export default function App() {
                   const updatedOwnerTasks = ownerTasks.filter(task => task.id !== taskId);
                   const updatedTeamData = { ...teamData, tasks: { ...teamData.tasks, [dateStr]: { ...dayTasks, [ownerUid]: updatedOwnerTasks } } };
                   const shouldRestock = !!(targetTask?.inventoryDeducted && targetTask?.productId);
-                  const updatedInventoryItems = shouldRestock ? inventoryItems.map(item => item.id === targetTask.productId ? { ...item, stock: (Number(item.stock) || 0) + 1 } : item) : inventoryItems;
+                  const restoreQuantity = Math.max(1, Number(targetTask?.inventoryQuantity) || 1);
+                  const updatedInventoryItems = shouldRestock ? inventoryItems.map(item => item.id === targetTask.productId ? { ...item, stock: (Number(item.stock) || 0) + restoreQuantity } : item) : inventoryItems;
                   await updateDoc(doc(db, 'app_data', 'shared_state'), shouldRestock
                     ? { [`teamData.tasks.${dateStr}.${ownerUid}`]: updatedOwnerTasks, inventoryItems: updatedInventoryItems }
                     : { [`teamData.tasks.${dateStr}.${ownerUid}`]: updatedOwnerTasks });
@@ -4237,13 +4256,14 @@ export default function App() {
             ) : activeTab === 'daily' ? (
               <DailyDetailView 
                 inventoryItems={inventoryItems}
-                addTask={async (dateStr, targetUid, text, imageUrl = '', imageName = '', imagePublicId = '', imageBytes = 0, visibility = 'public', subject = '', endTime = '', productId = '') => {
+                addTask={async (dateStr, targetUid, text, imageUrl = '', imageName = '', imagePublicId = '', imageBytes = 0, visibility = 'public', subject = '', endTime = '', productId = '', productQuantity = 1) => {
                   const product = productId ? inventoryItems.find(item => item.id === productId) : null;
-                  if (productId && (!product || Number(product.stock || 0) <= 0)) {
+                  const quantity = Math.max(1, Number(productQuantity) || 1);
+                  if (productId && (!product || Number(product.stock || 0) < quantity)) {
                     alert('選択した商品の在庫がありません。在庫管理ページで確認してください。');
                     throw new Error('選択した商品の在庫がありません。');
                   }
-                  const updatedInventoryItems = product ? inventoryItems.map(item => item.id === productId ? { ...item, stock: Math.max(0, Number(item.stock || 0) - 1) } : item) : inventoryItems;
+                  const updatedInventoryItems = product ? inventoryItems.map(item => item.id === productId ? { ...item, stock: Math.max(0, Number(item.stock || 0) - quantity) } : item) : inventoryItems;
                   const dayTasks = teamData.tasks[dateStr] || {};
                   const userTasks = dayTasks[targetUid] || [];
                   const updatedTeamData = {
@@ -4265,7 +4285,7 @@ export default function App() {
                             ownerUid: targetUid,
                             assigneeIds: [targetUid],
                             visibility: visibility === 'private' ? 'private' : 'public',
-                            ...(product ? { productId: product.id, productName: product.name, inventoryDeducted: true } : {}),
+                            ...(product ? { productId: product.id, productName: product.name, inventoryQuantity: quantity, inventoryDeducted: true } : {}),
                             completedAt: null,
                             ...(imageUrl ? {
                               imageUrl,
