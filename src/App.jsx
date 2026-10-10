@@ -739,9 +739,7 @@ const DailyDetailView = ({
   const [isUploading, setIsUploading] = useState(false);
   const [selectedPersonalMemoKey, setSelectedPersonalMemoKey] = useState('');
   const [isEditingPersonalMemo, setIsEditingPersonalMemo] = useState(false);
-  const [personalMemoEditSubject, setPersonalMemoEditSubject] = useState('');
   const [personalMemoEditText, setPersonalMemoEditText] = useState('');
-  const [personalMemoEditEndTime, setPersonalMemoEditEndTime] = useState('');
   const [personalMemoEditImage, setPersonalMemoEditImage] = useState(null);
   const [isSavingPersonalMemo, setIsSavingPersonalMemo] = useState(false);
   const [isDeletingPersonalMemo, setIsDeletingPersonalMemo] = useState(false);
@@ -752,7 +750,7 @@ const DailyDetailView = ({
   const canManageShift = checkCanManageShift(currentUser, roles);
   const isAdmin = !!currentUser && !!roles[currentUser.role] && (roles[currentUser.role].level || 0) >= 40;
   const canViewTask = (task, ownerUid) => task?.visibility !== 'private' || ownerUid === currentUserUid;
-  const selectedDateTasks = Object.entries(teamData.tasks[selectedDate] || {}).flatMap(([ownerUid, tasks]) => (tasks || []).filter(task => { if (!canViewTask(task, ownerUid)) return false; const assignees = Array.isArray(task.assigneeIds) && task.assigneeIds.length ? task.assigneeIds : [ownerUid]; return assignees.includes(selectedUserUid); }).map(task => ({ ...task, ownerUid, taskDate: selectedDate })));
+  const selectedDateTasks = Object.entries(teamData.tasks[selectedDate] || {}).flatMap(([ownerUid, tasks]) => (tasks || []).filter(task => { if (task?.visibility === 'private' || !canViewTask(task, ownerUid)) return false; const assignees = Array.isArray(task.assigneeIds) && task.assigneeIds.length ? task.assigneeIds : [ownerUid]; return assignees.includes(selectedUserUid); }).map(task => ({ ...task, ownerUid, taskDate: selectedDate })));
   const unfinishedPastTasks = Object.keys(teamData.tasks || {})
     .filter(dateStr => dateStr < selectedDate)
     .sort((a, b) => b.localeCompare(a))
@@ -760,7 +758,7 @@ const DailyDetailView = ({
       Object.entries(teamData.tasks[dateStr] || {})
         .flatMap(([ownerUid, tasks]) => (tasks || [])
           .filter(task => {
-            if (!canViewTask(task, ownerUid)) return false;
+            if (task?.visibility === 'private' || !canViewTask(task, ownerUid)) return false;
             if (task.completed) return false;
             const assignees = Array.isArray(task.assigneeIds) && task.assigneeIds.length
               ? task.assigneeIds
@@ -791,9 +789,7 @@ const DailyDetailView = ({
 
   const startPersonalMemoEdit = () => {
     if (!selectedPersonalMemo) return;
-    setPersonalMemoEditSubject(selectedPersonalMemo.subject || '');
     setPersonalMemoEditText(selectedPersonalMemo.text || '');
-    setPersonalMemoEditEndTime(selectedPersonalMemo.endTime || '');
     setPersonalMemoEditImage(null);
     setIsEditingPersonalMemo(true);
   };
@@ -822,16 +818,16 @@ const DailyDetailView = ({
 
   const savePersonalMemo = async () => {
     if (!selectedPersonalMemo) return;
-    if (!personalMemoEditSubject.trim() || (!personalMemoEditText.trim() && !selectedPersonalMemo.imageUrl && !personalMemoEditImage)) {
-      alert('件名と、内容または画像を入力してください。');
+    if (!personalMemoEditText.trim() && !selectedPersonalMemo.imageUrl && !personalMemoEditImage) {
+      alert('内容または画像を追加してください。');
       return;
     }
     setIsSavingPersonalMemo(true);
     try {
       const changes = {
-        subject: personalMemoEditSubject.trim(),
+        subject: '',
         text: personalMemoEditText.trim(),
-        endTime: personalMemoEditEndTime,
+        endTime: '',
         visibility: 'private',
         assigneeIds: [currentUserUid]
       };
@@ -861,8 +857,7 @@ const DailyDetailView = ({
       selectedPersonalMemo.ownerUid !== currentUserUid
     ) return;
 
-    const memoTitle = selectedPersonalMemo.subject || '件名未設定';
-    if (!window.confirm(`個人メモ「${memoTitle}」を削除しますか？\n削除したメモは元に戻せません。`)) return;
+    if (!window.confirm('この個人メモを削除しますか？\n削除したメモは元に戻せません。')) return;
 
     setIsDeletingPersonalMemo(true);
     try {
@@ -901,7 +896,7 @@ const DailyDetailView = ({
   };
 
   const handleAddTask = async () => {
-    if (!newTaskSubject.trim() || (!newTaskText.trim() && !newTaskImage)) { alert('件名と内容または画像を入力してください。'); return; }
+    if (newTaskVisibility === 'private' ? (!newTaskText.trim() && !newTaskImage) : (!newTaskSubject.trim() || (!newTaskText.trim() && !newTaskImage))) { alert(newTaskVisibility === 'private' ? '内容または画像を追加してください。' : '件名と内容または画像を入力してください。'); return; }
     setIsUploading(true);
     try {
       let imageUrl = '';
@@ -919,7 +914,7 @@ const DailyDetailView = ({
         alert('個人メモは、自分の名前を選んでいるときだけ登録できます。');
         return;
       }
-      addTask(selectedDate, selectedUserUid, newTaskText.trim(), imageUrl, imageName, imagePublicId, imageBytes, newTaskVisibility, newTaskSubject.trim(), newTaskEndTime);
+      addTask(selectedDate, selectedUserUid, newTaskText.trim(), imageUrl, imageName, imagePublicId, imageBytes, newTaskVisibility, newTaskVisibility === 'private' ? '' : newTaskSubject.trim(), newTaskVisibility === 'private' ? '' : newTaskEndTime);
       setNewTaskVisibility('public');
       setNewTaskSubject('');
       setNewTaskText('');
@@ -1242,18 +1237,18 @@ const DailyDetailView = ({
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <span className="text-xs font-black text-gray-600">このタスクを</span>
               <button type="button" onClick={() => setNewTaskVisibility('public')} className={`px-3 py-1.5 rounded-full text-xs font-black border transition-all ${newTaskVisibility === 'public' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-500 border-gray-200'}`}>👥 みんなに公開</button>
-              <button type="button" onClick={() => setNewTaskVisibility('private')} disabled={selectedUserUid !== currentUserUid} className={`px-3 py-1.5 rounded-full text-xs font-black border transition-all ${newTaskVisibility === 'private' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-500 border-gray-200'} ${selectedUserUid !== currentUserUid ? 'opacity-40 cursor-not-allowed' : ''}`}>🔒 個人メモ</button>
+              <button type="button" onClick={() => { setNewTaskVisibility('private'); setNewTaskSubject(''); setNewTaskEndTime(''); }} disabled={selectedUserUid !== currentUserUid} className={`px-3 py-1.5 rounded-full text-xs font-black border transition-all ${newTaskVisibility === 'private' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-500 border-gray-200'} ${selectedUserUid !== currentUserUid ? 'opacity-40 cursor-not-allowed' : ''}`}>🔒 個人メモ</button>
               {newTaskVisibility === 'private' && <span className="text-[10px] font-bold text-purple-600">自分だけに表示されます</span>}
             </div>
             <div className="space-y-2 mb-2">
-              <input type="text" value={newTaskSubject} onChange={e=>setNewTaskSubject(e.target.value)} placeholder="件名（例：備品の補充）" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm" disabled={isUploading}/>
-              <label className="flex items-center gap-2 text-xs text-gray-600"><span className="font-bold">終了予定時刻</span><div className="flex items-center gap-1"><select aria-label="終了予定時刻の時" value={newTaskEndTime ? newTaskEndTime.split(':')[0] : ''} onChange={e=>setNewTaskEndTime(e.target.value ? e.target.value+':'+((newTaskEndTime||'').split(':')[1]||'00') : '')} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" disabled={isUploading}><option value="">時</option>{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(v=><option key={v} value={v}>{v}</option>)}</select><span>:</span><select aria-label="終了予定時刻の分" value={newTaskEndTime ? newTaskEndTime.split(':')[1] : ''} onChange={e=>setNewTaskEndTime(((newTaskEndTime||'').split(':')[0]||'00')+':'+e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" disabled={isUploading}><option value="">分</option>{['00','15','30','45'].map(v=><option key={v} value={v}>{v}</option>)}</select></div></label>
+              {newTaskVisibility !== 'private' && <input type="text" value={newTaskSubject} onChange={e=>setNewTaskSubject(e.target.value)} placeholder="件名（例：備品の補充）" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm" disabled={isUploading}/>}
+              {newTaskVisibility !== 'private' && <label className="flex items-center gap-2 text-xs text-gray-600"><span className="font-bold">終了予定時刻</span><div className="flex items-center gap-1"><select aria-label="終了予定時刻の時" value={newTaskEndTime ? newTaskEndTime.split(':')[0] : ''} onChange={e=>setNewTaskEndTime(e.target.value ? e.target.value+':'+((newTaskEndTime||'').split(':')[1]||'00') : '')} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" disabled={isUploading}><option value="">時</option>{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(v=><option key={v} value={v}>{v}</option>)}</select><span>:</span><select aria-label="終了予定時刻の分" value={newTaskEndTime ? newTaskEndTime.split(':')[1] : ''} onChange={e=>setNewTaskEndTime(((newTaskEndTime||'').split(':')[0]||'00')+':'+e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" disabled={isUploading}><option value="">分</option>{['00','15','30','45'].map(v=><option key={v} value={v}>{v}</option>)}</select></div></label>}
             </div>
             <div className="flex gap-2 items-end">
               <textarea
                 value={newTaskText}
                 onChange={(e) => setNewTaskText(e.target.value)}
-                placeholder="内容・申し送りを入力"
+                placeholder={newTaskVisibility === 'private' ? '個人メモを入力' : '内容・申し送りを入力'}
                 className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow resize-y"
                 rows={2}
                 style={{ minHeight: '52px', maxHeight: '160px' }}
@@ -1270,7 +1265,7 @@ const DailyDetailView = ({
               </button>
               <button type="button"
                 onClick={handleAddTask}
-                disabled={isUploading || !newTaskSubject.trim() || (!newTaskText.trim() && !newTaskImage)}
+                disabled={isUploading || (newTaskVisibility === 'private' ? (!newTaskText.trim() && !newTaskImage) : (!newTaskSubject.trim() || (!newTaskText.trim() && !newTaskImage)))}
                 className="shrink-0 bg-blue-600 text-white px-4 py-3 rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:bg-gray-400 transition-colors shadow-sm active:scale-95 font-bold text-sm flex items-center gap-1.5"
               >
                 {isUploading ? <Loader2 size={18} className="animate-spin"/> : <Save size={18}/>} 保存
@@ -1349,10 +1344,9 @@ const DailyDetailView = ({
                   >
                     <div className="flex items-start justify-between gap-3">
                       <span className="text-[10px] text-purple-700 font-bold shrink-0">{memo.taskDate.replace(/-/g, '/')}</span>
-                      {memo.endTime && <span className="text-[10px] text-orange-600 font-bold shrink-0">終了予定 {memo.endTime}</span>}
                     </div>
-                    <div className="text-sm font-black text-gray-800 mt-1 break-words">{memo.subject || '件名未設定'}</div>
-                    {memo.text && <p className="text-xs text-gray-600 mt-1 whitespace-pre-wrap break-words line-clamp-3">{memo.text}</p>}
+                    {(memo.text || (!memo.imageUrl && memo.subject)) && <p className="text-sm text-gray-800 mt-1 whitespace-pre-wrap break-words line-clamp-3">{memo.text || memo.subject}</p>}
+                    {!memo.text && memo.imageUrl && <div className="text-sm text-gray-600 mt-1">画像メモ</div>}
                     {memo.imageUrl && <span className="inline-flex items-center gap-1 text-[10px] text-gray-500 mt-2"><ImageIcon size={12}/>画像添付あり</span>}
                     <div className="text-[10px] font-bold text-purple-600 mt-2">タップして詳細・編集・削除</div>
                   </button>
@@ -1369,8 +1363,8 @@ const DailyDetailView = ({
             <div className="px-4 py-3 border-b flex items-start justify-between gap-3 shrink-0">
               <div className="min-w-0">
                 <div className="text-[10px] font-bold text-purple-700">🔒 個人メモ詳細</div>
-                <h3 className="text-base font-black text-gray-800 mt-1 break-words">{selectedPersonalMemo.subject || '件名未設定'}</h3>
-                <p className="text-xs text-gray-500 mt-1">{selectedPersonalMemo.taskDate.replace(/-/g, '/')} ・ 終了予定 {selectedPersonalMemo.endTime || '未設定'}</p>
+                <h3 className="text-base font-black text-gray-800 mt-1 break-words">個人メモ</h3>
+                <p className="text-xs text-gray-500 mt-1">{selectedPersonalMemo.taskDate.replace(/-/g, '/')}</p>
               </div>
               <button type="button" onClick={closePersonalMemoDetail} className="p-2 rounded-full text-gray-500 hover:bg-gray-100 shrink-0" aria-label="個人メモ詳細を閉じる"><X size={18}/></button>
             </div>
@@ -1378,26 +1372,8 @@ const DailyDetailView = ({
               {isEditingPersonalMemo ? (
                 <>
                   <label className="block">
-                    <span className="block text-xs font-bold text-gray-600 mb-1">件名</span>
-                    <input type="text" value={personalMemoEditSubject} onChange={e => setPersonalMemoEditSubject(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="件名"/>
-                  </label>
-                  <label className="block">
                     <span className="block text-xs font-bold text-gray-600 mb-1">内容</span>
                     <textarea value={personalMemoEditText} onChange={e => setPersonalMemoEditText(e.target.value)} rows={7} className="w-full border rounded-lg px-3 py-2 text-sm resize-y" placeholder="個人メモの内容"/>
-                  </label>
-                  <label className="block">
-                    <span className="block text-xs font-bold text-gray-600 mb-1">終了予定時刻（任意・15分刻み）</span>
-                    <div className="flex items-center gap-2">
-                      <select aria-label="個人メモ終了予定時刻の時" value={personalMemoEditEndTime ? personalMemoEditEndTime.split(':')[0] : ''} onChange={e => setPersonalMemoEditEndTime(e.target.value ? e.target.value + ':' + ((personalMemoEditEndTime || '').split(':')[1] || '00') : '')} className="border rounded-lg px-2 py-2 text-sm">
-                        <option value="">時</option>
-                        {Array.from({length:24}, (_, i) => String(i).padStart(2, '0')).map(v => <option key={v} value={v}>{v}</option>)}
-                      </select>
-                      <span>:</span>
-                      <select aria-label="個人メモ終了予定時刻の分" value={personalMemoEditEndTime ? personalMemoEditEndTime.split(':')[1] : ''} onChange={e => setPersonalMemoEditEndTime(e.target.value ? ((personalMemoEditEndTime || '').split(':')[0] || '00') + ':' + e.target.value : '')} className="border rounded-lg px-2 py-2 text-sm">
-                        <option value="">分</option>
-                        {['00', '15', '30', '45'].map(v => <option key={v} value={v}>{v}</option>)}
-                      </select>
-                    </div>
                   </label>
                   <div className="rounded-xl border border-gray-200 p-3">
                     <div className="text-xs font-bold text-gray-600 mb-2">画像（任意）</div>
