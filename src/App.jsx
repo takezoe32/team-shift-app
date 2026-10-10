@@ -84,13 +84,13 @@ const INITIAL_ROLES = {
 };
 
 const INVENTORY_SEED_ITEMS = [
-  { id: 'inventory_led_1', name: 'LED電球１', stock: 6 },
-  { id: 'inventory_led_2', name: 'LED電球２', stock: 4 },
-  { id: 'inventory_jr_35', name: 'ＪＲ１２Ｖ３５Ｗ／Ｋ５ＳＥＺ／Ｎ', stock: 8 },
-  { id: 'inventory_jr_50', name: 'ＪＲ１２Ｖ５０ＷＫＷ５ＥＺＨ２', stock: 3 },
-  { id: 'inventory_lds_36', name: 'ＬＤＳ１１０Ｖ３６Ｗ・Ｗ・Ｋ', stock: 5 },
-  { id: 'inventory_lds_54', name: 'ＬＤＳ１１０Ｖ５４Ｗ・Ｗ・Ｋ', stock: 2 },
-  { id: 'inventory_lds_90', name: 'ＬＤＳ１１０Ｖ９０Ｗ・Ｗ・ＫＡ', stock: 9 }
+  { id: 'inventory_led_1', kind: '', name: 'LED電球１', usageLocation: '', stock: 0 },
+  { id: 'inventory_led_2', kind: '', name: 'LED電球２', usageLocation: '', stock: 0 },
+  { id: 'inventory_jr_35', kind: '', name: 'ＪＲ１２Ｖ３５Ｗ／Ｋ５ＳＥＺ／Ｎ', usageLocation: '', stock: 0 },
+  { id: 'inventory_jr_50', kind: '', name: 'ＪＲ１２Ｖ５０ＷＫＷ５ＥＺＨ２', usageLocation: '', stock: 0 },
+  { id: 'inventory_lds_36', kind: '', name: 'ＬＤＳ１１０Ｖ３６Ｗ・Ｗ・Ｋ', usageLocation: '', stock: 0 },
+  { id: 'inventory_lds_54', kind: '', name: 'ＬＤＳ１１０Ｖ５４Ｗ・Ｗ・Ｋ', usageLocation: '', stock: 0 },
+  { id: 'inventory_lds_90', kind: '', name: 'ＬＤＳ１１０Ｖ９０Ｗ・Ｗ・ＫＡ', usageLocation: '', stock: 0 }
 ];
 
 const DEFAULT_SHIFT_TYPES = [
@@ -1361,7 +1361,7 @@ const DailyDetailView = ({
             <div className="space-y-2 mb-2">
               {newTaskVisibility !== 'private' && <input type="text" value={newTaskSubject} onChange={e=>setNewTaskSubject(e.target.value)} placeholder="件名（例：備品の補充）" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm" disabled={isUploading}/>}
               {newTaskVisibility !== 'private' && <label className="flex items-center gap-2 text-xs text-gray-600"><span className="font-bold">終了予定時刻</span><div className="flex items-center gap-1"><select aria-label="終了予定時刻の時" value={newTaskEndTime ? newTaskEndTime.split(':')[0] : ''} onChange={e=>setNewTaskEndTime(e.target.value ? e.target.value+':'+((newTaskEndTime||'').split(':')[1]||'00') : '')} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" disabled={isUploading}><option value="">時</option>{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(v=><option key={v} value={v}>{v}</option>)}</select><span>:</span><select aria-label="終了予定時刻の分" value={newTaskEndTime ? newTaskEndTime.split(':')[1] : ''} onChange={e=>setNewTaskEndTime(((newTaskEndTime||'').split(':')[0]||'00')+':'+e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" disabled={isUploading}><option value="">分</option>{['00','15','30','45'].map(v=><option key={v} value={v}>{v}</option>)}</select></div></label>}
-              {newTaskVisibility !== 'private' && <label className="block text-xs text-gray-600"><span className="block font-bold mb-1">使用する商品（任意・選択すると在庫を1個減らします）</span><select value={newTaskProductId} onChange={e=>setNewTaskProductId(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white" disabled={isUploading}><option value="">商品を選択しない</option>{inventoryItems.map(item=><option key={item.id} value={item.id} disabled={Number(item.stock||0)<=0}>{item.name}（在庫 {Number(item.stock||0)} 個）</option>)}</select></label>}
+              {newTaskVisibility !== 'private' && <label className="block text-xs text-gray-600"><span className="block font-bold mb-1">使用する商品（任意・選択すると在庫を1個減らします）</span><select value={newTaskProductId} onChange={e=>setNewTaskProductId(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white" disabled={isUploading}><option value="">商品を選択しない</option>{inventoryItems.map(item=><option key={item.id} value={item.id} disabled={Number(item.stock||0)<=0}>{item.kind ? item.kind + '：' : ''}{item.name}{item.usageLocation ? '／使用箇所：' + item.usageLocation : ''}（在庫 {Number(item.stock||0)} 個）</option>)}</select></label>}
             </div>
             <div className="flex gap-2 items-end">
               <textarea
@@ -3019,15 +3019,23 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
 
 const normalizeInventoryName = (value) => String(value ?? '').normalize('NFKC').trim();
 
-const InventoryView = ({ inventoryItems = [], addInventoryItem, adjustInventoryStock, editInventoryItem, deleteInventoryItem }) => {
+const InventoryView = ({ inventoryItems = [], addInventoryItem, adjustInventoryStock, editInventoryItem, deleteInventoryItem, updateInventoryImage }) => {
+  const [newKind, setNewKind] = useState('');
   const [newName, setNewName] = useState('');
-  const [newStock, setNewStock] = useState('5');
+  const [newUsageLocation, setNewUsageLocation] = useState('');
+  const [newStock, setNewStock] = useState('0');
   const [editingId, setEditingId] = useState(null);
+  const [editingKind, setEditingKind] = useState('');
   const [editingName, setEditingName] = useState('');
+  const [editingUsageLocation, setEditingUsageLocation] = useState('');
   const [stockDrafts, setStockDrafts] = useState({});
+  const [uploadingImageId, setUploadingImageId] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+
   const handleAdd = async () => {
+    const kind = normalizeInventoryName(newKind);
     const name = normalizeInventoryName(newName);
+    const usageLocation = normalizeInventoryName(newUsageLocation);
     const stock = Number(newStock);
     if (!name) { alert('商品名を入力してください。'); return; }
     if (!Number.isInteger(stock) || stock < 0) { alert('在庫数は0以上の整数を入力してください。'); return; }
@@ -3036,31 +3044,66 @@ const InventoryView = ({ inventoryItems = [], addInventoryItem, adjustInventoryS
     }
     setIsSaving(true);
     try {
-      await addInventoryItem({ id: 'inventory_' + Date.now(), name, stock });
+      await addInventoryItem({ id: 'inventory_' + Date.now(), kind, name, usageLocation, stock });
+      setNewKind('');
       setNewName('');
-      setNewStock('5');
+      setNewUsageLocation('');
+      setNewStock('0');
     } catch (error) {
       console.error('商品の登録に失敗しました:', error);
       alert('商品を登録できませんでした。もう一度お試しください。');
     } finally { setIsSaving(false); }
   };
-  const startEdit = (item) => { setEditingId(item.id); setEditingName(normalizeInventoryName(item.name)); };
+
+  const startEdit = (item) => {
+    setEditingId(item.id);
+    setEditingKind(normalizeInventoryName(item.kind));
+    setEditingName(normalizeInventoryName(item.name));
+    setEditingUsageLocation(normalizeInventoryName(item.usageLocation));
+  };
+
   const handleEdit = async (item) => {
+    const kind = normalizeInventoryName(editingKind);
     const name = normalizeInventoryName(editingName);
+    const usageLocation = normalizeInventoryName(editingUsageLocation);
     if (!name) { alert('商品名を入力してください。'); return; }
     if (inventoryItems.some(other => other.id !== item.id && normalizeInventoryName(other.name).toLowerCase() === name.toLowerCase())) {
       alert('同じ商品名がすでに登録されています。'); return;
     }
     setIsSaving(true);
     try {
-      await editInventoryItem(item.id, name);
+      await editInventoryItem(item.id, { kind, name, usageLocation });
       setEditingId(null);
+      setEditingKind('');
       setEditingName('');
+      setEditingUsageLocation('');
     } catch (error) {
-      console.error('商品名の更新に失敗しました:', error);
-      alert('商品名を更新できませんでした。もう一度お試しください。');
+      console.error('商品情報の更新に失敗しました:', error);
+      alert('商品情報を更新できませんでした。もう一度お試しください。');
     } finally { setIsSaving(false); }
   };
+
+  const handleImageUpload = async (item, file) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { alert('画像ファイルを選択してください。'); return; }
+    if (file.size > 10 * 1024 * 1024) { alert('画像は10MB以下のファイルを選択してください。'); return; }
+    setUploadingImageId(item.id);
+    try {
+      const uploaded = await uploadTaskImageToCloudinary(file);
+      await updateInventoryImage(item.id, {
+        imageUrl: uploaded.secure_url,
+        imageName: file.name || '',
+        imagePublicId: uploaded.public_id || '',
+        imageBytes: Number(file.size || 0)
+      });
+    } catch (error) {
+      console.error('在庫商品の画像保存に失敗しました:', error);
+      alert('画像を保存できませんでした。もう一度お試しください。');
+    } finally {
+      setUploadingImageId(null);
+    }
+  };
+
   const handleStockSave = async (item) => {
     const raw = stockDrafts[item.id] ?? String(Math.max(0, Number(item.stock) || 0));
     const stock = Number(raw);
@@ -3077,6 +3120,7 @@ const InventoryView = ({ inventoryItems = [], addInventoryItem, adjustInventoryS
       alert('在庫数を保存できませんでした。もう一度お試しください。');
     } finally { setIsSaving(false); }
   };
+
   const handleDelete = async (item) => {
     if (!window.confirm(`「${normalizeInventoryName(item.name)}」を在庫一覧から削除しますか？\\n関連する過去のタスク記録は残ります。`)) return;
     setIsSaving(true);
@@ -3087,30 +3131,50 @@ const InventoryView = ({ inventoryItems = [], addInventoryItem, adjustInventoryS
       alert('商品を削除できませんでした。もう一度お試しください。');
     } finally { setIsSaving(false); }
   };
-  const sortedItems = [...inventoryItems].sort((a,b) => normalizeInventoryName(a.name).localeCompare(normalizeInventoryName(b.name), 'ja'));
+
+  const sortedItems = [...inventoryItems].sort((a,b) => normalizeInventoryName(a.kind).localeCompare(normalizeInventoryName(b.kind), 'ja') || normalizeInventoryName(a.name).localeCompare(normalizeInventoryName(b.name), 'ja'));
   return <div className="flex-1 overflow-y-auto bg-gray-50 pb-[84px]">
     <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-4">
       <div className="flex items-center gap-3"><div className="w-11 h-11 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center"><Package size={24}/></div><div><h2 className="text-xl font-black text-gray-800">在庫管理</h2><p className="text-xs text-gray-500">日別タスクで商品を選ぶと在庫が1個減ります。</p></div></div>
       <form onSubmit={e => { e.preventDefault(); void handleAdd(); }} className="rounded-2xl border border-gray-200 bg-white p-4 space-y-3 shadow-sm">
         <h3 className="text-sm font-black text-gray-700">商品を追加</h3>
-        <input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="商品名を入力" className="w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base" maxLength={120}/>
+        <label className="block text-xs font-bold text-gray-600">種類（任意）<input value={newKind} onChange={e=>setNewKind(e.target.value)} placeholder="種類を入力（省略可）" className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base" maxLength={80}/></label>
+        <label className="block text-xs font-bold text-gray-600">商品名<input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="商品名を入力" className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base" maxLength={120} required/></label>
+        <label className="block text-xs font-bold text-gray-600">使用箇所（任意）<input value={newUsageLocation} onChange={e=>setNewUsageLocation(e.target.value)} placeholder="使用箇所を入力（省略可）" className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base" maxLength={120}/></label>
         <div className="flex items-center gap-3"><label className="text-sm font-bold text-gray-600 flex-1" htmlFor="inventory-new-stock">初期在庫数</label><input id="inventory-new-stock" type="number" inputMode="numeric" min="0" step="1" value={newStock} onChange={e=>setNewStock(e.target.value)} className="w-28 min-h-11 border border-gray-300 rounded-xl px-3 py-2 text-base text-right"/></div>
         <button type="submit" disabled={isSaving || !newName.trim()} className="w-full min-h-11 rounded-xl bg-blue-600 text-white font-bold text-sm disabled:opacity-50">{isSaving?'登録中…':'商品を追加'}</button>
-        <p className="text-[11px] text-gray-500">商品名は全角英数字で入力しても、登録時に半角英数字へ統一します。</p>
+        <p className="text-[11px] text-gray-500">種類・使用箇所は空欄でも登録できます。商品名は全角英数字で入力しても、登録時に半角英数字へ統一します。</p>
       </form>
       <div className="flex items-center justify-between"><h3 className="text-sm font-black text-gray-700">登録商品</h3><span className="text-xs text-gray-500">{sortedItems.length}商品</span></div>
       {sortedItems.length===0 ? <div className="rounded-xl bg-white border border-gray-200 p-6 text-center text-sm text-gray-500">商品が登録されていません。</div> : <div className="space-y-2">{sortedItems.map(item => {
+        const kind = normalizeInventoryName(item.kind);
         const name = normalizeInventoryName(item.name);
+        const usageLocation = normalizeInventoryName(item.usageLocation);
         const stock = Math.max(0, Number(item.stock) || 0);
         const low = stock <= 2;
         const stockValue = stockDrafts[item.id] ?? String(stock);
         return <div key={item.id} className={`rounded-xl border p-3 sm:p-4 space-y-3 ${low?'border-red-300 bg-red-50':'border-gray-200 bg-white'}`}>
           <div className="flex items-start gap-2">
             <div className={`min-w-0 flex-1 ${low?'text-red-700':'text-gray-800'}`}>
-              {editingId === item.id ? <input autoFocus value={editingName} onChange={e=>setEditingName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void handleEdit(item);}if(e.key==='Escape'){setEditingId(null);setEditingName('');}}} maxLength={120} className="w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white text-gray-800"/> : <div className="font-bold text-sm break-words">{name}</div>}
+              {editingId === item.id ? <div className="space-y-2">
+                <label className="block text-xs font-bold text-gray-600">種類（任意）<input value={editingKind} onChange={e=>setEditingKind(e.target.value)} maxLength={80} placeholder="種類（省略可）" className="mt-1 w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white text-gray-800"/></label>
+                <label className="block text-xs font-bold text-gray-600">商品名<input autoFocus value={editingName} onChange={e=>setEditingName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void handleEdit(item);}if(e.key==='Escape'){setEditingId(null);setEditingName('');}}} maxLength={120} className="mt-1 w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white text-gray-800"/></label>
+                <label className="block text-xs font-bold text-gray-600">使用箇所（任意）<input value={editingUsageLocation} onChange={e=>setEditingUsageLocation(e.target.value)} maxLength={120} placeholder="使用箇所（省略可）" className="mt-1 w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white text-gray-800"/></label>
+              </div> : <div>
+                <div className="text-xs text-gray-500">{kind || '種類未設定'}</div>
+                <div className="font-bold text-sm break-words">{name}</div>
+                {usageLocation && <div className="mt-1 text-xs text-gray-600">使用箇所：{usageLocation}</div>}
+              </div>}
               {low && <div className="mt-1 text-[11px] font-black text-red-600">在庫わずか・補充してください</div>}
             </div>
-            {editingId === item.id ? <div className="flex gap-1 shrink-0"><button type="button" disabled={isSaving} onClick={()=>void handleEdit(item)} className="min-h-10 px-3 rounded-lg bg-blue-600 text-white text-xs font-bold disabled:opacity-50">保存</button><button type="button" onClick={()=>{setEditingId(null);setEditingName('');}} className="min-h-10 px-3 rounded-lg border border-gray-300 bg-white text-xs font-bold">取消</button></div> : <div className="flex gap-1 shrink-0"><button type="button" onClick={()=>startEdit(item)} aria-label={name+'の商品名を編集'} className="w-10 h-10 rounded-lg border border-gray-300 bg-white flex items-center justify-center"><Edit2 size={16}/></button><button type="button" onClick={()=>void handleDelete(item)} disabled={isSaving} aria-label={name+'を削除'} className="w-10 h-10 rounded-lg border border-red-200 bg-white text-red-600 flex items-center justify-center disabled:opacity-50"><Trash2 size={16}/></button></div>}
+            {editingId === item.id ? <div className="flex gap-1 shrink-0"><button type="button" disabled={isSaving} onClick={()=>void handleEdit(item)} className="min-h-10 px-3 rounded-lg bg-blue-600 text-white text-xs font-bold disabled:opacity-50">保存</button><button type="button" onClick={()=>{setEditingId(null);setEditingKind('');setEditingName('');setEditingUsageLocation('');}} className="min-h-10 px-3 rounded-lg border border-gray-300 bg-white text-xs font-bold">取消</button></div> : <div className="flex gap-1 shrink-0">
+              <label title="商品画像を保存" aria-label={name+'の画像を保存'} className={`w-10 h-10 rounded-lg border border-blue-200 bg-white text-blue-600 flex items-center justify-center cursor-pointer ${uploadingImageId===item.id?'opacity-50 pointer-events-none':''}`}>
+                {uploadingImageId===item.id ? <Loader2 size={16} className="animate-spin"/> : <ImageIcon size={16}/>}
+                <input type="file" accept="image/*" className="hidden" disabled={uploadingImageId===item.id || isSaving} onChange={e=>{const file=e.target.files?.[0];if(file)void handleImageUpload(item,file);e.target.value='';}}/>
+              </label>
+              <button type="button" onClick={()=>startEdit(item)} aria-label={name+'の商品情報を編集'} className="w-10 h-10 rounded-lg border border-gray-300 bg-white flex items-center justify-center"><Edit2 size={16}/></button>
+              <button type="button" onClick={()=>void handleDelete(item)} disabled={isSaving || uploadingImageId===item.id} aria-label={name+'を削除'} className="w-10 h-10 rounded-lg border border-red-200 bg-white text-red-600 flex items-center justify-center disabled:opacity-50"><Trash2 size={16}/></button>
+            </div>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" aria-label={name+'の在庫を1個減らす'} disabled={stock<=0 || isSaving} onClick={()=>void adjustInventoryStock(item.id,-1)} className="w-10 h-10 rounded-xl border border-gray-300 bg-white text-xl font-bold disabled:opacity-30">−</button>
@@ -3118,6 +3182,7 @@ const InventoryView = ({ inventoryItems = [], addInventoryItem, adjustInventoryS
             <span className={`text-sm font-bold ${low?'text-red-600':'text-gray-600'}`}>個</span>
             <button type="button" aria-label={name+'の在庫を1個増やす'} disabled={isSaving} onClick={()=>void adjustInventoryStock(item.id,1)} className="w-10 h-10 rounded-xl border border-gray-300 bg-white text-xl font-bold disabled:opacity-50">＋</button>
             <button type="button" disabled={isSaving || (stockDrafts[item.id] === undefined || stockDrafts[item.id] === String(stock))} onClick={()=>void handleStockSave(item)} className="min-h-10 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold disabled:opacity-40">個数を保存</button>
+            {item.imageUrl && <a href={item.imageUrl} target="_blank" rel="noreferrer" title="商品画像を拡大表示" className="inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-300 bg-white"><img src={item.imageUrl} alt={name+'の商品画像'} className="h-full w-full object-cover"/></a>}
           </div>
         </div>;
       })}</div>}
@@ -3340,11 +3405,11 @@ export default function App() {
         let currentUserOrder = [...(data.userOrder || [])];
         let currentPartnerItems = Array.isArray(data.partnerItems) ? data.partnerItems : [];
         let currentPartnerNames = Array.isArray(data.partnerNames) ? data.partnerNames : [];
-        let currentInventoryItems = (Array.isArray(data.inventoryItems) ? data.inventoryItems : INVENTORY_SEED_ITEMS).map(item => ({ ...item, name: normalizeInventoryName(item.name) }));
+        let currentInventoryItems = (Array.isArray(data.inventoryItems) ? data.inventoryItems : INVENTORY_SEED_ITEMS).map(item => ({ ...item, kind: normalizeInventoryName(item.kind), name: normalizeInventoryName(item.name), usageLocation: normalizeInventoryName(item.usageLocation) }));
         if (!Array.isArray(data.inventoryItems)) {
           updateDoc(doc(db, 'app_data', 'shared_state'), { inventoryItems: currentInventoryItems }).catch(error => console.error('初期在庫商品の保存に失敗しました:', error));
-        } else if (currentInventoryItems.some((item, index) => item.name !== data.inventoryItems[index]?.name)) {
-          updateDoc(doc(db, 'app_data', 'shared_state'), { inventoryItems: currentInventoryItems }).catch(error => console.error('商品名の半角統一に失敗しました:', error));
+        } else if (currentInventoryItems.some((item, index) => item.name !== data.inventoryItems[index]?.name || item.kind !== data.inventoryItems[index]?.kind || item.usageLocation !== data.inventoryItems[index]?.usageLocation)) {
+          updateDoc(doc(db, 'app_data', 'shared_state'), { inventoryItems: currentInventoryItems }).catch(error => console.error('在庫商品情報の正規化に失敗しました:', error));
         }
         let currentDebugLogs = Array.isArray(data.debugLogs) ? data.debugLogs : [];
         let currentShiftLogs = (data.shiftLogs && typeof data.shiftLogs === 'object') ? data.shiftLogs : {};
@@ -3788,10 +3853,10 @@ export default function App() {
                   await updateDoc(doc(db, 'app_data', 'shared_state'), { inventoryItems: updatedItems });
                   setInventoryItems(updatedItems);
                 }}
-                editInventoryItem={async (itemId, name) => {
-                  const normalizedName = normalizeInventoryName(name);
-                  const updatedItems = inventoryItems.map(item => item.id === itemId ? { ...item, name: normalizedName } : item);
-                  const updatedTasks = Object.fromEntries(Object.entries(teamData.tasks || {}).map(([dateStr, owners]) => [dateStr, Object.fromEntries(Object.entries(owners || {}).map(([ownerUid, tasks]) => [ownerUid, (tasks || []).map(task => task.productId === itemId ? { ...task, productName: normalizedName } : task)]))]));
+                editInventoryItem={async (itemId, changes) => {
+                  const normalizedChanges = { kind: normalizeInventoryName(changes.kind), name: normalizeInventoryName(changes.name), usageLocation: normalizeInventoryName(changes.usageLocation) };
+                  const updatedItems = inventoryItems.map(item => item.id === itemId ? { ...item, ...normalizedChanges } : item);
+                  const updatedTasks = Object.fromEntries(Object.entries(teamData.tasks || {}).map(([dateStr, owners]) => [dateStr, Object.fromEntries(Object.entries(owners || {}).map(([ownerUid, tasks]) => [ownerUid, (tasks || []).map(task => task.productId === itemId ? { ...task, productName: normalizedChanges.name } : task)]))]));
                   const updatedTeamData = { ...teamData, tasks: updatedTasks };
                   await updateDoc(doc(db, 'app_data', 'shared_state'), { inventoryItems: updatedItems, teamData: updatedTeamData });
                   setInventoryItems(updatedItems);
@@ -3799,6 +3864,11 @@ export default function App() {
                 }}
                 deleteInventoryItem={async (itemId) => {
                   const updatedItems = inventoryItems.filter(item => item.id !== itemId);
+                  await updateDoc(doc(db, 'app_data', 'shared_state'), { inventoryItems: updatedItems });
+                  setInventoryItems(updatedItems);
+                }}
+                updateInventoryImage={async (itemId, imageData) => {
+                  const updatedItems = inventoryItems.map(item => item.id === itemId ? { ...item, ...imageData } : item);
                   await updateDoc(doc(db, 'app_data', 'shared_state'), { inventoryItems: updatedItems });
                   setInventoryItems(updatedItems);
                 }}
