@@ -737,7 +737,6 @@ const DailyDetailView = ({
   const [newTaskImage, setNewTaskImage] = useState(null);
   const [newTaskImagePreview, setNewTaskImagePreview] = useState('');
   const [isUploading, setIsUploading] = useState(false);
-  const [showPersonalMemos, setShowPersonalMemos] = useState(false);
   const [selectedPersonalMemoKey, setSelectedPersonalMemoKey] = useState('');
   const [isEditingPersonalMemo, setIsEditingPersonalMemo] = useState(false);
   const [personalMemoEditSubject, setPersonalMemoEditSubject] = useState('');
@@ -788,7 +787,6 @@ const DailyDetailView = ({
     setSelectedPersonalMemoKey(`${task.taskDate}-${task.id}`);
     setIsEditingPersonalMemo(false);
     setPersonalMemoEditImage(null);
-    setShowPersonalMemos(false);
   };
 
   const startPersonalMemoEdit = () => {
@@ -1241,18 +1239,6 @@ const DailyDetailView = ({
         {/* スマホで使いやすいよう、タスク入力欄を一覧の上へ移動 */}
         <div className="bg-white border-b border-gray-200 p-3 shrink-0 shadow-sm">
           <div className="max-w-3xl mx-auto">
-            {selectedUserUid === currentUserUid && (
-              <div className="flex justify-end mb-2">
-                <button
-                  type="button"
-                  onClick={() => setShowPersonalMemos(true)}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-purple-200 bg-purple-50 text-purple-700 text-xs font-bold hover:bg-purple-100"
-                >
-                  🔒 個人メモ一覧
-                  <span className="rounded-full bg-purple-200 px-2 py-0.5 text-[10px]">{personalMemoTasks.length}</span>
-                </button>
-              </div>
-            )}
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <span className="text-xs font-black text-gray-600">このタスクを</span>
               <button type="button" onClick={() => setNewTaskVisibility('public')} className={`px-3 py-1.5 rounded-full text-xs font-black border transition-all ${newTaskVisibility === 'public' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-500 border-gray-200'}`}>👥 みんなに公開</button>
@@ -1338,49 +1324,44 @@ const DailyDetailView = ({
               <p className="text-gray-400 text-sm">タスクはありません</p>
             </div>
           ) : selectedDateTasks.map(task => <TaskItem key={task.id} task={task}/>) }
+
+          {selectedUserUid === currentUserUid && (
+            <section className="mt-4 rounded-2xl border border-purple-200 bg-white overflow-hidden">
+              <div className="px-3 py-3 border-b border-purple-100 bg-purple-50 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-black text-purple-800">🔒 個人メモ</h3>
+                  <p className="text-[10px] text-purple-600 mt-0.5">自分だけが確認できるメモです</p>
+                </div>
+                <span className="shrink-0 rounded-full bg-purple-200 text-purple-800 px-2.5 py-1 text-[10px] font-black">{personalMemoTasks.length}件</span>
+              </div>
+              <div className="p-3 space-y-2">
+                {personalMemoTasks.length === 0 ? (
+                  <div className="py-5 text-center">
+                    <p className="text-xs font-bold text-gray-500">個人メモはまだありません</p>
+                    <p className="text-[10px] text-gray-400 mt-1">上の入力欄で「個人メモ」を選んで保存すると、ここに表示されます。</p>
+                  </div>
+                ) : personalMemoTasks.map(memo => (
+                  <button
+                    key={`${memo.taskDate}-${memo.id}`}
+                    type="button"
+                    onClick={() => openPersonalMemo(memo)}
+                    className="w-full text-left rounded-xl border border-purple-100 bg-purple-50/40 hover:bg-purple-50 active:bg-purple-100 p-3 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="text-[10px] text-purple-700 font-bold shrink-0">{memo.taskDate.replace(/-/g, '/')}</span>
+                      {memo.endTime && <span className="text-[10px] text-orange-600 font-bold shrink-0">終了予定 {memo.endTime}</span>}
+                    </div>
+                    <div className="text-sm font-black text-gray-800 mt-1 break-words">{memo.subject || '件名未設定'}</div>
+                    {memo.text && <p className="text-xs text-gray-600 mt-1 whitespace-pre-wrap break-words line-clamp-3">{memo.text}</p>}
+                    {memo.imageUrl && <span className="inline-flex items-center gap-1 text-[10px] text-gray-500 mt-2"><ImageIcon size={12}/>画像添付あり</span>}
+                    <div className="text-[10px] font-bold text-purple-600 mt-2">タップして詳細・編集・削除</div>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
         </div>
       </div>
-
-      {showPersonalMemos && selectedUserUid === currentUserUid && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-3 sm:p-4" onClick={() => setShowPersonalMemos(false)}>
-          <div className="w-full max-w-xl max-h-[85dvh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="px-4 py-3 border-b flex items-center justify-between shrink-0">
-              <div>
-                <h3 className="text-base font-black text-gray-800">個人メモ一覧</h3>
-                <p className="text-xs text-gray-500 mt-1">日付を問わず、自分の個人メモを確認できます（{personalMemoTasks.length}件）</p>
-              </div>
-              <button type="button" onClick={() => setShowPersonalMemos(false)} className="p-2 rounded-full text-gray-500 hover:bg-gray-100" aria-label="個人メモ一覧を閉じる"><X size={18}/></button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-3 space-y-2">
-              {personalMemoTasks.length === 0 ? (
-                <div className="text-center py-10">
-                  <ClipboardList className="mx-auto text-gray-300 mb-3" size={40}/>
-                  <p className="text-sm font-bold text-gray-500">個人メモはまだありません</p>
-                  <p className="text-xs text-gray-400 mt-1">日別タスクで「個人メモ」を選んで保存してください。</p>
-                </div>
-              ) : personalMemoTasks.map(memo => (
-                <button
-                  key={`${memo.taskDate}-${memo.id}`}
-                  type="button"
-                  onClick={() => openPersonalMemo(memo)}
-                  className="w-full text-left rounded-xl border border-purple-100 bg-purple-50/50 hover:bg-purple-50 p-3"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="text-[11px] text-purple-700 font-bold shrink-0">{memo.taskDate.replace(/-/g, '/')}</span>
-                    {memo.endTime && <span className="text-[10px] text-orange-600 font-bold shrink-0">終了予定 {memo.endTime}</span>}
-                  </div>
-                  <div className="text-sm font-black text-gray-800 mt-1 break-words">{memo.subject || '件名未設定'}</div>
-                  {memo.text && <p className="text-xs text-gray-600 mt-1 whitespace-pre-wrap break-words line-clamp-3">{memo.text}</p>}
-                  {memo.imageUrl && <span className="inline-flex items-center gap-1 text-[10px] text-gray-500 mt-2"><ImageIcon size={12}/>画像添付あり</span>}
-                </button>
-              ))}
-            </div>
-            <div className="border-t p-3 flex justify-end shrink-0">
-              <button type="button" onClick={() => setShowPersonalMemos(false)} className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-xs font-bold">閉じる</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {selectedPersonalMemo && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-3 sm:p-4" onClick={closePersonalMemoDetail}>
