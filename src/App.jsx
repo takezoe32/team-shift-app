@@ -3019,7 +3019,7 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
 
 const normalizeInventoryName = (value) => String(value ?? '').normalize('NFKC').trim();
 
-const InventoryView = ({ inventoryItems = [], addInventoryItem, adjustInventoryStock, editInventoryItem, deleteInventoryItem }) => {
+const InventoryView = ({ inventoryItems = [], addInventoryItem, adjustInventoryStock, editInventoryItem, deleteInventoryItem, updateInventoryImage }) => {
   const [newKind, setNewKind] = useState('');
   const [newName, setNewName] = useState('');
   const [newUsageLocation, setNewUsageLocation] = useState('');
@@ -3029,6 +3029,7 @@ const InventoryView = ({ inventoryItems = [], addInventoryItem, adjustInventoryS
   const [editingName, setEditingName] = useState('');
   const [editingUsageLocation, setEditingUsageLocation] = useState('');
   const [stockDrafts, setStockDrafts] = useState({});
+  const [uploadingImageId, setUploadingImageId] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
 
   const handleAdd = async () => {
@@ -3080,6 +3081,27 @@ const InventoryView = ({ inventoryItems = [], addInventoryItem, adjustInventoryS
       console.error('商品情報の更新に失敗しました:', error);
       alert('商品情報を更新できませんでした。もう一度お試しください。');
     } finally { setIsSaving(false); }
+  };
+
+  const handleImageUpload = async (item, file) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { alert('画像ファイルを選択してください。'); return; }
+    if (file.size > 10 * 1024 * 1024) { alert('画像は10MB以下のファイルを選択してください。'); return; }
+    setUploadingImageId(item.id);
+    try {
+      const uploaded = await uploadTaskImageToCloudinary(file);
+      await updateInventoryImage(item.id, {
+        imageUrl: uploaded.secure_url,
+        imageName: file.name || '',
+        imagePublicId: uploaded.public_id || '',
+        imageBytes: Number(file.size || 0)
+      });
+    } catch (error) {
+      console.error('在庫商品の画像保存に失敗しました:', error);
+      alert('画像を保存できませんでした。もう一度お試しください。');
+    } finally {
+      setUploadingImageId(null);
+    }
   };
 
   const handleStockSave = async (item) => {
@@ -3145,7 +3167,14 @@ const InventoryView = ({ inventoryItems = [], addInventoryItem, adjustInventoryS
               </div>}
               {low && <div className="mt-1 text-[11px] font-black text-red-600">在庫わずか・補充してください</div>}
             </div>
-            {editingId === item.id ? <div className="flex gap-1 shrink-0"><button type="button" disabled={isSaving} onClick={()=>void handleEdit(item)} className="min-h-10 px-3 rounded-lg bg-blue-600 text-white text-xs font-bold disabled:opacity-50">保存</button><button type="button" onClick={()=>{setEditingId(null);setEditingKind('');setEditingName('');setEditingUsageLocation('');}} className="min-h-10 px-3 rounded-lg border border-gray-300 bg-white text-xs font-bold">取消</button></div> : <div className="flex gap-1 shrink-0"><button type="button" onClick={()=>startEdit(item)} aria-label={name+'の商品情報を編集'} className="w-10 h-10 rounded-lg border border-gray-300 bg-white flex items-center justify-center"><Edit2 size={16}/></button><button type="button" onClick={()=>void handleDelete(item)} disabled={isSaving} aria-label={name+'を削除'} className="w-10 h-10 rounded-lg border border-red-200 bg-white text-red-600 flex items-center justify-center disabled:opacity-50"><Trash2 size={16}/></button></div>}
+            {editingId === item.id ? <div className="flex gap-1 shrink-0"><button type="button" disabled={isSaving} onClick={()=>void handleEdit(item)} className="min-h-10 px-3 rounded-lg bg-blue-600 text-white text-xs font-bold disabled:opacity-50">保存</button><button type="button" onClick={()=>{setEditingId(null);setEditingKind('');setEditingName('');setEditingUsageLocation('');}} className="min-h-10 px-3 rounded-lg border border-gray-300 bg-white text-xs font-bold">取消</button></div> : <div className="flex gap-1 shrink-0">
+              <label title="商品画像を保存" aria-label={name+'の画像を保存'} className={`w-10 h-10 rounded-lg border border-blue-200 bg-white text-blue-600 flex items-center justify-center cursor-pointer ${uploadingImageId===item.id?'opacity-50 pointer-events-none':''}`}>
+                {uploadingImageId===item.id ? <Loader2 size={16} className="animate-spin"/> : <ImageIcon size={16}/>}
+                <input type="file" accept="image/*" className="hidden" disabled={uploadingImageId===item.id || isSaving} onChange={e=>{const file=e.target.files?.[0];if(file)void handleImageUpload(item,file);e.target.value='';}}/>
+              </label>
+              <button type="button" onClick={()=>startEdit(item)} aria-label={name+'の商品情報を編集'} className="w-10 h-10 rounded-lg border border-gray-300 bg-white flex items-center justify-center"><Edit2 size={16}/></button>
+              <button type="button" onClick={()=>void handleDelete(item)} disabled={isSaving || uploadingImageId===item.id} aria-label={name+'を削除'} className="w-10 h-10 rounded-lg border border-red-200 bg-white text-red-600 flex items-center justify-center disabled:opacity-50"><Trash2 size={16}/></button>
+            </div>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" aria-label={name+'の在庫を1個減らす'} disabled={stock<=0 || isSaving} onClick={()=>void adjustInventoryStock(item.id,-1)} className="w-10 h-10 rounded-xl border border-gray-300 bg-white text-xl font-bold disabled:opacity-30">−</button>
@@ -3153,6 +3182,7 @@ const InventoryView = ({ inventoryItems = [], addInventoryItem, adjustInventoryS
             <span className={`text-sm font-bold ${low?'text-red-600':'text-gray-600'}`}>個</span>
             <button type="button" aria-label={name+'の在庫を1個増やす'} disabled={isSaving} onClick={()=>void adjustInventoryStock(item.id,1)} className="w-10 h-10 rounded-xl border border-gray-300 bg-white text-xl font-bold disabled:opacity-50">＋</button>
             <button type="button" disabled={isSaving || (stockDrafts[item.id] === undefined || stockDrafts[item.id] === String(stock))} onClick={()=>void handleStockSave(item)} className="min-h-10 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold disabled:opacity-40">個数を保存</button>
+            {item.imageUrl && <a href={item.imageUrl} target="_blank" rel="noreferrer" title="商品画像を拡大表示" className="inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-300 bg-white"><img src={item.imageUrl} alt={name+'の商品画像'} className="h-full w-full object-cover"/></a>}
           </div>
         </div>;
       })}</div>}
@@ -3834,6 +3864,11 @@ export default function App() {
                 }}
                 deleteInventoryItem={async (itemId) => {
                   const updatedItems = inventoryItems.filter(item => item.id !== itemId);
+                  await updateDoc(doc(db, 'app_data', 'shared_state'), { inventoryItems: updatedItems });
+                  setInventoryItems(updatedItems);
+                }}
+                updateInventoryImage={async (itemId, imageData) => {
+                  const updatedItems = inventoryItems.map(item => item.id === itemId ? { ...item, ...imageData } : item);
                   await updateDoc(doc(db, 'app_data', 'shared_state'), { inventoryItems: updatedItems });
                   setInventoryItems(updatedItems);
                 }}
