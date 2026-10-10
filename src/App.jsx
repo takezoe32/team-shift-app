@@ -737,6 +737,14 @@ const DailyDetailView = ({
   const [newTaskImage, setNewTaskImage] = useState(null);
   const [newTaskImagePreview, setNewTaskImagePreview] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [showPersonalMemos, setShowPersonalMemos] = useState(false);
+  const [selectedPersonalMemoKey, setSelectedPersonalMemoKey] = useState('');
+  const [isEditingPersonalMemo, setIsEditingPersonalMemo] = useState(false);
+  const [personalMemoEditSubject, setPersonalMemoEditSubject] = useState('');
+  const [personalMemoEditText, setPersonalMemoEditText] = useState('');
+  const [personalMemoEditEndTime, setPersonalMemoEditEndTime] = useState('');
+  const [personalMemoEditImage, setPersonalMemoEditImage] = useState(null);
+  const [isSavingPersonalMemo, setIsSavingPersonalMemo] = useState(false);
   const imageInputRef = React.useRef(null);
   
   const currentUser = users[currentUserUid];
@@ -762,6 +770,90 @@ const DailyDetailView = ({
           .map(task => ({ ...task, ownerUid, taskDate: dateStr })))
     );
   const selectedDateShifts = teamData.shifts[selectedDate] || {};
+
+  // 個人メモは日付に関係なく、自分が登録した private タスクを一覧化する。
+  // 他のユーザーの個人メモは検索・表示対象にしない。
+  const personalMemoTasks = Object.entries(teamData.tasks || {})
+    .flatMap(([dateStr, owners]) => (owners?.[currentUserUid] || [])
+      .filter(task => task?.visibility === 'private')
+      .map(task => ({ ...task, ownerUid: currentUserUid, taskDate: dateStr })))
+    .sort((a, b) => (b.taskDate || '').localeCompare(a.taskDate || '') ||
+      (b.createdAt || '').localeCompare(a.createdAt || ''));
+  const selectedPersonalMemo = personalMemoTasks.find(
+    task => `${task.taskDate}-${task.id}` === selectedPersonalMemoKey
+  ) || null;
+
+  const openPersonalMemo = (task) => {
+    setSelectedPersonalMemoKey(`${task.taskDate}-${task.id}`);
+    setIsEditingPersonalMemo(false);
+    setPersonalMemoEditImage(null);
+    setShowPersonalMemos(false);
+  };
+
+  const startPersonalMemoEdit = () => {
+    if (!selectedPersonalMemo) return;
+    setPersonalMemoEditSubject(selectedPersonalMemo.subject || '');
+    setPersonalMemoEditText(selectedPersonalMemo.text || '');
+    setPersonalMemoEditEndTime(selectedPersonalMemo.endTime || '');
+    setPersonalMemoEditImage(null);
+    setIsEditingPersonalMemo(true);
+  };
+
+  const closePersonalMemoDetail = () => {
+    setSelectedPersonalMemoKey('');
+    setIsEditingPersonalMemo(false);
+    setPersonalMemoEditImage(null);
+  };
+
+  const handlePersonalMemoImageChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('画像ファイルを選択してください。');
+      e.target.value = '';
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      alert('画像は10MB以下にしてください。');
+      e.target.value = '';
+      return;
+    }
+    setPersonalMemoEditImage(file);
+  };
+
+  const savePersonalMemo = async () => {
+    if (!selectedPersonalMemo) return;
+    if (!personalMemoEditSubject.trim() || (!personalMemoEditText.trim() && !selectedPersonalMemo.imageUrl && !personalMemoEditImage)) {
+      alert('件名と、内容または画像を入力してください。');
+      return;
+    }
+    setIsSavingPersonalMemo(true);
+    try {
+      const changes = {
+        subject: personalMemoEditSubject.trim(),
+        text: personalMemoEditText.trim(),
+        endTime: personalMemoEditEndTime,
+        visibility: 'private',
+        assigneeIds: [currentUserUid]
+      };
+      if (personalMemoEditImage) {
+        const result = await uploadTaskImageToCloudinary(personalMemoEditImage);
+        changes.imageUrl = result.secure_url || result.url || '';
+        changes.imageName = personalMemoEditImage.name;
+        changes.imagePublicId = result.public_id || '';
+        changes.imageBytes = Number(result.bytes || personalMemoEditImage.size || 0);
+        changes.imageUploadedAt = new Date().toISOString();
+      }
+      await updateTaskText(selectedPersonalMemo.taskDate, currentUserUid, selectedPersonalMemo.id, changes);
+      setIsEditingPersonalMemo(false);
+      setPersonalMemoEditImage(null);
+    } catch (error) {
+      console.error('個人メモの更新に失敗しました:', error);
+      alert(`個人メモを保存できませんでした。\\n${error?.message || 'もう一度お試しください。'}`);
+    } finally {
+      setIsSavingPersonalMemo(false);
+    }
+  };
 
   const handleImageChange = (e) => {
     const file = e.target.files?.[0];
@@ -1126,6 +1218,18 @@ const DailyDetailView = ({
         {/* スマホで使いやすいよう、タスク入力欄を一覧の上へ移動 */}
         <div className="bg-white border-b border-gray-200 p-3 shrink-0 shadow-sm">
           <div className="max-w-3xl mx-auto">
+            {selectedUserUid === currentUserUid && (
+              <div className="flex justify-end mb-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPersonalMemos(true)}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-purple-200 bg-purple-50 text-purple-700 text-xs font-bold hover:bg-purple-100"
+                >
+                  🔒 個人メモ一覧
+                  <span className="rounded-full bg-purple-200 px-2 py-0.5 text-[10px]">{personalMemoTasks.length}</span>
+                </button>
+              </div>
+            )}
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <span className="text-xs font-black text-gray-600">このタスクを</span>
               <button type="button" onClick={() => setNewTaskVisibility('public')} className={`px-3 py-1.5 rounded-full text-xs font-black border transition-all ${newTaskVisibility === 'public' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-500 border-gray-200'}`}>👥 みんなに公開</button>
@@ -1213,6 +1317,121 @@ const DailyDetailView = ({
           ) : selectedDateTasks.map(task => <TaskItem key={task.id} task={task}/>) }
         </div>
       </div>
+
+      {showPersonalMemos && selectedUserUid === currentUserUid && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-3 sm:p-4" onClick={() => setShowPersonalMemos(false)}>
+          <div className="w-full max-w-xl max-h-[85dvh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-4 py-3 border-b flex items-center justify-between shrink-0">
+              <div>
+                <h3 className="text-base font-black text-gray-800">個人メモ一覧</h3>
+                <p className="text-xs text-gray-500 mt-1">日付を問わず、自分の個人メモを確認できます（{personalMemoTasks.length}件）</p>
+              </div>
+              <button type="button" onClick={() => setShowPersonalMemos(false)} className="p-2 rounded-full text-gray-500 hover:bg-gray-100" aria-label="個人メモ一覧を閉じる"><X size={18}/></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+              {personalMemoTasks.length === 0 ? (
+                <div className="text-center py-10">
+                  <ClipboardList className="mx-auto text-gray-300 mb-3" size={40}/>
+                  <p className="text-sm font-bold text-gray-500">個人メモはまだありません</p>
+                  <p className="text-xs text-gray-400 mt-1">日別タスクで「個人メモ」を選んで保存してください。</p>
+                </div>
+              ) : personalMemoTasks.map(memo => (
+                <button
+                  key={`${memo.taskDate}-${memo.id}`}
+                  type="button"
+                  onClick={() => openPersonalMemo(memo)}
+                  className="w-full text-left rounded-xl border border-purple-100 bg-purple-50/50 hover:bg-purple-50 p-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-[11px] text-purple-700 font-bold shrink-0">{memo.taskDate.replace(/-/g, '/')}</span>
+                    {memo.endTime && <span className="text-[10px] text-orange-600 font-bold shrink-0">終了予定 {memo.endTime}</span>}
+                  </div>
+                  <div className="text-sm font-black text-gray-800 mt-1 break-words">{memo.subject || '件名未設定'}</div>
+                  {memo.text && <p className="text-xs text-gray-600 mt-1 whitespace-pre-wrap break-words line-clamp-3">{memo.text}</p>}
+                  {memo.imageUrl && <span className="inline-flex items-center gap-1 text-[10px] text-gray-500 mt-2"><ImageIcon size={12}/>画像添付あり</span>}
+                </button>
+              ))}
+            </div>
+            <div className="border-t p-3 flex justify-end shrink-0">
+              <button type="button" onClick={() => setShowPersonalMemos(false)} className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-xs font-bold">閉じる</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedPersonalMemo && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-3 sm:p-4" onClick={closePersonalMemoDetail}>
+          <div className="w-full max-w-xl max-h-[90dvh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-4 py-3 border-b flex items-start justify-between gap-3 shrink-0">
+              <div className="min-w-0">
+                <div className="text-[10px] font-bold text-purple-700">🔒 個人メモ詳細</div>
+                <h3 className="text-base font-black text-gray-800 mt-1 break-words">{selectedPersonalMemo.subject || '件名未設定'}</h3>
+                <p className="text-xs text-gray-500 mt-1">{selectedPersonalMemo.taskDate.replace(/-/g, '/')} ・ 終了予定 {selectedPersonalMemo.endTime || '未設定'}</p>
+              </div>
+              <button type="button" onClick={closePersonalMemoDetail} className="p-2 rounded-full text-gray-500 hover:bg-gray-100 shrink-0" aria-label="個人メモ詳細を閉じる"><X size={18}/></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {isEditingPersonalMemo ? (
+                <>
+                  <label className="block">
+                    <span className="block text-xs font-bold text-gray-600 mb-1">件名</span>
+                    <input type="text" value={personalMemoEditSubject} onChange={e => setPersonalMemoEditSubject(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="件名"/>
+                  </label>
+                  <label className="block">
+                    <span className="block text-xs font-bold text-gray-600 mb-1">内容</span>
+                    <textarea value={personalMemoEditText} onChange={e => setPersonalMemoEditText(e.target.value)} rows={7} className="w-full border rounded-lg px-3 py-2 text-sm resize-y" placeholder="個人メモの内容"/>
+                  </label>
+                  <label className="block">
+                    <span className="block text-xs font-bold text-gray-600 mb-1">終了予定時刻（任意・15分刻み）</span>
+                    <div className="flex items-center gap-2">
+                      <select aria-label="個人メモ終了予定時刻の時" value={personalMemoEditEndTime ? personalMemoEditEndTime.split(':')[0] : ''} onChange={e => setPersonalMemoEditEndTime(e.target.value ? e.target.value + ':' + ((personalMemoEditEndTime || '').split(':')[1] || '00') : '')} className="border rounded-lg px-2 py-2 text-sm">
+                        <option value="">時</option>
+                        {Array.from({length:24}, (_, i) => String(i).padStart(2, '0')).map(v => <option key={v} value={v}>{v}</option>)}
+                      </select>
+                      <span>:</span>
+                      <select aria-label="個人メモ終了予定時刻の分" value={personalMemoEditEndTime ? personalMemoEditEndTime.split(':')[1] : ''} onChange={e => setPersonalMemoEditEndTime(e.target.value ? ((personalMemoEditEndTime || '').split(':')[0] || '00') + ':' + e.target.value : '')} className="border rounded-lg px-2 py-2 text-sm">
+                        <option value="">分</option>
+                        {['00', '15', '30', '45'].map(v => <option key={v} value={v}>{v}</option>)}
+                      </select>
+                    </div>
+                  </label>
+                  <div className="rounded-xl border border-gray-200 p-3">
+                    <div className="text-xs font-bold text-gray-600 mb-2">画像（任意）</div>
+                    {selectedPersonalMemo.imageUrl && <img src={selectedPersonalMemo.imageUrl} alt={selectedPersonalMemo.imageName || '個人メモの画像'} className="max-h-48 max-w-full object-contain rounded-lg border mb-2"/>}
+                    <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 text-gray-700 text-xs font-bold cursor-pointer hover:bg-gray-200">
+                      <ImageIcon size={15}/><span>画像を追加・差し替え</span>
+                      <input type="file" accept="image/*" className="hidden" onChange={handlePersonalMemoImageChange}/>
+                    </label>
+                    {personalMemoEditImage && <p className="text-[10px] text-gray-500 mt-2">{personalMemoEditImage.name} を保存時にアップロードします。</p>}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="rounded-xl bg-purple-50 border border-purple-100 p-3">
+                    <div className="text-[10px] font-bold text-purple-700 mb-1">内容</div>
+                    <div className="text-sm text-gray-800 whitespace-pre-wrap break-words">{selectedPersonalMemo.text || '内容はありません。'}</div>
+                  </div>
+                  {selectedPersonalMemo.imageUrl && <div><div className="text-[10px] font-bold text-gray-500 mb-1">添付画像</div><img src={selectedPersonalMemo.imageUrl} alt={selectedPersonalMemo.imageName || '個人メモの画像'} className="max-h-[50vh] max-w-full rounded-lg border object-contain"/></div>}
+                  {selectedPersonalMemo.createdAt && <p className="text-[10px] text-gray-400">登録日時：{new Date(selectedPersonalMemo.createdAt).toLocaleString('ja-JP')}</p>}
+                </>
+              )}
+            </div>
+            <div className="border-t p-3 flex gap-2 shrink-0">
+              {isEditingPersonalMemo ? (
+                <>
+                  <button type="button" onClick={() => { setIsEditingPersonalMemo(false); setPersonalMemoEditImage(null); }} disabled={isSavingPersonalMemo} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-xs font-bold">キャンセル</button>
+                  <button type="button" onClick={savePersonalMemo} disabled={isSavingPersonalMemo} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold disabled:opacity-50">{isSavingPersonalMemo ? '保存中…' : '変更を保存'}</button>
+                </>
+              ) : (
+                <>
+                  <button type="button" onClick={closePersonalMemoDetail} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-xs font-bold">閉じる</button>
+                  <button type="button" onClick={startPersonalMemoEdit} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold flex items-center justify-center gap-2"><Edit2 size={14}/>編集</button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
