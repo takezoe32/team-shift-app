@@ -213,7 +213,7 @@ const getJapaneseHolidayMap = (year) => {
   const holidays = {};
   const nationalHolidayKeys = [];
   const addHoliday = (month, day, name) => {
-    const key = \`${year}-\${String(month).padStart(2, '0')}-\${String(day).padStart(2, '0')}\`;
+    const key = String(year) + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
     holidays[key] = name;
     nationalHolidayKeys.push(key);
   };
