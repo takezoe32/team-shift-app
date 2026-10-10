@@ -745,6 +745,7 @@ const DailyDetailView = ({
   const [personalMemoEditEndTime, setPersonalMemoEditEndTime] = useState('');
   const [personalMemoEditImage, setPersonalMemoEditImage] = useState(null);
   const [isSavingPersonalMemo, setIsSavingPersonalMemo] = useState(false);
+  const [isDeletingPersonalMemo, setIsDeletingPersonalMemo] = useState(false);
   const imageInputRef = React.useRef(null);
   
   const currentUser = users[currentUserUid];
@@ -852,6 +853,28 @@ const DailyDetailView = ({
       alert(`個人メモを保存できませんでした。\n${error?.message || 'もう一度お試しください。'}`);
     } finally {
       setIsSavingPersonalMemo(false);
+    }
+  };
+
+  const deletePersonalMemo = async () => {
+    if (
+      !selectedPersonalMemo ||
+      selectedPersonalMemo.visibility !== 'private' ||
+      selectedPersonalMemo.ownerUid !== currentUserUid
+    ) return;
+
+    const memoTitle = selectedPersonalMemo.subject || '件名未設定';
+    if (!window.confirm(`個人メモ「${memoTitle}」を削除しますか？\\n削除したメモは元に戻せません。`)) return;
+
+    setIsDeletingPersonalMemo(true);
+    try {
+      await deleteTask(selectedPersonalMemo.taskDate, currentUserUid, selectedPersonalMemo.id);
+      closePersonalMemoDetail();
+    } catch (error) {
+      console.error('個人メモの削除に失敗しました:', error);
+      alert(`個人メモを削除できませんでした。\\n${error?.message || 'もう一度お試しください。'}`);
+    } finally {
+      setIsDeletingPersonalMemo(false);
     }
   };
 
@@ -1424,8 +1447,9 @@ const DailyDetailView = ({
                 </>
               ) : (
                 <>
-                  <button type="button" onClick={closePersonalMemoDetail} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-xs font-bold">閉じる</button>
-                  <button type="button" onClick={startPersonalMemoEdit} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold flex items-center justify-center gap-2"><Edit2 size={14}/>編集</button>
+                  <button type="button" onClick={closePersonalMemoDetail} disabled={isDeletingPersonalMemo} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-xs font-bold disabled:opacity-50">閉じる</button>
+                  <button type="button" onClick={deletePersonalMemo} disabled={isDeletingPersonalMemo} className="flex-1 py-2.5 rounded-xl bg-red-50 text-red-700 border border-red-200 text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-50"><Trash2 size={14}/>{isDeletingPersonalMemo ? '削除中…' : '削除'}</button>
+                  <button type="button" onClick={startPersonalMemoEdit} disabled={isDeletingPersonalMemo} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-50"><Edit2 size={14}/>編集</button>
                 </>
               )}
             </div>
