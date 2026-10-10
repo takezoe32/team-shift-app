@@ -209,6 +209,98 @@ const LoginScreen = ({ onGoogleLoginSuccess, authError }) => (
   </div>
 );
 
+const getJapaneseHolidayMap = (year) => {
+  const holidays = {};
+  const nationalHolidayKeys = [];
+  const addHoliday = (month, day, name) => {
+    const key = String(year) + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+    holidays[key] = name;
+    nationalHolidayKeys.push(key);
+  };
+  const nthWeekday = (month, weekday, occurrence) => {
+    const firstDay = new Date(year, month - 1, 1).getDay();
+    return 1 + ((weekday - firstDay + 7) % 7) + (occurrence - 1) * 7;
+  };
+  const equinoxDay = (spring) => {
+    if (year >= 1980 && year <= 2099) {
+      const base = spring ? 20.8431 : 23.2488;
+      return Math.floor(base + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
+    }
+    return spring ? 20 : 23;
+  };
+
+  addHoliday(1, 1, '元日');
+  if (year >= 2000) addHoliday(1, nthWeekday(1, 1, 2), '成人の日');
+  else addHoliday(1, 15, '成人の日');
+  if (year >= 1967) addHoliday(2, 11, '建国記念の日');
+  if (year >= 2020) addHoliday(2, 23, '天皇誕生日');
+  else if (year >= 1989 && year <= 2018) addHoliday(12, 23, '天皇誕生日');
+  else if (year < 1989) addHoliday(4, 29, '天皇誕生日');
+
+  addHoliday(3, equinoxDay(true), '春分の日');
+
+  if (year >= 2007) addHoliday(4, 29, '昭和の日');
+  else if (year >= 1989) addHoliday(4, 29, 'みどりの日');
+  addHoliday(5, 3, '憲法記念日');
+  if (year >= 2007) addHoliday(5, 4, 'みどりの日');
+  addHoliday(5, 5, 'こどもの日');
+
+  if (year === 2020) addHoliday(7, 23, '海の日');
+  else if (year === 2021) addHoliday(7, 22, '海の日');
+  else if (year >= 2003) addHoliday(7, nthWeekday(7, 1, 3), '海の日');
+  else if (year >= 1996) addHoliday(7, 20, '海の日');
+
+  if (year === 2020) addHoliday(8, 10, '山の日');
+  else if (year === 2021) addHoliday(8, 8, '山の日');
+  else if (year >= 2016) addHoliday(8, 11, '山の日');
+
+  if (year >= 2003) addHoliday(9, nthWeekday(9, 1, 3), '敬老の日');
+  else if (year >= 1966) addHoliday(9, 15, '敬老の日');
+  addHoliday(9, equinoxDay(false), '秋分の日');
+
+  if (year === 2020) addHoliday(7, 24, 'スポーツの日');
+  else if (year === 2021) addHoliday(7, 23, 'スポーツの日');
+  else if (year >= 2000) addHoliday(10, nthWeekday(10, 1, 2), year >= 2020 ? 'スポーツの日' : '体育の日');
+  else addHoliday(10, 10, '体育の日');
+
+  addHoliday(11, 3, '文化の日');
+  addHoliday(11, 23, '勤労感謝の日');
+
+  // 2019年の天皇即位に伴う特別な休日。
+  if (year === 2019) {
+    addHoliday(5, 1, '天皇の即位の日');
+    addHoliday(10, 22, '即位礼正殿の儀');
+  }
+
+  // 祝日に挟まれた平日を「国民の休日」とする（祝日法第3条第3項）。
+  const baseHolidayKeys = [...nationalHolidayKeys];
+  const isNextDay = (key, offset) => {
+    const date = new Date(key + 'T12:00:00');
+    date.setDate(date.getDate() + offset);
+    return formatDate(date);
+  };
+  const start = new Date(year, 0, 2);
+  const end = new Date(year, 11, 30);
+  for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
+    const key = formatDate(date);
+    if (!holidays[key] && holidays[isNextDay(key, -1)] && holidays[isNextDay(key, 1)]) {
+      holidays[key] = '国民の休日';
+    }
+  }
+
+  // 祝日が日曜日の場合、その後の祝日でない日に振替休日を置く。
+  baseHolidayKeys.forEach((key) => {
+    const date = new Date(key + 'T12:00:00');
+    if (date.getDay() !== 0) return;
+    do {
+      date.setDate(date.getDate() + 1);
+    } while (holidays[formatDate(date)]);
+    holidays[formatDate(date)] = '振替休日';
+  });
+
+  return holidays;
+};
+
 const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partnerNames, currentUserUid, shiftTypes, sortedUsers, roles, currentUser, updateTaskAssignees, updateTaskText, deleteTask, toggleTask, updatePartnerItem }) => {
   const [detailTask, setDetailTask] = useState(null);
   const [detailPartner, setDetailPartner] = useState(null);
@@ -241,6 +333,7 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partne
   const [selectedCalendarTaskDate, setSelectedCalendarTaskDate] = useState(todayStr);
   const year = currentDate.getFullYear(), month = currentDate.getMonth();
   const daysInMonth = getDaysInMonth(year, month), firstDayOfWeek = new Date(year, month, 1).getDay();
+  const holidays = getJapaneseHolidayMap(year);
   const days = [];
   for (let i=0;i<firstDayOfWeek;i++) days.push(<div key={`empty-${i}`} className="p-2 border-b border-r border-gray-100 bg-gray-50/50 min-h-[80px]"></div>);
   for (let i=1;i<=daysInMonth;i++) {
@@ -249,8 +342,11 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partne
     const myShift=shiftTypes.find(s=>s.id===myShiftId)||shiftTypes.find(s=>s.id==='none');
     const hasMyTask=teamData.tasks[dateStr]?.[currentUserUid]?.some(task => task?.visibility !== 'private');
     const isPastDate=dateStr<todayStr;
-    days.push(<div key={i} onClick={()=>setSelectedCalendarTaskDate(dateStr)} className={`p-1 border-b border-r border-gray-100 min-h-[80px] cursor-pointer active:bg-gray-50 flex flex-col ${isPastDate?'bg-gray-200':''}`}>
-      <div className="flex justify-between items-start p-1"><span className={`text-sm font-bold ${new Date().getDate()===i&&new Date().getMonth()===month?'bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center':isPastDate?'text-gray-400':'text-gray-700'}`}>{i}</span>{hasMyTask&&<div className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-1.5"></div>}</div>
+    const holidayName=holidays[dateStr] || '';
+    const isHoliday=!!holidayName;
+    days.push(<div key={i} onClick={()=>setSelectedCalendarTaskDate(dateStr)} title={holidayName || undefined} className={`p-1 border-b border-r border-gray-100 min-h-[80px] cursor-pointer active:bg-gray-50 flex flex-col ${isPastDate?'bg-gray-200':isHoliday?'bg-rose-50':''}`}>
+      <div className="flex justify-between items-start p-1"><span className={`text-sm font-bold ${new Date().getDate()===i&&new Date().getMonth()===month?'bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center':isPastDate?'text-gray-400':isHoliday?'text-red-600':'text-gray-700'}`}>{i}</span>{hasMyTask&&<div className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-1.5"></div>}</div>
+      {holidayName && <div className="px-1 mt-0.5 text-[9px] leading-tight font-bold text-red-600 break-words line-clamp-2">{holidayName}</div>}
       <div className="mt-1 flex-1 px-1">{myShift.id!=='none'&&<div className={`text-[10px] font-bold px-1.5 py-0.5 rounded truncate ${myShift.color}`}>{myShift.label}</div>}</div>
     </div>);
   }
@@ -372,10 +468,13 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
     ? [...shiftLogs[monthKey]].sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')))
     : [];
 
+  const holidays = getJapaneseHolidayMap(year);
+  const todayStr = formatDate(new Date());
   const days = [];
   for(let i=1; i<=daysInMonth; i++) {
      const d = new Date(year, month, i);
-     days.push({ day: i, dateStr: formatDate(d), weekDay: DAYS_OF_WEEK[d.getDay()] });
+     const dateStr = formatDate(d);
+     days.push({ day: i, dateStr, weekDay: DAYS_OF_WEEK[d.getDay()], holiday: holidays[dateStr] || '' });
   }
 
   const handleImportExecute = () => {
@@ -589,9 +688,10 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
                 メンバー
               </th>
               {days.map(d => (
-                <th key={d.day} className={`min-w-[48px] p-1.5 border-r border-b border-gray-200 text-center font-medium ${d.dateStr < formatDate(new Date()) ? 'bg-gray-200 text-gray-400' : d.weekDay === '日' ? 'text-red-500' : d.weekDay === '土' ? 'text-blue-500' : 'text-gray-500'}`}>
+                <th key={d.day} title={d.holiday || undefined} className={`min-w-[48px] p-1.5 border-r border-b border-gray-200 text-center font-medium ${d.dateStr < todayStr ? (d.holiday ? 'bg-gray-200 text-red-600' : 'bg-gray-200 text-gray-400') : d.holiday ? 'bg-rose-50 text-red-600' : d.weekDay === '日' ? 'text-red-500' : d.weekDay === '土' ? 'text-blue-500' : 'text-gray-500'}`}>
                   {d.day}<br/>
                   <span className="text-[10px]">{d.weekDay}</span>
+                  {d.holiday && <div className="mt-0.5 text-[8px] leading-tight text-red-600 font-bold break-words">{d.holiday}</div>}
                 </th>
               ))}
             </tr>
@@ -610,7 +710,8 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
                        <td 
                          key={d.day} 
                          onClick={() => setEditingCell({ dateStr: d.dateStr, uid: u.id, userName: u.name })}
-                         className={`p-1 border-r border-b border-gray-100 text-center cursor-pointer active:bg-gray-100 transition-colors ${d.dateStr < formatDate(new Date()) ? 'bg-gray-200' : ''}`}
+                         title={d.holiday || undefined}
+                         className={`p-1 border-r border-b border-gray-100 text-center cursor-pointer active:bg-gray-100 transition-colors ${d.dateStr < todayStr ? 'bg-gray-200' : d.holiday ? 'bg-rose-50/60' : ''}`}
                        >
                          <div className={`w-full h-8 flex items-center justify-center rounded-md font-bold text-[10px] ${shiftId !== 'none' ? shift.color : 'text-gray-300'}`}>
                            {shift.label.substring(0, 2)}
