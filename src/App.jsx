@@ -28,7 +28,8 @@ import {
   Image as ImageIcon,
   Paperclip,
   Loader2,
-  BookOpen
+  BookOpen,
+  Package
 } from 'lucide-react';
 
 // Google OAuth Client ID
@@ -81,6 +82,16 @@ const INITIAL_ROLES = {
   manager: { level: 20, name: '店長' },
   staff: { level: 10, name: 'スタッフ' }
 };
+
+const INVENTORY_SEED_ITEMS = [
+  { id: 'inventory_led_1', name: 'LED電球１', stock: 6 },
+  { id: 'inventory_led_2', name: 'LED電球２', stock: 4 },
+  { id: 'inventory_jr_35', name: 'ＪＲ１２Ｖ３５Ｗ／Ｋ５ＳＥＺ／Ｎ', stock: 8 },
+  { id: 'inventory_jr_50', name: 'ＪＲ１２Ｖ５０ＷＫＷ５ＥＺＨ２', stock: 3 },
+  { id: 'inventory_lds_36', name: 'ＬＤＳ１１０Ｖ３６Ｗ・Ｗ・Ｋ', stock: 5 },
+  { id: 'inventory_lds_54', name: 'ＬＤＳ１１０Ｖ５４Ｗ・Ｗ・Ｋ', stock: 2 },
+  { id: 'inventory_lds_90', name: 'ＬＤＳ１１０Ｖ９０Ｗ・Ｗ・ＫＡ', stock: 9 }
+];
 
 const DEFAULT_SHIFT_TYPES = [
   { id: 'work', label: '出勤', color: 'bg-orange-100 text-orange-700 border-orange-200' },
@@ -826,12 +837,13 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
 };
 
 const DailyDetailView = ({ 
-  selectedDate, changeDay, teamData, currentUserUid, shiftTypes,
+  selectedDate, changeDay, teamData, currentUserUid, shiftTypes, inventoryItems = [],
   addTask, toggleTask, deleteTask, updateTaskText, updateTaskAssignees, users, roles, sortedUsers
 }) => {
   const [newTaskSubject, setNewTaskSubject] = useState('');
   const [newTaskText, setNewTaskText] = useState('');
   const [newTaskEndTime, setNewTaskEndTime] = useState('');
+  const [newTaskProductId, setNewTaskProductId] = useState('');
   const [newTaskVisibility, setNewTaskVisibility] = useState('public');
   const [selectedUserUid, setSelectedUserUid] = useState(currentUserUid);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
@@ -1017,15 +1029,16 @@ const DailyDetailView = ({
         alert('個人メモは、自分の名前を選んでいるときだけ登録できます。');
         return;
       }
-      addTask(selectedDate, selectedUserUid, newTaskText.trim(), imageUrl, imageName, imagePublicId, imageBytes, newTaskVisibility, newTaskVisibility === 'private' ? '' : newTaskSubject.trim(), newTaskVisibility === 'private' ? '' : newTaskEndTime);
+      await addTask(selectedDate, selectedUserUid, newTaskText.trim(), imageUrl, imageName, imagePublicId, imageBytes, newTaskVisibility, newTaskVisibility === 'private' ? '' : newTaskSubject.trim(), newTaskVisibility === 'private' ? '' : newTaskEndTime, newTaskVisibility === 'private' ? '' : newTaskProductId);
       setNewTaskVisibility('public');
       setNewTaskSubject('');
       setNewTaskText('');
       setNewTaskEndTime('');
+      setNewTaskProductId('');
       clearNewTaskImage();
     } catch (error) {
       console.error('画像のアップロードに失敗しました:', error);
-      alert(`画像の保存に失敗しました。\n${error?.message || 'Cloudinaryへのアップロードに失敗しました。'}`);
+      alert(`タスクの保存に失敗しました。\n${error?.message || 'もう一度お試しください。'}`);
     } finally {
       setIsUploading(false);
     }
@@ -1206,6 +1219,7 @@ const DailyDetailView = ({
               {task.text}
             </span>
           )}
+          {task.productName && <div className={`mt-1 text-xs font-bold ${Number(inventoryItems.find(item=>item.id===task.productId)?.stock ?? 0)<=2 ? 'text-red-600' : 'text-emerald-700'}`}>使用商品: {task.productName}</div>}
           <div className="mt-1 text-[9px] text-purple-600">担当: {selectedAssigneeIds.map(id => users[id]?.name?.split(' ')[0] || '').filter(Boolean).join('・') || '未設定'}</div>
 
           {pastFinishConfirmTaskKey === `${taskDate}-${task.ownerUid || selectedUserUid}-${task.id}` && isPastTask && !task.completed && canEditTask && (
@@ -1347,6 +1361,7 @@ const DailyDetailView = ({
             <div className="space-y-2 mb-2">
               {newTaskVisibility !== 'private' && <input type="text" value={newTaskSubject} onChange={e=>setNewTaskSubject(e.target.value)} placeholder="件名（例：備品の補充）" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm" disabled={isUploading}/>}
               {newTaskVisibility !== 'private' && <label className="flex items-center gap-2 text-xs text-gray-600"><span className="font-bold">終了予定時刻</span><div className="flex items-center gap-1"><select aria-label="終了予定時刻の時" value={newTaskEndTime ? newTaskEndTime.split(':')[0] : ''} onChange={e=>setNewTaskEndTime(e.target.value ? e.target.value+':'+((newTaskEndTime||'').split(':')[1]||'00') : '')} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" disabled={isUploading}><option value="">時</option>{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(v=><option key={v} value={v}>{v}</option>)}</select><span>:</span><select aria-label="終了予定時刻の分" value={newTaskEndTime ? newTaskEndTime.split(':')[1] : ''} onChange={e=>setNewTaskEndTime(((newTaskEndTime||'').split(':')[0]||'00')+':'+e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" disabled={isUploading}><option value="">分</option>{['00','15','30','45'].map(v=><option key={v} value={v}>{v}</option>)}</select></div></label>}
+              {newTaskVisibility !== 'private' && <label className="block text-xs text-gray-600"><span className="block font-bold mb-1">使用する商品（任意・選択すると在庫を1個減らします）</span><select value={newTaskProductId} onChange={e=>setNewTaskProductId(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white" disabled={isUploading}><option value="">商品を選択しない</option>{inventoryItems.map(item=><option key={item.id} value={item.id} disabled={Number(item.stock||0)<=0}>{item.name}（在庫 {Number(item.stock||0)} 個）</option>)}</select></label>}
             </div>
             <div className="flex gap-2 items-end">
               <textarea
@@ -3001,6 +3016,51 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
   </div>
 };
 
+
+const InventoryView = ({ inventoryItems = [], addInventoryItem, adjustInventoryStock }) => {
+  const [newName, setNewName] = useState('');
+  const [newStock, setNewStock] = useState('5');
+  const [isSaving, setIsSaving] = useState(false);
+  const handleAdd = async () => {
+    const name = newName.trim();
+    if (!name) { alert('商品名を入力してください。'); return; }
+    if (inventoryItems.some(item => String(item.name || '').trim().toLowerCase() === name.toLowerCase())) {
+      alert('同じ商品名がすでに登録されています。'); return;
+    }
+    setIsSaving(true);
+    try {
+      await addInventoryItem({ id: 'inventory_' + Date.now(), name, stock: Number(newStock) || 0 });
+      setNewName('');
+      setNewStock('5');
+    } catch (error) {
+      console.error('商品の登録に失敗しました:', error);
+      alert('商品を登録できませんでした。もう一度お試しください。');
+    } finally { setIsSaving(false); }
+  };
+  const sortedItems = [...inventoryItems].sort((a,b) => String(a.name||'').localeCompare(String(b.name||''), 'ja'));
+  return <div className="flex-1 overflow-y-auto bg-gray-50 pb-[84px]">
+    <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-4">
+      <div className="flex items-center gap-3"><div className="w-11 h-11 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center"><Package size={24}/></div><div><h2 className="text-xl font-black text-gray-800">在庫管理</h2><p className="text-xs text-gray-500">日別タスクで商品を選ぶと在庫が1個減ります。</p></div></div>
+      <form onSubmit={e => { e.preventDefault(); void handleAdd(); }} className="rounded-2xl border border-gray-200 bg-white p-4 space-y-3 shadow-sm">
+        <h3 className="text-sm font-black text-gray-700">商品を追加</h3>
+        <input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="商品名を入力" className="w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base" maxLength={120}/>
+        <div className="flex items-center gap-3"><label className="text-sm font-bold text-gray-600 flex-1" htmlFor="inventory-new-stock">初期在庫数</label><select id="inventory-new-stock" value={newStock} onChange={e=>setNewStock(e.target.value)} className="min-h-11 border border-gray-300 rounded-xl px-3 py-2 text-base">{Array.from({length:11},(_,i)=><option key={i} value={String(i)}>{i}個</option>)}</select></div>
+        <button type="submit" disabled={isSaving || !newName.trim()} className="w-full min-h-11 rounded-xl bg-blue-600 text-white font-bold text-sm disabled:opacity-50">{isSaving?'登録中…':'商品を追加'}</button>
+      </form>
+      <div className="flex items-center justify-between"><h3 className="text-sm font-black text-gray-700">登録商品</h3><span className="text-xs text-gray-500">{sortedItems.length}商品</span></div>
+      {sortedItems.length===0 ? <div className="rounded-xl bg-white border border-gray-200 p-6 text-center text-sm text-gray-500">商品が登録されていません。</div> : <div className="space-y-2">{sortedItems.map(item => {
+        const stock = Math.max(0, Number(item.stock) || 0);
+        const low = stock <= 2;
+        return <div key={item.id} className={`rounded-xl border p-3 sm:p-4 flex items-center gap-3 ${low?'border-red-300 bg-red-50':'border-gray-200 bg-white'}`}>
+          <div className={`min-w-0 flex-1 ${low?'text-red-700':'text-gray-800'}`}><div className="font-bold text-sm break-words">{item.name}</div>{low && <div className="mt-1 text-[11px] font-black text-red-600">在庫わずか・補充してください</div>}</div>
+          <div className="flex items-center gap-2 shrink-0"><button type="button" aria-label={item.name+'の在庫を1個減らす'} disabled={stock<=0} onClick={()=>void adjustInventoryStock(item.id,-1)} className="w-11 h-11 rounded-xl border border-gray-300 bg-white text-xl font-bold disabled:opacity-30">−</button><div className={`w-12 text-center font-black tabular-nums ${low?'text-red-600':'text-gray-800'}`}><span className="text-xl">{stock}</span><span className="text-xs ml-0.5">個</span></div><button type="button" aria-label={item.name+'の在庫を1個増やす'} onClick={()=>void adjustInventoryStock(item.id,1)} className="w-11 h-11 rounded-xl border border-gray-300 bg-white text-xl font-bold">＋</button></div>
+        </div>;
+      })}</div>}
+      <p className="text-[11px] text-gray-500">在庫が2個以下の商品は赤く表示されます。在庫数は「−」「＋」で手動調整できます。</p>
+    </div>
+  </div>;
+};
+
 const BottomNav = ({ activeTab, setActiveTab, setSelectedDate, currentUser, roles }) => {
   const canManageShift = checkCanManageShift(currentUser, roles);
   const userRoleObj = roles[currentUser.role] || { level: 10 };
@@ -3036,6 +3096,15 @@ const BottomNav = ({ activeTab, setActiveTab, setSelectedDate, currentUser, role
           <CheckSquare className="w-6 h-6"/>
           <span className="text-[10px] font-bold">日別タスク</span>
           {activeTab === 'daily' && <div className="absolute top-0 w-1/2 h-0.5 bg-blue-600 rounded-b-full"></div>}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('inventory')}
+          className={`flex-1 flex flex-col items-center justify-center space-y-1.5 relative ${activeTab === 'inventory' ? 'text-emerald-600' : 'text-gray-400'}`}
+        >
+          <Package className="w-6 h-6"/>
+          <span className="text-[10px] font-bold">在庫管理</span>
+          {activeTab === 'inventory' && <div className="absolute top-0 w-1/2 h-0.5 bg-emerald-600 rounded-b-full"></div>}
         </button>
 
         <button
@@ -3086,6 +3155,7 @@ export default function App() {
   const [teamData, setTeamData] = useState({ shifts: {}, tasks: {} });
   const [partnerItems, setPartnerItems] = useState([]);
   const [partnerNames, setPartnerNames] = useState([]);
+  const [inventoryItems, setInventoryItems] = useState([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [debugLogs, setDebugLogs] = useState([]);
   const [shiftLogs, setShiftLogs] = useState({});
@@ -3205,6 +3275,10 @@ export default function App() {
         let currentUserOrder = [...(data.userOrder || [])];
         let currentPartnerItems = Array.isArray(data.partnerItems) ? data.partnerItems : [];
         let currentPartnerNames = Array.isArray(data.partnerNames) ? data.partnerNames : [];
+        let currentInventoryItems = Array.isArray(data.inventoryItems) ? data.inventoryItems : INVENTORY_SEED_ITEMS;
+        if (!Array.isArray(data.inventoryItems)) {
+          updateDoc(doc(db, 'app_data', 'shared_state'), { inventoryItems: INVENTORY_SEED_ITEMS }).catch(error => console.error('初期在庫商品の保存に失敗しました:', error));
+        }
         let currentDebugLogs = Array.isArray(data.debugLogs) ? data.debugLogs : [];
         let currentShiftLogs = (data.shiftLogs && typeof data.shiftLogs === 'object') ? data.shiftLogs : {};
 
@@ -3346,6 +3420,7 @@ export default function App() {
         if (data.teamData || needsCleanup) setTeamData({ shifts: currentShifts, tasks: currentTasks });
         setPartnerItems(currentPartnerItems);
         setPartnerNames(currentPartnerNames);
+        setInventoryItems(currentInventoryItems);
         setDebugLogs(currentDebugLogs);
         setShiftLogs(currentShiftLogs);
         if (data.shiftTypes) setShiftTypes(data.shiftTypes);
@@ -3637,6 +3712,26 @@ export default function App() {
                   await saveToFirestore({ partnerItems: updatedItems });
                 }}
               />
+            ) : activeTab === 'inventory' ? (
+              <InventoryView
+                inventoryItems={inventoryItems}
+                addInventoryItem={async (item) => {
+                  const updatedItems = [...inventoryItems, item];
+                  setInventoryItems(updatedItems);
+                  await updateDoc(doc(db, 'app_data', 'shared_state'), { inventoryItems: updatedItems });
+                }}
+                adjustInventoryStock={async (itemId, delta) => {
+                  const updatedItems = inventoryItems.map(item => item.id === itemId ? { ...item, stock: Math.max(0, (Number(item.stock) || 0) + delta) } : item);
+                  setInventoryItems(updatedItems);
+                  try {
+                    await updateDoc(doc(db, 'app_data', 'shared_state'), { inventoryItems: updatedItems });
+                  } catch (error) {
+                    console.error('在庫数の保存に失敗しました:', error);
+                    setInventoryItems(inventoryItems);
+                    alert('在庫数を保存できませんでした。もう一度お試しください。');
+                  }
+                }}
+              />
             ) : activeTab === 'calendar' ? (
               <CalendarView 
                 changeMonth={(offset) => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + offset, 1))} 
@@ -3693,9 +3788,16 @@ export default function App() {
                 deleteTask={async (dateStr, ownerUid, taskId) => {
                   const dayTasks = teamData.tasks[dateStr] || {};
                   const ownerTasks = dayTasks[ownerUid] || [];
-                  const updatedOwnerTasks = ownerTasks.filter(t => t.id !== taskId);
-                  setTeamData({ ...teamData, tasks: { ...teamData.tasks, [dateStr]: { ...dayTasks, [ownerUid]: updatedOwnerTasks } } });
-                  await updateDoc(doc(db, 'app_data', 'shared_state'), { [`teamData.tasks.${dateStr}.${ownerUid}`]: updatedOwnerTasks });
+                  const targetTask = ownerTasks.find(task => task.id === taskId);
+                  const updatedOwnerTasks = ownerTasks.filter(task => task.id !== taskId);
+                  const updatedTeamData = { ...teamData, tasks: { ...teamData.tasks, [dateStr]: { ...dayTasks, [ownerUid]: updatedOwnerTasks } } };
+                  const shouldRestock = !!(targetTask?.inventoryDeducted && targetTask?.productId);
+                  const updatedInventoryItems = shouldRestock ? inventoryItems.map(item => item.id === targetTask.productId ? { ...item, stock: (Number(item.stock) || 0) + 1 } : item) : inventoryItems;
+                  await updateDoc(doc(db, 'app_data', 'shared_state'), shouldRestock
+                    ? { [`teamData.tasks.${dateStr}.${ownerUid}`]: updatedOwnerTasks, inventoryItems: updatedInventoryItems }
+                    : { [`teamData.tasks.${dateStr}.${ownerUid}`]: updatedOwnerTasks });
+                  setTeamData(updatedTeamData);
+                  if (shouldRestock) setInventoryItems(updatedInventoryItems);
                 }}
                 toggleTask={async (dateStr, ownerUid, taskId) => {
                   const dayTasks = teamData.tasks[dateStr] || {};
@@ -3845,7 +3947,14 @@ export default function App() {
               />
             ) : activeTab === 'daily' ? (
               <DailyDetailView 
-                addTask={(dateStr, targetUid, text, imageUrl = '', imageName = '', imagePublicId = '', imageBytes = 0, visibility = 'public', subject = '', endTime = '') => {
+                inventoryItems={inventoryItems}
+                addTask={async (dateStr, targetUid, text, imageUrl = '', imageName = '', imagePublicId = '', imageBytes = 0, visibility = 'public', subject = '', endTime = '', productId = '') => {
+                  const product = productId ? inventoryItems.find(item => item.id === productId) : null;
+                  if (productId && (!product || Number(product.stock || 0) <= 0)) {
+                    alert('選択した商品の在庫がありません。在庫管理ページで確認してください。');
+                    throw new Error('選択した商品の在庫がありません。');
+                  }
+                  const updatedInventoryItems = product ? inventoryItems.map(item => item.id === productId ? { ...item, stock: Math.max(0, Number(item.stock || 0) - 1) } : item) : inventoryItems;
                   const dayTasks = teamData.tasks[dateStr] || {};
                   const userTasks = dayTasks[targetUid] || [];
                   const updatedTeamData = {
@@ -3867,6 +3976,7 @@ export default function App() {
                             ownerUid: targetUid,
                             assigneeIds: [targetUid],
                             visibility: visibility === 'private' ? 'private' : 'public',
+                            ...(product ? { productId: product.id, productName: product.name, inventoryDeducted: true } : {}),
                             completedAt: null,
                             ...(imageUrl ? {
                               imageUrl,
@@ -3881,7 +3991,8 @@ export default function App() {
                     }
                   };
                   setTeamData(updatedTeamData);
-                  saveToFirestore({ teamData: updatedTeamData });
+                  if (product) setInventoryItems(updatedInventoryItems);
+                  await updateDoc(doc(db, 'app_data', 'shared_state'), product ? { teamData: updatedTeamData, inventoryItems: updatedInventoryItems } : { teamData: updatedTeamData });
                 }} 
                 changeDay={(offset) => {
                   const d = new Date(selectedDate);
@@ -3893,7 +4004,9 @@ export default function App() {
                 currentUserUid={currentUser.id} 
                 deleteTask={async (dateStr, targetUid, taskId) => {
                   const dayTasks = teamData.tasks[dateStr] || {};
-                  const updatedOwnerTasks = (dayTasks[targetUid] || []).filter(task => task.id !== taskId);
+                  const ownerTasks = dayTasks[targetUid] || [];
+                  const targetTask = ownerTasks.find(task => task.id === taskId);
+                  const updatedOwnerTasks = ownerTasks.filter(task => task.id !== taskId);
                   const updatedTeamData = {
                     ...teamData,
                     tasks: {
@@ -3904,11 +4017,14 @@ export default function App() {
                       }
                     }
                   };
-                  // 削除はFirestoreへの保存成功後に画面へ反映し、失敗時は詳細画面で再試行できるようにする。
-                  await updateDoc(doc(db, 'app_data', 'shared_state'), {
-                    [`teamData.tasks.${dateStr}.${targetUid}`]: updatedOwnerTasks
-                  });
+                  const shouldRestock = !!(targetTask?.inventoryDeducted && targetTask?.productId);
+                  const updatedInventoryItems = shouldRestock ? inventoryItems.map(item => item.id === targetTask.productId ? { ...item, stock: (Number(item.stock) || 0) + 1 } : item) : inventoryItems;
+                  // 削除はFirestoreへの保存成功後に画面へ反映する。使用商品がある場合は在庫も戻す。
+                  await updateDoc(doc(db, 'app_data', 'shared_state'), shouldRestock
+                    ? { [`teamData.tasks.${dateStr}.${targetUid}`]: updatedOwnerTasks, inventoryItems: updatedInventoryItems }
+                    : { [`teamData.tasks.${dateStr}.${targetUid}`]: updatedOwnerTasks });
                   setTeamData(updatedTeamData);
+                  if (shouldRestock) setInventoryItems(updatedInventoryItems);
                 }} 
                 updateTaskAssignees={async (ownerUid, dateStr, taskId, assigneeIds) => {
                   const dayTasks = teamData.tasks[dateStr] || {};
