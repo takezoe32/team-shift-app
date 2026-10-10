@@ -3105,7 +3105,7 @@ const lookupBarcodeProduct = async (barcode) => {
 };
 
 
-const InventoryView = ({ inventoryItems = [], addInventoryItem, adjustInventoryStock, editInventoryItem, deleteInventoryItem, updateInventoryImage }) => {
+const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInventoryItem, adjustInventoryStock, editInventoryItem, deleteInventoryItem, updateInventoryImage }) => {
   const [newKind, setNewKind] = useState('');
   const [newName, setNewName] = useState('');
   const [newUsageLocation, setNewUsageLocation] = useState('');
@@ -3341,6 +3341,7 @@ const InventoryView = ({ inventoryItems = [], addInventoryItem, adjustInventoryS
           </div>
         </div>;
       })}</div>}
+      <section className="rounded-2xl border border-gray-200 bg-white p-4 space-y-2"><div className="flex items-center gap-2"><History size={17} className="text-gray-500"/><h3 className="text-sm font-black text-gray-700">在庫変動履歴</h3></div><p className="text-[11px] text-gray-500">入庫・在庫調整・タスク使用・タスク削除による戻しを記録します。月末の実在庫との差異は「在庫数を保存」で調整し、履歴を確認してください。</p>{inventoryMovements.length ? <div className="max-h-72 overflow-y-auto divide-y divide-gray-100">{[...inventoryMovements].sort((a,b)=>String(b.timestamp||'').localeCompare(String(a.timestamp||''))).slice(0,50).map(entry=><div key={entry.id} className="py-2 text-xs"><div className="flex items-start justify-between gap-2"><span className="font-bold text-gray-700">{entry.productName || '商品'}</span><span className={`font-black tabular-nums ${Number(entry.delta||0)<0?'text-red-600':'text-emerald-700'}`}>{Number(entry.delta||0)>0?'+':''}{Number(entry.delta||0)}個</span></div><div className="mt-0.5 text-gray-500">{entry.typeLabel || entry.type || '在庫変更'} ・ {entry.timestamp ? new Date(entry.timestamp).toLocaleString('ja-JP') : ''}</div>{entry.reason && <div className="mt-0.5 text-gray-600">理由：{entry.reason}</div>}</div>)}</div> : <p className="py-2 text-xs text-gray-400">まだ履歴はありません。今後の在庫変更から記録されます。</p>}</section>
       <p className="text-[11px] text-gray-500">在庫が商品ごとの発注基準数以下になると赤く表示されます。バーコード検索は無料枠の外部データベースを利用するため、情報が見つからない場合は手入力してください。</p>
     </div>
     {scannerOpen && <BarcodeScannerModal onDetected={handleBarcodeDetected} onClose={()=>setScannerOpen(false)}/>}
@@ -3442,6 +3443,7 @@ export default function App() {
   const [partnerItems, setPartnerItems] = useState([]);
   const [partnerNames, setPartnerNames] = useState([]);
   const [inventoryItems, setInventoryItems] = useState([]);
+  const [inventoryMovements, setInventoryMovements] = useState([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [debugLogs, setDebugLogs] = useState([]);
   const [shiftLogs, setShiftLogs] = useState({});
@@ -3709,6 +3711,7 @@ export default function App() {
         setPartnerItems(currentPartnerItems);
         setPartnerNames(currentPartnerNames);
         setInventoryItems(currentInventoryItems);
+        setInventoryMovements(Array.isArray(data.inventoryMovements) ? data.inventoryMovements : []);
         setDebugLogs(currentDebugLogs);
         setShiftLogs(currentShiftLogs);
         if (data.shiftTypes) setShiftTypes(data.shiftTypes);
@@ -4003,11 +4006,14 @@ export default function App() {
             ) : activeTab === 'inventory' ? (
               <InventoryView
                 inventoryItems={inventoryItems}
+                inventoryMovements={inventoryMovements}
                 addInventoryItem={async (item) => {
                   const normalizedItem = { ...item, name: normalizeInventoryName(item.name), barcode: normalizeInventoryName(item.barcode), minStock: Math.max(0, Number(item.minStock) || 0), stock: Math.max(0, Number(item.stock) || 0) };
                   const updatedItems = [...inventoryItems, normalizedItem];
-                  await updateDoc(doc(db, 'app_data', 'shared_state'), { inventoryItems: updatedItems });
+                  const movement = { id: 'inv_' + Date.now() + '_' + Math.random().toString(36).slice(2,7), timestamp: new Date().toISOString(), type: 'register', typeLabel: '商品登録・初期在庫', productId: normalizedItem.id, productName: normalizedItem.name, delta: Number(normalizedItem.stock || 0), stockAfter: Number(normalizedItem.stock || 0), reason: 'バーコードまたは手入力で商品登録' };
+                  await updateDoc(doc(db, 'app_data', 'shared_state'), { inventoryItems: updatedItems, inventoryMovements: arrayUnion(movement) });
                   setInventoryItems(updatedItems);
+                  setInventoryMovements(current => [movement, ...current]);
                 }}
                 editInventoryItem={async (itemId, changes) => {
                   const normalizedChanges = { kind: normalizeInventoryName(changes.kind), name: normalizeInventoryName(changes.name), usageLocation: normalizeInventoryName(changes.usageLocation), barcode: normalizeInventoryName(changes.barcode), minStock: Math.max(0, Number(changes.minStock) || 0) };
@@ -4029,10 +4035,16 @@ export default function App() {
                   setInventoryItems(updatedItems);
                 }}
                 adjustInventoryStock={async (itemId, value, setExact = false) => {
-                  const updatedItems = inventoryItems.map(item => item.id === itemId ? { ...item, stock: setExact ? Math.max(0, Number(value) || 0) : Math.max(0, (Number(item.stock) || 0) + value) } : item);
+                  const currentItem = inventoryItems.find(item => item.id === itemId);
+                  const oldStock = Math.max(0, Number(currentItem?.stock) || 0);
+                  const nextStock = setExact ? Math.max(0, Number(value) || 0) : Math.max(0, oldStock + value);
+                  const delta = nextStock - oldStock;
+                  const updatedItems = inventoryItems.map(item => item.id === itemId ? { ...item, stock: nextStock } : item);
+                  const movement = { id: 'inv_' + Date.now() + '_' + Math.random().toString(36).slice(2,7), timestamp: new Date().toISOString(), type: setExact ? 'stocktake_adjustment' : (Number(value) >= 0 ? 'stock_in' : 'manual_adjustment'), typeLabel: setExact ? '在庫数の直接保存・棚卸し調整' : (Number(value) >= 0 ? '入庫・在庫加算' : '手動減算'), productId: itemId, productName: currentItem?.name || '', delta, stockBefore: oldStock, stockAfter: nextStock, reason: setExact ? '入力した実在庫数へ調整' : '' };
                   try {
-                    await updateDoc(doc(db, 'app_data', 'shared_state'), { inventoryItems: updatedItems });
+                    await updateDoc(doc(db, 'app_data', 'shared_state'), { inventoryItems: updatedItems, inventoryMovements: arrayUnion(movement) });
                     setInventoryItems(updatedItems);
+                    setInventoryMovements(current => [movement, ...current]);
                   } catch (error) {
                     console.error('在庫数の保存に失敗しました:', error);
                     throw error;
