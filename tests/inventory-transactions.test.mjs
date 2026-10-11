@@ -1,3 +1,4 @@
+import { hasInventoryProductDetails, inventoryProductLabel } from '../src/inventoryProduct.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -10,6 +11,7 @@ const source = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
 function setup(initialItems) {
   let data = { inventoryItems: structuredClone(initialItems), inventoryMovements: [] };
   const context = {
+    hasInventoryProductDetails, inventoryProductLabel,
     crypto: { randomUUID }, db: {}, currentUser: { id: 'tester', name: 'テスト担当' },
     inventoryItems: [{ id: 'lamp', name: '電球', stock: 1 }],
     normalizeInventoryName: value => String(value || '').normalize('NFKC').trim(),
@@ -69,4 +71,25 @@ test('registration preserves manufacturer, model number and JAN for reuse', asyn
   assert.equal(saved.modelNumber, 'LDA5L-G');
   assert.equal(saved.barcode, '4549980715123');
   assert.equal(saved.stock, 4);
+});
+
+for (const field of ['kind', 'name', 'manufacturer', 'modelNumber']) {
+  test(`a product can be registered with only ${field}`, async () => {
+    const env = setup([]);
+    await env.register({ id: 'single', [field]: '入力あり', stock: 0 });
+    assert.equal(env.data().inventoryItems.length, 1);
+    assert.equal(env.data().inventoryMovements[0].productName, '入力あり');
+  });
+}
+test('empty or whitespace-only details fail even when JAN is provided', async () => {
+  const env = setup([]);
+  await assert.rejects(env.register({ id: 'empty', kind: '　', name: ' ', manufacturer: '\t', modelNumber: '', barcode: '4549980715123', stock: 0 }), /いずれかを入力/);
+  assert.equal(env.data().inventoryItems.length, 0);
+});
+test('different unnamed products can be registered while duplicate JAN is rejected', async () => {
+  const env = setup([]);
+  await env.register({ id: 'a', modelNumber: 'A', barcode: '4900000000001', stock: 0 });
+  await env.register({ id: 'b', modelNumber: 'B', barcode: '4900000000002', stock: 0 });
+  await assert.rejects(env.register({ id: 'c', modelNumber: 'C', barcode: '4900000000001', stock: 0 }), /すでに登録/);
+  assert.equal(env.data().inventoryItems.length, 2);
 });
