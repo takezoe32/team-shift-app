@@ -3091,12 +3091,14 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
   const [ocrOpen, setOcrOpen] = useState(false);
   const [newProductPhoto, setNewProductPhoto] = useState(null);
   const [newProductPhotoPreview, setNewProductPhotoPreview] = useState('');
+  const [selectedYahooImage, setSelectedYahooImage] = useState(null);
   const uploadedProductPhotoRef = useRef(null);
   const registrationSaveRef = useRef(false);
   useEffect(() => () => { if (newProductPhotoPreview) URL.revokeObjectURL(newProductPhotoPreview); }, [newProductPhotoPreview]);
   const selectProductPhoto = file => {
     if (registrationSaveRef.current) return;
     uploadedProductPhotoRef.current = null;
+    setSelectedYahooImage(null);
     setNewProductPhoto(file);
     setNewProductPhotoPreview(file ? URL.createObjectURL(file) : '');
   };
@@ -3191,7 +3193,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
     registrationSaveRef.current = true;
     setIsSaving(true);
     try {
-      let imageData = {};
+      let imageData = selectedYahooImage || {};
       if (newProductPhoto) {
         if (uploadedProductPhotoRef.current?.file !== newProductPhoto) {
           const prepared = await prepareInventoryImage(newProductPhoto);
@@ -3205,6 +3207,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
       }
       await addInventoryItem({ id: 'inventory_' + Date.now(), kind, name, manufacturer: normalizeInventoryName(newManufacturer), modelNumber: normalizeInventoryName(newModelNumber), usageLocation, barcode, minStock, stock, ...imageData });
       setNewProductPhoto(null);
+      setSelectedYahooImage(null);
       setNewProductPhotoPreview('');
       uploadedProductPhotoRef.current = null;
       setNewKind('');
@@ -3284,6 +3287,22 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
       console.error('商品情報の更新に失敗しました:', error);
       alert('商品情報を更新できませんでした。入力内容・画像を確認して再試行してください。');
     } finally { editingSaveRef.current = false; setIsSaving(false); }
+  };
+
+  const applyProductCandidate = candidate => {
+    if (registrationSaveRef.current) return;
+    setNewName(candidate.productName || candidate.title);
+    if (candidate.fieldsInferred) { setNewManufacturer(candidate.manufacturer || ''); setNewModelNumber(candidate.modelNumber || ''); }
+    selectProductPhoto(null);
+    setProductLookupSource(candidate.url);
+    setBarcodeLookupMessage('商品情報の候補を入力しました。メーカー・商品名・型番の分離は推定です。取得元のページ・セット数量と照合し、修正して登録してください。');
+    setProductLookupCandidates([]);
+  };
+  const selectYahooProductImage = candidate => {
+    if (registrationSaveRef.current || !candidate.imageUrl) return;
+    applyProductCandidate(candidate);
+    setSelectedYahooImage({ imageUrl: candidate.imageUrl, imageName: 'Yahoo!ショッピング：' + candidate.title, imagePublicId: '', imageBytes: 0 });
+    setNewProductPhotoPreview(candidate.imageUrl);
   };
 
   const lookupProductByBarcode = async (barcode, provider = 'official') => {
@@ -3424,7 +3443,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
         <label className="block text-xs font-bold text-gray-600">バーコード番号（任意）<input value={newBarcode} onChange={e=>changeBarcode(e.target.value)} inputMode="numeric" placeholder="バーコードを読み取るか入力" className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base" maxLength={80}/></label>
         {newBarcode && !scannedStockItemId && <button type="button" onClick={() => void lookupProductByBarcode(newBarcode, 'yahoo')} disabled={isLookingUpProduct} className="w-full min-h-10 rounded-lg border border-blue-300 text-blue-800 text-xs font-bold disabled:opacity-50">Yahoo!ショッピングで商品候補を検索</button>}
         {newBarcode && !scannedStockItemId && <button type="button" onClick={() => void lookupProductByBarcode(newBarcode)} disabled={isLookingUpProduct} className="w-full min-h-10 rounded-lg border border-blue-300 text-blue-800 text-xs font-bold disabled:opacity-50">{isLookingUpProduct ? '商品情報を検索中…' : 'メーカー公式サイトで候補を検索（任意）'}</button>}
-        {barcodeLookupMessage && <div className="rounded-lg bg-blue-50 border border-blue-100 p-2 text-xs text-blue-800 space-y-2"><div>{barcodeLookupMessage}</div>{isLookingUpProduct && <div className="flex items-center gap-2"><Loader2 size={14} className="animate-spin"/>商品候補を検索中…</div>}{productLookupSource && <a href={productLookupSource} target="_blank" rel="noopener noreferrer" className="block underline break-all">取得元の商品ページを確認 ↗</a>}{productLookupCandidates.length > 0 && !productLookupSource && <div className="space-y-2"><div className="font-bold">商品候補（選択すると各入力欄に反映します）</div>{productLookupCandidates.map((candidate) => <div key={candidate.url} className="rounded-lg border border-blue-200 bg-white p-2 space-y-1"><button type="button" onClick={() => { setNewName(candidate.productName || candidate.title); if (candidate.fieldsInferred) { setNewManufacturer(candidate.manufacturer || ''); setNewModelNumber(candidate.modelNumber || ''); } setProductLookupSource(candidate.url); setBarcodeLookupMessage('商品情報の候補を入力しました。メーカー・商品名・型番の分離は推定です。取得元のページ・セット数量と照合し、修正して登録してください。'); setProductLookupCandidates([]); }} className="text-left font-bold underline">{candidate.title}</button><div className="text-[11px] text-gray-600">{candidate.manufacturer ? candidate.manufacturer + '・' : ''}{candidate.sourceType || 'メーカー公式サイト'}{candidate.description ? '：' + candidate.description : ''}</div>{candidate.fieldsInferred && <div className="text-xs text-gray-700 space-y-1"><div>メーカー候補：{candidate.manufacturer || '判別できません'}</div><div>商品名候補：{candidate.productName || candidate.title}</div><div>型番候補：{candidate.modelNumber || '判別できません'}</div>{candidate.brand && <div>Yahooブランド：{candidate.brand}</div>}<div className="text-amber-800">分離結果は推定です。選択後に各欄を確認・修正してください。</div></div>}<a href={candidate.url} target="_blank" rel="noopener noreferrer" className="break-all underline">ページを確認 ↗</a>{candidate.exactCodeMatch && <span className="inline-block rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">JANコード一致</span>}</div>)}</div>}</div>}
+        {barcodeLookupMessage && <div className="rounded-lg bg-blue-50 border border-blue-100 p-2 text-xs text-blue-800 space-y-2"><div>{barcodeLookupMessage}</div>{isLookingUpProduct && <div className="flex items-center gap-2"><Loader2 size={14} className="animate-spin"/>商品候補を検索中…</div>}{productLookupSource && <a href={productLookupSource} target="_blank" rel="noopener noreferrer" className="block underline break-all">取得元の商品ページを確認 ↗</a>}{productLookupCandidates.length > 0 && !productLookupSource && <div className="space-y-2"><div className="font-bold">商品候補（選択すると各入力欄に反映します）</div>{productLookupCandidates.map((candidate) => <div key={candidate.url} className="rounded-lg border border-blue-200 bg-white p-2 space-y-1">{candidate.imageUrl && <div className="space-y-1"><img src={candidate.imageUrl} alt={candidate.title + 'のYahoo商品画像'} loading="lazy" referrerPolicy="no-referrer" className="h-32 w-full rounded-lg bg-white object-contain"/><button type="button" disabled={isSaving} onClick={()=>selectYahooProductImage(candidate)} className="min-h-11 rounded-lg bg-blue-600 px-3 text-sm font-bold text-white disabled:opacity-50">この商品情報と画像を使う</button></div>}<button type="button" onClick={() => applyProductCandidate(candidate)} className="text-left font-bold underline">{candidate.title}</button><div className="text-[11px] text-gray-600">{candidate.manufacturer ? candidate.manufacturer + '・' : ''}{candidate.sourceType || 'メーカー公式サイト'}{candidate.description ? '：' + candidate.description : ''}</div>{candidate.fieldsInferred && <div className="text-xs text-gray-700 space-y-1"><div>メーカー候補：{candidate.manufacturer || '判別できません'}</div><div>商品名候補：{candidate.productName || candidate.title}</div><div>型番候補：{candidate.modelNumber || '判別できません'}</div>{candidate.brand && <div>Yahooブランド：{candidate.brand}</div>}<div className="text-amber-800">分離結果は推定です。選択後に各欄を確認・修正してください。</div></div>}<a href={candidate.url} target="_blank" rel="noopener noreferrer" className="break-all underline">ページを確認 ↗</a>{candidate.exactCodeMatch && <span className="inline-block rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">JANコード一致</span>}</div>)}</div>}</div>}
         {scannedStockItemId && <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-2"><div className="text-sm font-bold text-emerald-800">登録済み商品の入出庫：{inventoryProductLabel(inventoryItems.find(item=>item.id===scannedStockItemId))}</div><div className="flex gap-2"><select aria-label="入出庫区分" value={scanDirection} onChange={e=>setScanDirection(e.target.value)} className="rounded-lg border border-emerald-300"><option value="in">入庫</option><option value="out">出庫</option></select><input type="number" min="1" step="1" value={scanQuantity} onChange={e=>setScanQuantity(e.target.value)} aria-label="入出庫数量" className="min-h-11 w-24 rounded-lg border border-emerald-300 px-2 text-center text-base"/><button type="button" onClick={()=>void handleScannedStockAdd()} disabled={isSaving} className="flex-1 min-h-11 rounded-lg bg-emerald-600 px-3 text-sm font-bold text-white disabled:opacity-50">この数量の入出庫を保存</button></div></div>}
         {!scannedStockItemId && <div className="space-y-3">
           <p className="text-xs text-gray-600">未登録商品はGoogle検索・ラベル撮影・手入力で確認できます。入力した商品情報を確認してから登録してください。</p>
@@ -3432,7 +3451,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
           <button type="button" onClick={()=>setOcrOpen(open=>!open)} className="block min-h-11 w-full rounded-lg border border-indigo-300 bg-indigo-50 px-3 text-sm font-bold text-indigo-900">{ocrOpen ? 'ラベル読み取りを閉じる' : '商品ラベルを撮影して文字を読み取る'}</button>
           {ocrOpen && <LabelOcrCapture key={newBarcode} onUseImage={selectProductPhoto} disabled={isSaving} onApply={(field, value)=>{ const text = normalizeInventoryName(value); if(field==='name')setNewName(text.slice(0,120)); if(field==='manufacturer')setNewManufacturer(text.slice(0,120)); if(field==='modelNumber')setNewModelNumber(text.slice(0,120)); }}/>}
         </div>}
-        {newProductPhotoPreview && <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 space-y-2"><div className="text-xs font-bold text-blue-800">登録する商品画像</div><img src={newProductPhotoPreview} alt="登録する商品画像のプレビュー" className="max-h-48 w-full rounded-lg bg-white object-contain"/><button type="button" disabled={isSaving} onClick={()=>selectProductPhoto(null)} className="min-h-11 text-sm font-bold text-red-600 disabled:opacity-50">商品画像を外す</button><p className="text-xs text-gray-600">商品を追加すると、この写真も保存します。</p></div>}
+        {newProductPhotoPreview && <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 space-y-2"><div className="text-xs font-bold text-blue-800">登録する商品画像</div><img src={newProductPhotoPreview} alt="登録する商品画像のプレビュー" className="max-h-48 w-full rounded-lg bg-white object-contain"/><button type="button" disabled={isSaving} onClick={()=>selectProductPhoto(null)} className="min-h-11 text-sm font-bold text-red-600 disabled:opacity-50">商品画像を外す</button><p className="text-xs text-gray-600">{selectedYahooImage ? 'Yahooの商品画像URLを保存します。写真のアップロードは不要です。販売店による画像変更・削除で表示できなくなる場合があります。' : '商品を追加すると、この写真も保存します。'}</p></div>}
         <label className="block text-xs font-bold text-gray-600">種類（任意）<input value={newKind} onChange={e=>setNewKind(e.target.value)} placeholder="種類を入力（省略可）" className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base" maxLength={80}/></label>
         <label className="block text-xs font-bold text-gray-600">商品名（任意）<input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="商品名を入力" className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base" maxLength={120}/></label>
         <label className="block text-xs font-bold text-gray-600">メーカー（任意）<input value={newManufacturer} onChange={e=>setNewManufacturer(e.target.value)} maxLength={120} className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base"/></label>

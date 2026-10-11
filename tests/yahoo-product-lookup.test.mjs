@@ -37,3 +37,14 @@ test('Yahoo unavailable and missing credentials allow manual fallback without le
     assert.ok(!JSON.stringify(body).includes('test-only-id'));
   }
 });
+test('Yahoo images prefer 600px safe URLs and reject untrusted hosts', async () => {
+ const base={janCode:jan,name:'LED電球',url:'https://store.shopping.yahoo.co.jp/shop/bulb.html'};
+ const large='https://item-shopping.c.yimg.jp/i/n/shop_bulb';
+ let result=await lookup([{...base,exImage:{url:large},image:{medium:'https://item-shopping.c.yimg.jp/i/g/shop_bulb'}}]);
+ assert.equal(result.body.candidates[0].imageUrl,large);
+ result=await lookup([{...base,exImage:{url:'https://evil.example/a'},image:{medium:large}}]);
+ assert.equal(result.body.candidates[0].imageUrl,large);
+ for(const url of ['https://yimg.jp.evil.example/a','http://item-shopping.c.yimg.jp/a','javascript:alert(1)']) {
+  result=await lookup([{...base,exImage:{url}}]);assert.equal(result.body.candidates[0].imageUrl,'');
+ }
+});
