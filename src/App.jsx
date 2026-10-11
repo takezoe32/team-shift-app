@@ -1,3 +1,4 @@
+import { prepareInventoryImage } from './inventoryImage.js';
 import { hasInventoryProductDetails, inventoryProductLabel } from './inventoryProduct.mjs';
 import LabelOcrCapture from './components/LabelOcrCapture';
 import React, { useState, useEffect, useRef } from 'react';
@@ -3193,10 +3194,11 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
       let imageData = {};
       if (newProductPhoto) {
         if (uploadedProductPhotoRef.current?.file !== newProductPhoto) {
-          const uploaded = await uploadTaskImageToCloudinary(newProductPhoto);
+          const prepared = await prepareInventoryImage(newProductPhoto);
+          const uploaded = await uploadTaskImageToCloudinary(prepared);
           uploadedProductPhotoRef.current = { file: newProductPhoto, data: {
-            imageUrl: uploaded.secure_url, imageName: newProductPhoto.name || '',
-            imagePublicId: uploaded.public_id || '', imageBytes: Number(uploaded.bytes || newProductPhoto.size || 0)
+            imageUrl: uploaded.secure_url, imageName: prepared.name || '',
+            imagePublicId: uploaded.public_id || '', imageBytes: Number(uploaded.bytes || prepared.size || 0)
           } };
         }
         imageData = uploadedProductPhotoRef.current.data;
@@ -3256,10 +3258,11 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
       let imageChanges = {};
       if (editingPhoto) {
         if (editingPhotoUploadRef.current?.file !== editingPhoto) {
-          const uploaded = await uploadTaskImageToCloudinary(editingPhoto);
+          const prepared = await prepareInventoryImage(editingPhoto);
+          const uploaded = await uploadTaskImageToCloudinary(prepared);
           editingPhotoUploadRef.current = { file: editingPhoto, data: {
-            imageUrl: uploaded.secure_url, imageName: editingPhoto.name || '',
-            imagePublicId: uploaded.public_id || '', imageBytes: Number(uploaded.bytes || editingPhoto.size || 0)
+            imageUrl: uploaded.secure_url, imageName: prepared.name || '',
+            imagePublicId: uploaded.public_id || '', imageBytes: Number(uploaded.bytes || prepared.size || 0)
           } };
         }
         imageChanges = editingPhotoUploadRef.current.data;
@@ -3368,12 +3371,13 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
     if (file.size > 10 * 1024 * 1024) { alert('画像は10MB以下のファイルを選択してください。'); return; }
     setUploadingImageId(item.id);
     try {
-      const uploaded = await uploadTaskImageToCloudinary(file);
+      const prepared = await prepareInventoryImage(file);
+      const uploaded = await uploadTaskImageToCloudinary(prepared);
       await updateInventoryImage(item.id, {
         imageUrl: uploaded.secure_url,
-        imageName: file.name || '',
+        imageName: prepared.name || '',
         imagePublicId: uploaded.public_id || '',
-        imageBytes: Number(file.size || 0)
+        imageBytes: Number(uploaded.bytes || prepared.size || 0)
       });
     } catch (error) {
       console.error('在庫商品の画像保存に失敗しました:', error);
