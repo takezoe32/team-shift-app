@@ -3088,6 +3088,17 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
   const [newManufacturer, setNewManufacturer] = useState('');
   const [newModelNumber, setNewModelNumber] = useState('');
   const [ocrOpen, setOcrOpen] = useState(false);
+  const [newProductPhoto, setNewProductPhoto] = useState(null);
+  const [newProductPhotoPreview, setNewProductPhotoPreview] = useState('');
+  const uploadedProductPhotoRef = useRef(null);
+  const registrationSaveRef = useRef(false);
+  useEffect(() => () => { if (newProductPhotoPreview) URL.revokeObjectURL(newProductPhotoPreview); }, [newProductPhotoPreview]);
+  const selectProductPhoto = file => {
+    if (registrationSaveRef.current) return;
+    uploadedProductPhotoRef.current = null;
+    setNewProductPhoto(file);
+    setNewProductPhotoPreview(file ? URL.createObjectURL(file) : '');
+  };
   const [newUsageLocation, setNewUsageLocation] = useState('');
   const [newBarcode, setNewBarcode] = useState('');
   const [newMinStock, setNewMinStock] = useState('2');
@@ -3106,6 +3117,8 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
   const changeBarcode = (code) => {
     ++lookupRequestRef.current;
     const barcode = normalizeInventoryName(code);
+    if (registrationSaveRef.current) return;
+    selectProductPhoto(null);
     setNewBarcode(barcode);
     setNewName('');
     setNewManufacturer('');
@@ -3132,7 +3145,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
   const [isSaving, setIsSaving] = useState(false);
 
   const handleAdd = async () => {
-    if (isSaving) return;
+    if (isSaving || registrationSaveRef.current) return;
     ++lookupRequestRef.current;
     setIsLookingUpProduct(false);
     const kind = normalizeInventoryName(newKind);
@@ -3148,9 +3161,24 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
     if (name && inventoryItems.some(item => normalizeInventoryName(item.name).toLowerCase() === name.toLowerCase())) {
       alert('同じ商品名がすでに登録されています。'); return;
     }
+    registrationSaveRef.current = true;
     setIsSaving(true);
     try {
-      await addInventoryItem({ id: 'inventory_' + Date.now(), kind, name, manufacturer: normalizeInventoryName(newManufacturer), modelNumber: normalizeInventoryName(newModelNumber), usageLocation, barcode, minStock, stock });
+      let imageData = {};
+      if (newProductPhoto) {
+        if (uploadedProductPhotoRef.current?.file !== newProductPhoto) {
+          const uploaded = await uploadTaskImageToCloudinary(newProductPhoto);
+          uploadedProductPhotoRef.current = { file: newProductPhoto, data: {
+            imageUrl: uploaded.secure_url, imageName: newProductPhoto.name || '',
+            imagePublicId: uploaded.public_id || '', imageBytes: Number(uploaded.bytes || newProductPhoto.size || 0)
+          } };
+        }
+        imageData = uploadedProductPhotoRef.current.data;
+      }
+      await addInventoryItem({ id: 'inventory_' + Date.now(), kind, name, manufacturer: normalizeInventoryName(newManufacturer), modelNumber: normalizeInventoryName(newModelNumber), usageLocation, barcode, minStock, stock, ...imageData });
+      setNewProductPhoto(null);
+      setNewProductPhotoPreview('');
+      uploadedProductPhotoRef.current = null;
       setNewKind('');
       setNewName('');
       setNewManufacturer('');
@@ -3165,8 +3193,8 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
       setProductLookupSource('');
     } catch (error) {
       console.error('商品の登録に失敗しました:', error);
-      alert('商品を登録できませんでした。もう一度お試しください。');
-    } finally { setIsSaving(false); }
+      alert('商品を登録できませんでした。画像のアップロードまたは保存に失敗しました。入力内容を確認して再試行してください。');
+    } finally { registrationSaveRef.current = false; setIsSaving(false); }
   };
 
   const startEdit = (item) => {
@@ -3346,8 +3374,9 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
           <p className="text-xs text-gray-600">未登録商品はGoogle検索・ラベル撮影・手入力で確認できます。入力した商品情報を確認してから登録してください。</p>
           {newBarcode && <a href={`https://www.google.com/search?q=${encodeURIComponent(normalizeInventoryName(newBarcode) + ' 商品')}`} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center rounded-lg bg-blue-600 px-3 text-sm font-bold text-white">JANコードをGoogleで検索 ↗</a>}
           <button type="button" onClick={()=>setOcrOpen(open=>!open)} className="block min-h-11 w-full rounded-lg border border-indigo-300 bg-indigo-50 px-3 text-sm font-bold text-indigo-900">{ocrOpen ? 'ラベル読み取りを閉じる' : '商品ラベルを撮影して文字を読み取る'}</button>
-          {ocrOpen && <LabelOcrCapture key={newBarcode} disabled={isSaving} onApply={(field, value)=>{ const text = normalizeInventoryName(value); if(field==='name')setNewName(text.slice(0,120)); if(field==='manufacturer')setNewManufacturer(text.slice(0,120)); if(field==='modelNumber')setNewModelNumber(text.slice(0,120)); }}/>}
+          {ocrOpen && <LabelOcrCapture key={newBarcode} onUseImage={selectProductPhoto} disabled={isSaving} onApply={(field, value)=>{ const text = normalizeInventoryName(value); if(field==='name')setNewName(text.slice(0,120)); if(field==='manufacturer')setNewManufacturer(text.slice(0,120)); if(field==='modelNumber')setNewModelNumber(text.slice(0,120)); }}/>}
         </div>}
+        {newProductPhotoPreview && <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 space-y-2"><div className="text-xs font-bold text-blue-800">登録する商品画像</div><img src={newProductPhotoPreview} alt="登録する商品画像のプレビュー" className="max-h-48 w-full rounded-lg bg-white object-contain"/><button type="button" disabled={isSaving} onClick={()=>selectProductPhoto(null)} className="min-h-11 text-sm font-bold text-red-600 disabled:opacity-50">商品画像を外す</button><p className="text-xs text-gray-600">商品を追加すると、この写真も保存します。</p></div>}
         <label className="block text-xs font-bold text-gray-600">種類（任意）<input value={newKind} onChange={e=>setNewKind(e.target.value)} placeholder="種類を入力（省略可）" className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base" maxLength={80}/></label>
         <label className="block text-xs font-bold text-gray-600">商品名（任意）<input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="商品名を入力" className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base" maxLength={120}/></label>
         <label className="block text-xs font-bold text-gray-600">メーカー（任意）<input value={newManufacturer} onChange={e=>setNewManufacturer(e.target.value)} maxLength={120} className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base"/></label>
