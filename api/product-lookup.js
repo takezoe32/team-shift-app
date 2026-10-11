@@ -71,7 +71,7 @@ export default async function handler(req, res) {
         const title = xmlValue(item, 'title');
         const url = safeHttpUrl(xmlValue(item, 'link'));
         const description = xmlValue(item, 'description');
-        if (!url || !title || !description || searchItems.some(entry => entry.url === url)) continue;
+        if (!url || !title || searchItems.some(entry => entry.url === url)) continue;
         searchItems.push({ title, url, description });
       }
       if (searchItems.length >= 12) break;
@@ -110,11 +110,11 @@ export default async function handler(req, res) {
         url: canonicalUrl,
         description: description.slice(0, 360),
         exactCodeMatch,
-        likelyOfficial: !isLikelyCommerce(canonicalUrl)
+        likelyCommerce: isLikelyCommerce(canonicalUrl)
       });
     }
 
-    candidates.sort((a, b) => Number(b.exactCodeMatch) - Number(a.exactCodeMatch));
+    candidates.sort((a, b) => Number(b.exactCodeMatch && !b.likelyCommerce) - Number(a.exactCodeMatch && !a.likelyCommerce));
     return res.status(200).json({
       jan,
       candidates: candidates.slice(0, 6),
