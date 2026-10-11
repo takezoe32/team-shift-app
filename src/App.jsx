@@ -3182,7 +3182,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
 
   const lookupProductByBarcode = async (barcode) => {
     const normalizedBarcode = normalizeInventoryName(barcode);
-    if (!/^\\d{8,14}$/.test(normalizedBarcode)) {
+    if (!/^\d{8,14}$/.test(normalizedBarcode)) {
       setBarcodeLookupMessage('JANコードを8〜14桁の数字で入力してください。');
       return;
     }
