@@ -1,3 +1,4 @@
+import LabelOcrCapture from './components/LabelOcrCapture';
 import React, { useState, useEffect, useRef } from 'react';
 import { GoogleOAuthProvider, GoogleLogin, googleLogout } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode';
@@ -3083,6 +3084,9 @@ const BarcodeScannerModal = ({ onDetected, onClose }) => {
 const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInventoryItem, adjustInventoryStock, editInventoryItem, deleteInventoryItem, updateInventoryImage }) => {
   const [newKind, setNewKind] = useState('');
   const [newName, setNewName] = useState('');
+  const [newManufacturer, setNewManufacturer] = useState('');
+  const [newModelNumber, setNewModelNumber] = useState('');
+  const [ocrOpen, setOcrOpen] = useState(false);
   const [newUsageLocation, setNewUsageLocation] = useState('');
   const [newBarcode, setNewBarcode] = useState('');
   const [newMinStock, setNewMinStock] = useState('2');
@@ -3103,18 +3107,22 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
     const barcode = normalizeInventoryName(code);
     setNewBarcode(barcode);
     setNewName('');
+    setNewManufacturer('');
+    setNewModelNumber('');
     setProductLookupCandidates([]);
     setProductLookupSource('');
     setIsLookingUpProduct(false);
     const existing = barcode && inventoryItems.find(item => normalizeInventoryName(item.barcode) === barcode);
     setScannedStockItemId(existing?.id || '');
     setScanQuantity('1');
-    setBarcodeLookupMessage(existing ? '登録済み商品：' + existing.name + '。入庫数を入力できます。' : '未登録商品はGoogle検索で確認し、商品名を手入力できます。');
+    setBarcodeLookupMessage(existing ? '登録済み商品：' + existing.name + '。入出庫数を入力できます。' : '未登録商品はGoogle検索で確認し、商品名を手入力できます。');
   };
   useEffect(() => () => { ++lookupRequestRef.current; }, []);
   const [editingId, setEditingId] = useState(null);
   const [editingKind, setEditingKind] = useState('');
   const [editingName, setEditingName] = useState('');
+  const [editingManufacturer, setEditingManufacturer] = useState('');
+  const [editingModelNumber, setEditingModelNumber] = useState('');
   const [editingUsageLocation, setEditingUsageLocation] = useState('');
   const [editingBarcode, setEditingBarcode] = useState('');
   const [editingMinStock, setEditingMinStock] = useState('0');
@@ -3141,9 +3149,12 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
     }
     setIsSaving(true);
     try {
-      await addInventoryItem({ id: 'inventory_' + Date.now(), kind, name, usageLocation, barcode, minStock, stock });
+      await addInventoryItem({ id: 'inventory_' + Date.now(), kind, name, manufacturer: normalizeInventoryName(newManufacturer), modelNumber: normalizeInventoryName(newModelNumber), usageLocation, barcode, minStock, stock });
       setNewKind('');
       setNewName('');
+      setNewManufacturer('');
+      setNewModelNumber('');
+      setOcrOpen(false);
       setNewUsageLocation('');
       setNewBarcode('');
       setNewMinStock('2');
@@ -3161,6 +3172,8 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
     setEditingId(item.id);
     setEditingKind(normalizeInventoryName(item.kind));
     setEditingName(normalizeInventoryName(item.name));
+    setEditingManufacturer(normalizeInventoryName(item.manufacturer));
+    setEditingModelNumber(normalizeInventoryName(item.modelNumber));
     setEditingUsageLocation(normalizeInventoryName(item.usageLocation));
     setEditingBarcode(normalizeInventoryName(item.barcode));
     setEditingMinStock(String(Math.max(0, Number(item.minStock) || 0)));
@@ -3180,7 +3193,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
     }
     setIsSaving(true);
     try {
-      await editInventoryItem(item.id, { kind, name, usageLocation, barcode, minStock });
+      await editInventoryItem(item.id, { kind, name, manufacturer: normalizeInventoryName(editingManufacturer), modelNumber: normalizeInventoryName(editingModelNumber), usageLocation, barcode, minStock });
       setEditingId(null);
       setEditingKind('');
       setEditingName('');
@@ -3205,7 +3218,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
       setProductLookupCandidates([]);
       setProductLookupSource('');
       setIsLookingUpProduct(false);
-      setBarcodeLookupMessage('登録済み商品：' + existing.name + '。入庫数を入力できます。');
+      setBarcodeLookupMessage('登録済み商品：' + existing.name + '。入出庫数を入力できます。');
       return;
     }
     setIsLookingUpProduct(true);
@@ -3245,11 +3258,11 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
     const existing = inventoryItems.find(item => normalizeInventoryName(item.barcode) === barcode);
     if (existing) {
       setScannedStockItemId(existing.id);
-      setBarcodeLookupMessage('登録済み商品：' + existing.name + '。入庫数を入力して在庫に加算できます。');
+      setBarcodeLookupMessage('登録済み商品：' + existing.name + '。入庫または出庫の数量を入力できます。');
       return;
     }
     setScannedStockItemId('');
-    void lookupProductByBarcode(barcode);
+    // Unregistered products can use Google, OCR or manual entry immediately.
   };
 
   const handleScannedStockAdd = async () => {
@@ -3325,11 +3338,19 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
       <form onSubmit={e => { e.preventDefault(); void handleAdd(); }} className="rounded-2xl border border-gray-200 bg-white p-4 space-y-3 shadow-sm">
         <div className="flex items-center justify-between gap-2"><h3 className="text-sm font-black text-gray-700">商品を追加・バーコード登録</h3><button type="button" onClick={()=>setScannerOpen(true)} className="shrink-0 inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-indigo-600 px-3 text-xs font-bold text-white"><Camera size={16}/>カメラで読取</button></div>
         <label className="block text-xs font-bold text-gray-600">バーコード番号（任意）<input value={newBarcode} onChange={e=>changeBarcode(e.target.value)} inputMode="numeric" placeholder="バーコードを読み取るか入力" className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base" maxLength={80}/></label>
-        {newBarcode && !scannedStockItemId && <button type="button" onClick={() => void lookupProductByBarcode(newBarcode)} disabled={isLookingUpProduct} className="w-full min-h-10 rounded-lg border border-blue-300 text-blue-800 text-xs font-bold disabled:opacity-50">{isLookingUpProduct ? '商品情報を検索中…' : 'JANコードから商品情報を自動検索'}</button>}
-        {barcodeLookupMessage && <div className="rounded-lg bg-blue-50 border border-blue-100 p-2 text-xs text-blue-800 space-y-2"><div>{barcodeLookupMessage}</div>{isLookingUpProduct && <div className="flex items-center gap-2"><Loader2 size={14} className="animate-spin"/>メーカーサイトを検索中…</div>}{productLookupSource && <a href={productLookupSource} target="_blank" rel="noopener noreferrer" className="block underline break-all">取得元の商品ページを確認 ↗</a>}{productLookupCandidates.length > 0 && !productLookupSource && <div className="space-y-2"><div className="font-bold">商品候補（選択すると商品名に入力します）</div>{productLookupCandidates.map((candidate) => <div key={candidate.url} className="rounded-lg border border-blue-200 bg-white p-2 space-y-1"><button type="button" onClick={() => { setNewName(candidate.title); setProductLookupSource(candidate.url); setBarcodeLookupMessage('候補の商品名を入力しました。メーカー公式ページと商品名を確認してから登録してください。'); setProductLookupCandidates([]); }} className="text-left font-bold underline">{candidate.title}</button><div className="text-[11px] text-gray-600">{candidate.manufacturer ? candidate.manufacturer + '・' : ''}{candidate.sourceType || 'メーカー公式サイト'}{candidate.description ? '：' + candidate.description : ''}</div><a href={candidate.url} target="_blank" rel="noopener noreferrer" className="break-all underline">ページを確認 ↗</a>{candidate.exactCodeMatch && <span className="inline-block rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">JANコード掲載あり</span>}</div>)}</div>}{newBarcode && !scannedStockItemId && <div className="flex flex-wrap gap-2"><button type="button" onClick={() => void lookupProductByBarcode(newBarcode)} disabled={isLookingUpProduct} className="inline-flex min-h-10 items-center justify-center rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">商品情報を再検索</button><a href={`https://www.google.com/search?q=${encodeURIComponent(newBarcode + ' 商品')}`} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-10 items-center justify-center rounded-lg border border-blue-300 px-3 py-2 text-xs font-bold text-blue-800">Googleで検索 ↗</a></div>}</div>}
-        {scannedStockItemId && <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-2"><div className="text-sm font-bold text-emerald-800">登録済み商品の入出庫：{inventoryItems.find(item=>item.id===scannedStockItemId)?.name}</div><div className="flex gap-2"><select aria-label="入出庫区分" value={scanDirection} onChange={e=>setScanDirection(e.target.value)} className="rounded-lg border border-emerald-300"><option value="in">入庫</option><option value="out">出庫</option></select><input type="number" min="1" step="1" value={scanQuantity} onChange={e=>setScanQuantity(e.target.value)} aria-label="入庫数量" className="min-h-11 w-24 rounded-lg border border-emerald-300 px-2 text-center text-base"/><button type="button" onClick={()=>void handleScannedStockAdd()} disabled={isSaving} className="flex-1 min-h-11 rounded-lg bg-emerald-600 px-3 text-sm font-bold text-white disabled:opacity-50">この数量の入出庫を保存</button></div></div>}
+        {newBarcode && !scannedStockItemId && <button type="button" onClick={() => void lookupProductByBarcode(newBarcode)} disabled={isLookingUpProduct} className="w-full min-h-10 rounded-lg border border-blue-300 text-blue-800 text-xs font-bold disabled:opacity-50">{isLookingUpProduct ? '商品情報を検索中…' : 'メーカー公式サイトで候補を検索（任意）'}</button>}
+        {barcodeLookupMessage && <div className="rounded-lg bg-blue-50 border border-blue-100 p-2 text-xs text-blue-800 space-y-2"><div>{barcodeLookupMessage}</div>{isLookingUpProduct && <div className="flex items-center gap-2"><Loader2 size={14} className="animate-spin"/>メーカーサイトを検索中…</div>}{productLookupSource && <a href={productLookupSource} target="_blank" rel="noopener noreferrer" className="block underline break-all">取得元の商品ページを確認 ↗</a>}{productLookupCandidates.length > 0 && !productLookupSource && <div className="space-y-2"><div className="font-bold">商品候補（選択すると商品名に入力します）</div>{productLookupCandidates.map((candidate) => <div key={candidate.url} className="rounded-lg border border-blue-200 bg-white p-2 space-y-1"><button type="button" onClick={() => { setNewName(candidate.title); setProductLookupSource(candidate.url); setBarcodeLookupMessage('候補の商品名を入力しました。メーカー公式ページと商品名を確認してから登録してください。'); setProductLookupCandidates([]); }} className="text-left font-bold underline">{candidate.title}</button><div className="text-[11px] text-gray-600">{candidate.manufacturer ? candidate.manufacturer + '・' : ''}{candidate.sourceType || 'メーカー公式サイト'}{candidate.description ? '：' + candidate.description : ''}</div><a href={candidate.url} target="_blank" rel="noopener noreferrer" className="break-all underline">ページを確認 ↗</a>{candidate.exactCodeMatch && <span className="inline-block rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">JANコード掲載あり</span>}</div>)}</div>}</div>}
+        {scannedStockItemId && <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-2"><div className="text-sm font-bold text-emerald-800">登録済み商品の入出庫：{inventoryItems.find(item=>item.id===scannedStockItemId)?.name}</div><div className="flex gap-2"><select aria-label="入出庫区分" value={scanDirection} onChange={e=>setScanDirection(e.target.value)} className="rounded-lg border border-emerald-300"><option value="in">入庫</option><option value="out">出庫</option></select><input type="number" min="1" step="1" value={scanQuantity} onChange={e=>setScanQuantity(e.target.value)} aria-label="入出庫数量" className="min-h-11 w-24 rounded-lg border border-emerald-300 px-2 text-center text-base"/><button type="button" onClick={()=>void handleScannedStockAdd()} disabled={isSaving} className="flex-1 min-h-11 rounded-lg bg-emerald-600 px-3 text-sm font-bold text-white disabled:opacity-50">この数量の入出庫を保存</button></div></div>}
+        {!scannedStockItemId && <div className="space-y-3">
+          <p className="text-xs text-gray-600">未登録商品はGoogle検索・ラベル撮影・手入力で確認できます。商品名を確認してから登録してください。</p>
+          {newBarcode && <a href={`https://www.google.com/search?q=${encodeURIComponent(normalizeInventoryName(newBarcode) + ' 商品')}`} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center rounded-lg bg-blue-600 px-3 text-sm font-bold text-white">JANコードをGoogleで検索 ↗</a>}
+          <button type="button" onClick={()=>setOcrOpen(open=>!open)} className="block min-h-11 w-full rounded-lg border border-indigo-300 bg-indigo-50 px-3 text-sm font-bold text-indigo-900">{ocrOpen ? 'ラベル読み取りを閉じる' : '商品ラベルを撮影して文字を読み取る'}</button>
+          {ocrOpen && <LabelOcrCapture key={newBarcode} disabled={isSaving} onApply={(field, value)=>{ const text = normalizeInventoryName(value); if(field==='name')setNewName(text.slice(0,120)); if(field==='manufacturer')setNewManufacturer(text.slice(0,120)); if(field==='modelNumber')setNewModelNumber(text.slice(0,120)); }}/>}
+        </div>}
         <label className="block text-xs font-bold text-gray-600">種類（任意）<input value={newKind} onChange={e=>setNewKind(e.target.value)} placeholder="種類を入力（省略可）" className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base" maxLength={80}/></label>
         <label className="block text-xs font-bold text-gray-600">商品名<input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="商品名を入力" className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base" maxLength={120} required/></label>
+        <label className="block text-xs font-bold text-gray-600">メーカー（任意）<input value={newManufacturer} onChange={e=>setNewManufacturer(e.target.value)} maxLength={120} className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base"/></label>
+        <label className="block text-xs font-bold text-gray-600">型番（任意）<input value={newModelNumber} onChange={e=>setNewModelNumber(e.target.value)} maxLength={120} className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base"/></label>
         <label className="block text-xs font-bold text-gray-600">使用箇所（任意）<input value={newUsageLocation} onChange={e=>setNewUsageLocation(e.target.value)} placeholder="使用箇所を入力（省略可）" className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base" maxLength={120}/></label>
         <div className="flex items-center gap-3"><label className="text-sm font-bold text-gray-600 flex-1" htmlFor="inventory-new-min-stock">発注基準数</label><input id="inventory-new-min-stock" type="number" min="0" step="1" value={newMinStock} onChange={e=>setNewMinStock(e.target.value)} className="w-28 min-h-11 border border-gray-300 rounded-xl px-3 py-2 text-base text-right"/></div>
         <div className="flex items-center gap-3"><label className="text-sm font-bold text-gray-600 flex-1" htmlFor="inventory-new-stock">初期在庫数</label><input id="inventory-new-stock" type="number" inputMode="numeric" min="0" step="1" value={newStock} onChange={e=>setNewStock(e.target.value)} className="w-28 min-h-11 border border-gray-300 rounded-xl px-3 py-2 text-base text-right"/></div>
@@ -3351,12 +3372,16 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
               {editingId === item.id ? <div className="space-y-2">
                 <label className="block text-xs font-bold text-gray-600">種類（任意）<input value={editingKind} onChange={e=>setEditingKind(e.target.value)} maxLength={80} placeholder="種類（省略可）" className="mt-1 w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white text-gray-800"/></label>
                 <label className="block text-xs font-bold text-gray-600">商品名<input autoFocus value={editingName} onChange={e=>setEditingName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void handleEdit(item);}if(e.key==='Escape'){setEditingId(null);setEditingName('');}}} maxLength={120} className="mt-1 w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white text-gray-800"/></label>
+                <label className="block text-xs font-bold text-gray-600">メーカー（任意）<input value={editingManufacturer} onChange={e=>setEditingManufacturer(e.target.value)} maxLength={120} className="mt-1 w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white"/></label>
+                <label className="block text-xs font-bold text-gray-600">型番（任意）<input value={editingModelNumber} onChange={e=>setEditingModelNumber(e.target.value)} maxLength={120} className="mt-1 w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white"/></label>
                 <label className="block text-xs font-bold text-gray-600">使用箇所（任意）<input value={editingUsageLocation} onChange={e=>setEditingUsageLocation(e.target.value)} maxLength={120} placeholder="使用箇所（省略可）" className="mt-1 w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white text-gray-800"/></label>
                 <label className="block text-xs font-bold text-gray-600">バーコード番号<input value={editingBarcode} onChange={e=>setEditingBarcode(e.target.value)} maxLength={80} className="mt-1 w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white text-gray-800"/></label>
                 <label className="block text-xs font-bold text-gray-600">発注基準数<input type="number" min="0" step="1" value={editingMinStock} onChange={e=>setEditingMinStock(e.target.value)} className="mt-1 w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white text-gray-800"/></label>
               </div> : <div>
                 <div className="text-xs text-gray-500">{kind || '種類未設定'}</div>
                 <div className="font-bold text-sm break-words">{name}</div>
+                {item.manufacturer && <div className="mt-1 text-xs text-gray-600">メーカー：{item.manufacturer}</div>}
+                {item.modelNumber && <div className="mt-1 text-xs text-gray-600">型番：{item.modelNumber}</div>}
                 {usageLocation && <div className="mt-1 text-xs text-gray-600">使用箇所：{usageLocation}</div>}
                 {item.barcode && <div className="mt-1 text-[11px] text-gray-500">バーコード：{item.barcode}</div>}
                 <div className="mt-1 text-[11px] text-gray-500">発注基準：{minStock}個</div>
@@ -4067,7 +4092,7 @@ export default function App() {
                   setInventoryMovements(current => current.some(entry => entry.id === movement.id) ? current : [movement, ...current]);
                 }}
                 editInventoryItem={async (itemId, changes) => {
-                  const normalizedChanges = { kind: normalizeInventoryName(changes.kind), name: normalizeInventoryName(changes.name), usageLocation: normalizeInventoryName(changes.usageLocation), barcode: normalizeInventoryName(changes.barcode), minStock: Math.max(0, Number(changes.minStock) || 0) };
+                  const normalizedChanges = { kind: normalizeInventoryName(changes.kind), name: normalizeInventoryName(changes.name), manufacturer: normalizeInventoryName(changes.manufacturer), modelNumber: normalizeInventoryName(changes.modelNumber), usageLocation: normalizeInventoryName(changes.usageLocation), barcode: normalizeInventoryName(changes.barcode), minStock: Math.max(0, Number(changes.minStock) || 0) };
                   const updatedItems = inventoryItems.map(item => item.id === itemId ? { ...item, ...normalizedChanges } : item);
                   const updatedTasks = Object.fromEntries(Object.entries(teamData.tasks || {}).map(([dateStr, owners]) => [dateStr, Object.fromEntries(Object.entries(owners || {}).map(([ownerUid, tasks]) => [ownerUid, (tasks || []).map(task => task.productId === itemId ? { ...task, productName: normalizedChanges.name } : task)]))]));
                   const updatedTeamData = { ...teamData, tasks: updatedTasks };
