@@ -43,6 +43,33 @@ const safeHttpUrl = (value) => {
 
 const isLikelyCommerce = (url) => /amazon\.|rakuten\.|yodobashi\.|biccamera\.|monotaro\.|shopping\.yahoo\.|lohaco\.|askul\.|misumi-ec\./i.test(url);
 
+const OFFICIAL_DOMAINS = [
+  { domain: 'panasonic.jp', name: 'パナソニック' },
+  { domain: 'panasonic.com', name: 'パナソニック' },
+  { domain: 'jpn.faq.panasonic.com', name: 'パナソニック' },
+  { domain: 'lighting-daiko.co.jp', name: '大光電機' },
+  { domain: 'odelic.co.jp', name: 'オーデリック' },
+  { domain: 'koizumi-lt.co.jp', name: 'コイズミ照明' },
+  { domain: 'endo-lighting.co.jp', name: '遠藤照明' },
+  { domain: 'iwasaki.co.jp', name: '岩崎電気' },
+  { domain: 'mitsubishielectric.co.jp', name: '三菱電機' },
+  { domain: 'irisohyama.co.jp', name: 'アイリスオーヤマ' },
+  { domain: 'toshiba-lifestyle.com', name: '東芝ライフスタイル' },
+  { domain: 'lighting.toshiba.co.jp', name: '東芝ライテック' },
+  { domain: 'maxell.co.jp', name: 'マクセル' },
+  { domain: 'yamagiwa.co.jp', name: 'YAMAGIWA' },
+  { domain: 'ushio.co.jp', name: 'ウシオ電機' },
+  { domain: 'sharp.co.jp', name: 'シャープ' },
+  { domain: 'hitachi-gls.co.jp', name: '日立グローバルライフソリューションズ' }
+];
+const getOfficialManufacturer = (url) => {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    return OFFICIAL_DOMAINS.find(entry => hostname === entry.domain || hostname.endsWith('.' + entry.domain)) || null;
+  } catch { return null; }
+};
+const containsJapanese = (value = '') => /[ぁ-んァ-ヶ一-龠]/.test(value);
+
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=3600');
   if (req.method !== 'GET') return res.status(405).json({ error: 'GETのみ対応しています。' });
@@ -70,9 +97,10 @@ export default async function handler(req, res) {
       for (const item of items) {
         const title = xmlValue(item, 'title');
         const url = safeHttpUrl(xmlValue(item, 'link'));
+        const manufacturer = getOfficialManufacturer(url);
         const description = xmlValue(item, 'description');
-        if (!url || !title || searchItems.some(entry => entry.url === url)) continue;
-        searchItems.push({ title, url, description });
+        if (!url || !title || !manufacturer || searchItems.some(entry => entry.url === url)) continue;
+        searchItems.push({ title, url, description, manufacturer });
       }
       if (searchItems.length >= 12) break;
     }
@@ -96,21 +124,25 @@ export default async function handler(req, res) {
           const html = (await pageResponse.text()).slice(0, 1_000_000);
           pageTitle = getPageTitle(html);
           description = htmlMeta(html, 'description') || htmlMeta(html, 'og:description') || description;
-          exactCodeMatch = html.includes(jan);
+          exactCodeMatch = html.replace(/<[^>]*>/g, ' ').split(/\D+/).includes(jan);
         }
       } catch {
         // Search snippets are still useful when a manufacturer blocks automated page reads.
       }
 
       const title = (pageTitle || item.title).replace(/\s*[|｜-]\s*(公式|製品情報|商品情報|メーカー公式).*$/i, '').trim();
-      if (!title) continue;
+      const manufacturer = getOfficialManufacturer(canonicalUrl) || item.manufacturer;
+      if (!title || !manufacturer || !exactCodeMatch || !containsJapanese(title)) continue;
       candidates.push({
         title: title.slice(0, 180),
         searchTitle: item.title.slice(0, 180),
         url: canonicalUrl,
         description: description.slice(0, 360),
         exactCodeMatch,
-        likelyCommerce: isLikelyCommerce(canonicalUrl)
+        manufacturer: manufacturer.name,
+        sourceType: 'メーカー公式サイト',
+        officialSource: true,
+        likelyCommerce: false
       });
     }
 
@@ -119,8 +151,8 @@ export default async function handler(req, res) {
       jan,
       candidates: candidates.slice(0, 6),
       message: candidates.length
-        ? '検索候補を取得しました。メーカー公式ページとJANコードを確認してください。'
-        : '商品情報が見つかりませんでした。JANコードを使ってGoogle検索するか、商品名を手入力してください。'
+        ? 'メーカー公式サイト上でJANコードと日本語の商品名を確認できた候補です。登録前に内容を確認してください。'
+        : 'メーカー公式サイト上でJANコードと日本語の商品名を確認できませんでした。誤った商品名を自動入力せず、Google検索または手入力で確認してください。'
     });
   } catch (error) {
     console.error('Product lookup failed:', error);
