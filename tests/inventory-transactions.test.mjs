@@ -61,3 +61,12 @@ test('registration checks the stored JAN and name, not stale UI data', async () 
   assert.equal(env.data().inventoryItems.length, 1);
   assert.equal(env.data().inventoryMovements.length, 0);
 });
+test('registration preserves manufacturer, model number and JAN for reuse', async () => {
+  const env = setup([]);
+  await env.register({ id: 'lamp', name: 'LED電球', manufacturer: 'パナソニック', modelNumber: 'LDA5L-G', barcode: '4549980715123', stock: 4 });
+  const saved = env.data().inventoryItems[0];
+  assert.equal(saved.manufacturer, 'パナソニック');
+  assert.equal(saved.modelNumber, 'LDA5L-G');
+  assert.equal(saved.barcode, '4549980715123');
+  assert.equal(saved.stock, 4);
+});
