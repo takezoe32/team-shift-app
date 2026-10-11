@@ -1551,8 +1551,8 @@ const DailyDetailView = ({
           </div>
         </div>
       )}
+      {productScannerOpen && <BarcodeScannerModal onDetected={handleProductBarcodeDetected} onClose={()=>setProductScannerOpen(false)}/>}
     </div>
-    {productScannerOpen && <BarcodeScannerModal onDetected={handleProductBarcodeDetected} onClose={()=>setProductScannerOpen(false)}/>}
   );
 };
 
