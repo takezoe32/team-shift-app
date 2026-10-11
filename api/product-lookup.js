@@ -15,14 +15,15 @@ const xmlValue = (item, tag) => {
 };
 
 const htmlMeta = (html, property) => {
-  const escaped = property.replace(/[.*+?^\x24{}()|[\]\\]/g, '\\$&');
-  const patterns = [
-    new RegExp('<meta[^>]+(?:property|name)=["']' + escaped + '["'][^>]+content=["']([^"']*)["'][^>]*>', 'i'),
-    new RegExp('<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']' + escaped + '["'][^>]*>', 'i')
-  ];
-  for (const pattern of patterns) {
-    const match = html.match(pattern);
-    if (match) return stripTags(match[1]);
+  const tags = html.match(/<meta\b[^>]*>/gi) || [];
+  for (const tag of tags) {
+    const attrs = {};
+    for (const match of tag.matchAll(/([\w:-]+)\s*=\s*["']([^"']*)["']/gi)) {
+      attrs[match[1].toLowerCase()] = decodeHtml(match[2]);
+    }
+    if ((attrs.property || attrs.name || '').toLowerCase() === property.toLowerCase()) {
+      return stripTags(attrs.content || '');
+    }
   }
   return '';
 };
