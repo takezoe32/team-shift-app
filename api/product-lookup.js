@@ -41,8 +41,6 @@ const safeHttpUrl = (value) => {
   }
 };
 
-const isLikelyCommerce = (url) => /amazon\.|rakuten\.|yodobashi\.|biccamera\.|monotaro\.|shopping\.yahoo\.|lohaco\.|askul\.|misumi-ec\./i.test(url);
-
 const OFFICIAL_DOMAINS = [
   { domain: 'panasonic.jp', name: 'パナソニック' },
   { domain: 'panasonic.com', name: 'パナソニック' },
@@ -131,7 +129,7 @@ export default async function handler(req, res) {
       }
 
       const title = (pageTitle || item.title).replace(/\s*[|｜-]\s*(公式|製品情報|商品情報|メーカー公式).*$/i, '').trim();
-      const manufacturer = getOfficialManufacturer(canonicalUrl) || item.manufacturer;
+      const manufacturer = getOfficialManufacturer(canonicalUrl);
       if (!title || !manufacturer || !exactCodeMatch || !containsJapanese(title)) continue;
       candidates.push({
         title: title.slice(0, 180),
