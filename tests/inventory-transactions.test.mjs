@@ -16,14 +16,14 @@ function setup(initialItems) {
     inventoryItems: [{ id: 'lamp', name: '電球', stock: 1 }],
     normalizeInventoryName: value => String(value || '').normalize('NFKC').trim(),
     doc: () => ({}), arrayUnion: movement => ({ movement }),
-    setInventoryItems() {}, setInventoryMovements() {},
+    setInventoryItems() {}, setInventoryMovements() {}, setTeamData() {},
     runTransaction: async (_db, callback) => {
       let pending;
       const result = await callback({
         get: async () => ({ exists: () => true, data: () => structuredClone(data) }),
         update: (_ref, update) => { pending = update; },
       });
-      if (pending) data = { ...data, inventoryItems: pending.inventoryItems, inventoryMovements: [...data.inventoryMovements, pending.inventoryMovements.movement] };
+      if (pending) data = { ...data, ...pending, inventoryMovements: pending.inventoryMovements ? [...data.inventoryMovements, pending.inventoryMovements.movement] : data.inventoryMovements };
       return result;
     },
   };
@@ -33,7 +33,7 @@ function setup(initialItems) {
     const body = source.slice(start + name.length + 2, source.indexOf('\n                }}', start)) + '}';
     return vm.runInNewContext(`(${body})`, context);
   };
-  return { register: callback('addInventoryItem'), adjust: callback('adjustInventoryStock'), data: () => data };
+  return { register: callback('addInventoryItem'), adjust: callback('adjustInventoryStock'), edit: callback('editInventoryItem'), data: () => data };
 }
 test('stock changes use the latest stored quantity and record the actor', async () => {
   const env = setup([{ id: 'lamp', name: '電球', stock: 10 }]);
@@ -102,4 +102,28 @@ test('different unnamed products can be registered while duplicate JAN is reject
   assert.equal(saved.imageName, 'label.jpg');
   assert.equal(saved.imagePublicId, 'inventory/label');
   assert.equal(saved.imageBytes, 12345);
+});
+
+test('image edit preserves latest stock, adds label photo and clears every image field on deletion', async () => {
+  const env = setup([{ id: 'lamp', name: '電球', stock: 10, barcode: '123', imageUrl: 'old.jpg', imagePublicId: 'old', imageName: 'old', imageBytes: 20 }]);
+  await env.edit('lamp', { name: '電球', barcode: '123', imageUrl: 'new.jpg', imagePublicId: 'new', imageName: 'label.jpg', imageBytes: 100 });
+  assert.equal(env.data().inventoryItems[0].stock, 10);
+  assert.equal(env.data().inventoryItems[0].imageUrl, 'new.jpg');
+  await env.edit('lamp', { modelNumber: 'NEW-MODEL', barcode: '123' });
+  assert.equal(env.data().inventoryItems[0].imageUrl, 'new.jpg');
+  await env.edit('lamp', { modelNumber: 'NEW-MODEL', barcode: '123', imageUrl: '', imagePublicId: '', imageName: '', imageBytes: 0 });
+  const item = env.data().inventoryItems[0];
+  assert.equal(item.stock, 10);
+  assert.equal(item.imageUrl, '');
+  assert.equal(item.imagePublicId, '');
+  assert.equal(item.imageName, '');
+  assert.equal(item.imageBytes, 0);
+  assert.equal(env.data().inventoryMovements.length, 0);
+});
+test('editing a deleted product or stored duplicate JAN rejects without changing inventory', async () => {
+  const env = setup([{ id: 'lamp', name: '電球', stock: 10, barcode: '123' }, { id: 'other', name: '別の商品', stock: 2, barcode: '456' }]);
+  await assert.rejects(env.edit('missing', { name: '画像変更', imageUrl: 'new.jpg' }), /見つかりません/);
+  await assert.rejects(env.edit('lamp', { name: '電球', barcode: '456', imageUrl: '' }), /すでに登録/);
+  assert.equal(env.data().inventoryItems[0].stock, 10);
+  assert.equal(env.data().inventoryItems[0].barcode, '123');
 });

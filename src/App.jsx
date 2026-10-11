@@ -3140,6 +3140,32 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
   const [editingUsageLocation, setEditingUsageLocation] = useState('');
   const [editingBarcode, setEditingBarcode] = useState('');
   const [editingMinStock, setEditingMinStock] = useState('0');
+  const [editingOcrOpen, setEditingOcrOpen] = useState(false);
+  const [editingPhoto, setEditingPhoto] = useState(null);
+  const [editingPhotoPreview, setEditingPhotoPreview] = useState('');
+  const [editingImageRemoved, setEditingImageRemoved] = useState(false);
+  const editingPhotoUploadRef = useRef(null);
+  const editingSaveRef = useRef(false);
+  useEffect(() => () => { if (editingPhotoPreview) URL.revokeObjectURL(editingPhotoPreview); }, [editingPhotoPreview]);
+  const selectEditingPhoto = file => {
+    if (editingSaveRef.current) return;
+    editingPhotoUploadRef.current = null;
+    setEditingPhoto(file);
+    setEditingPhotoPreview(file ? URL.createObjectURL(file) : '');
+    setEditingImageRemoved(false);
+  };
+  const cancelEdit = () => {
+    if (editingSaveRef.current) return;
+    setEditingId(null);
+    setEditingOcrOpen(false);
+    selectEditingPhoto(null);
+  };
+  const removeEditingImage = () => {
+    if (editingSaveRef.current) return;
+    if (!window.confirm('商品画像を削除しますか？「保存」を押すと反映されます。')) return;
+    selectEditingPhoto(null);
+    setEditingImageRemoved(true);
+  };
   const [stockDrafts, setStockDrafts] = useState({});
   const [uploadingImageId, setUploadingImageId] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -3198,6 +3224,9 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
   };
 
   const startEdit = (item) => {
+    if (isSaving || uploadingImageId) return;
+    selectEditingPhoto(null);
+    setEditingOcrOpen(false);
     setEditingId(item.id);
     setEditingKind(normalizeInventoryName(item.kind));
     setEditingName(normalizeInventoryName(item.name));
@@ -3209,6 +3238,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
   };
 
   const handleEdit = async (item) => {
+    if (isSaving || editingSaveRef.current) return;
     const kind = normalizeInventoryName(editingKind);
     const name = normalizeInventoryName(editingName);
     const usageLocation = normalizeInventoryName(editingUsageLocation);
@@ -3220,9 +3250,28 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
     if (name && inventoryItems.some(other => other.id !== item.id && normalizeInventoryName(other.name).toLowerCase() === name.toLowerCase())) {
       alert('同じ商品名がすでに登録されています。'); return;
     }
+    editingSaveRef.current = true;
     setIsSaving(true);
     try {
-      await editInventoryItem(item.id, { kind, name, manufacturer: normalizeInventoryName(editingManufacturer), modelNumber: normalizeInventoryName(editingModelNumber), usageLocation, barcode, minStock });
+      let imageChanges = {};
+      if (editingPhoto) {
+        if (editingPhotoUploadRef.current?.file !== editingPhoto) {
+          const uploaded = await uploadTaskImageToCloudinary(editingPhoto);
+          editingPhotoUploadRef.current = { file: editingPhoto, data: {
+            imageUrl: uploaded.secure_url, imageName: editingPhoto.name || '',
+            imagePublicId: uploaded.public_id || '', imageBytes: Number(uploaded.bytes || editingPhoto.size || 0)
+          } };
+        }
+        imageChanges = editingPhotoUploadRef.current.data;
+      } else if (editingImageRemoved) {
+        imageChanges = { imageUrl: '', imageName: '', imagePublicId: '', imageBytes: 0 };
+      }
+      await editInventoryItem(item.id, { kind, name, manufacturer: normalizeInventoryName(editingManufacturer), modelNumber: normalizeInventoryName(editingModelNumber), usageLocation, barcode, minStock, ...imageChanges });
+      setEditingPhoto(null);
+      setEditingPhotoPreview('');
+      setEditingImageRemoved(false);
+      setEditingOcrOpen(false);
+      editingPhotoUploadRef.current = null;
       setEditingId(null);
       setEditingKind('');
       setEditingName('');
@@ -3230,8 +3279,8 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
       setEditingBarcode('');
     } catch (error) {
       console.error('商品情報の更新に失敗しました:', error);
-      alert('商品情報を更新できませんでした。もう一度お試しください。');
-    } finally { setIsSaving(false); }
+      alert('商品情報を更新できませんでした。入力内容・画像を確認して再試行してください。');
+    } finally { editingSaveRef.current = false; setIsSaving(false); }
   };
 
   const lookupProductByBarcode = async (barcode) => {
@@ -3400,8 +3449,18 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
           <div className="flex items-start gap-2">
             <div className={`min-w-0 flex-1 ${low?'text-red-700':'text-gray-800'}`}>
               {editingId === item.id ? <div className="space-y-2">
+                <div className="rounded-xl border border-indigo-200 bg-white p-3 space-y-2">
+                  <div className="text-xs font-bold text-gray-700">商品画像・ラベル</div>
+                  {(editingPhotoPreview || (!editingImageRemoved && item.imageUrl)) && <img src={editingPhotoPreview || item.imageUrl} alt="編集中の商品画像" className="max-h-48 w-full rounded-lg object-contain"/>}
+                  {editingPhotoPreview && <p className="text-xs text-blue-700">この写真を商品画像として保存します。</p>}
+                  {editingImageRemoved && <p className="text-xs text-red-600">商品画像を削除します。保存するまでは反映されません。</p>}
+                  <button type="button" disabled={isSaving} onClick={()=>setEditingOcrOpen(open=>!open)} className="min-h-11 w-full rounded-lg border border-indigo-300 bg-indigo-50 px-3 text-sm font-bold text-indigo-900 disabled:opacity-50">{editingOcrOpen ? 'ラベル読み取りを閉じる' : 'ラベルを撮影・追加する'}</button>
+                  {(editingPhoto || (!editingImageRemoved && item.imageUrl)) && <button type="button" disabled={isSaving} onClick={removeEditingImage} className="min-h-11 text-sm font-bold text-red-600 disabled:opacity-50">商品画像を削除</button>}
+                  {editingImageRemoved && <button type="button" disabled={isSaving} onClick={()=>setEditingImageRemoved(false)} className="min-h-11 text-sm font-bold text-gray-600">画像の削除を取り消す</button>}
+                  {editingOcrOpen && <LabelOcrCapture key={item.id} onUseImage={selectEditingPhoto} disabled={isSaving} onApply={(field,value)=>{const text=normalizeInventoryName(value).slice(0,120);if(field==='name')setEditingName(text);if(field==='manufacturer')setEditingManufacturer(text);if(field==='modelNumber')setEditingModelNumber(text);}}/>}
+                </div>
                 <label className="block text-xs font-bold text-gray-600">種類（任意）<input value={editingKind} onChange={e=>setEditingKind(e.target.value)} maxLength={80} placeholder="種類（省略可）" className="mt-1 w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white text-gray-800"/></label>
-                <label className="block text-xs font-bold text-gray-600">商品名（任意）<input autoFocus value={editingName} onChange={e=>setEditingName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void handleEdit(item);}if(e.key==='Escape'){setEditingId(null);setEditingName('');}}} maxLength={120} className="mt-1 w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white text-gray-800"/></label>
+                <label className="block text-xs font-bold text-gray-600">商品名（任意）<input autoFocus value={editingName} onChange={e=>setEditingName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void handleEdit(item);}if(e.key==='Escape'){cancelEdit();}}} maxLength={120} className="mt-1 w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white text-gray-800"/></label>
                 <label className="block text-xs font-bold text-gray-600">メーカー（任意）<input value={editingManufacturer} onChange={e=>setEditingManufacturer(e.target.value)} maxLength={120} className="mt-1 w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white"/></label>
                 <label className="block text-xs font-bold text-gray-600">型番（任意）<input value={editingModelNumber} onChange={e=>setEditingModelNumber(e.target.value)} maxLength={120} className="mt-1 w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white"/></label>
                 <label className="block text-xs font-bold text-gray-600">使用箇所（任意）<input value={editingUsageLocation} onChange={e=>setEditingUsageLocation(e.target.value)} maxLength={120} placeholder="使用箇所（省略可）" className="mt-1 w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white text-gray-800"/></label>
@@ -3418,12 +3477,12 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
               </div>}
               {low && <div className="mt-1 text-[11px] font-black text-red-600">在庫わずか・補充してください</div>}
             </div>
-            {editingId === item.id ? <div className="flex gap-1 shrink-0"><button type="button" disabled={isSaving} onClick={()=>void handleEdit(item)} className="min-h-10 px-3 rounded-lg bg-blue-600 text-white text-xs font-bold disabled:opacity-50">保存</button><button type="button" onClick={()=>{setEditingId(null);setEditingKind('');setEditingName('');setEditingUsageLocation('');}} className="min-h-10 px-3 rounded-lg border border-gray-300 bg-white text-xs font-bold">取消</button></div> : <div className="flex gap-1 shrink-0">
+            {editingId === item.id ? <div className="flex gap-1 shrink-0"><button type="button" disabled={isSaving} onClick={()=>void handleEdit(item)} className="min-h-10 px-3 rounded-lg bg-blue-600 text-white text-xs font-bold disabled:opacity-50">保存</button><button type="button" disabled={isSaving} onClick={cancelEdit} className="min-h-10 px-3 rounded-lg border border-gray-300 bg-white text-xs font-bold">取消</button></div> : <div className="flex gap-1 shrink-0">
               <label title="商品画像を保存" aria-label={name+'の画像を保存'} className={`w-10 h-10 rounded-lg border border-blue-200 bg-white text-blue-600 flex items-center justify-center cursor-pointer ${uploadingImageId===item.id?'opacity-50 pointer-events-none':''}`}>
                 {uploadingImageId===item.id ? <Loader2 size={16} className="animate-spin"/> : <ImageIcon size={16}/>}
                 <input type="file" accept="image/*" className="hidden" disabled={uploadingImageId===item.id || isSaving} onChange={e=>{const file=e.target.files?.[0];if(file)void handleImageUpload(item,file);e.target.value='';}}/>
               </label>
-              <button type="button" onClick={()=>startEdit(item)} aria-label={name+'の商品情報を編集'} className="w-10 h-10 rounded-lg border border-gray-300 bg-white flex items-center justify-center"><Edit2 size={16}/></button>
+              <button type="button" disabled={isSaving || !!uploadingImageId} onClick={()=>startEdit(item)} aria-label={name+'の商品情報を編集'} className="w-10 h-10 rounded-lg border border-gray-300 bg-white flex items-center justify-center"><Edit2 size={16}/></button>
               <button type="button" onClick={()=>void handleDelete(item)} disabled={isSaving || uploadingImageId===item.id} aria-label={name+'を削除'} className="w-10 h-10 rounded-lg border border-red-200 bg-white text-red-600 flex items-center justify-center disabled:opacity-50"><Trash2 size={16}/></button>
             </div>}
           </div>
@@ -4124,11 +4183,25 @@ export default function App() {
                 }}
                 editInventoryItem={async (itemId, changes) => {
                   const normalizedChanges = { kind: normalizeInventoryName(changes.kind), name: normalizeInventoryName(changes.name), manufacturer: normalizeInventoryName(changes.manufacturer), modelNumber: normalizeInventoryName(changes.modelNumber), usageLocation: normalizeInventoryName(changes.usageLocation), barcode: normalizeInventoryName(changes.barcode), minStock: Math.max(0, Number(changes.minStock) || 0) };
+                  if (Object.prototype.hasOwnProperty.call(changes, 'imageUrl')) {
+                    Object.assign(normalizedChanges, { imageUrl: changes.imageUrl || '', imageName: changes.imageName || '', imagePublicId: changes.imagePublicId || '', imageBytes: Number(changes.imageBytes || 0) });
+                  }
                   if (!hasInventoryProductDetails(normalizedChanges)) throw new Error('種類・商品名・メーカー・型番のいずれかを入力してください。');
-                  const updatedItems = inventoryItems.map(item => item.id === itemId ? { ...item, ...normalizedChanges } : item);
-                  const updatedTasks = Object.fromEntries(Object.entries(teamData.tasks || {}).map(([dateStr, owners]) => [dateStr, Object.fromEntries(Object.entries(owners || {}).map(([ownerUid, tasks]) => [ownerUid, (tasks || []).map(task => task.productId === itemId ? { ...task, productName: inventoryProductLabel(normalizedChanges) } : task)]))]));
-                  const updatedTeamData = { ...teamData, tasks: updatedTasks };
-                  await updateDoc(doc(db, 'app_data', 'shared_state'), { inventoryItems: updatedItems, teamData: updatedTeamData });
+                  const { updatedItems, updatedTeamData } = await runTransaction(db, async transaction => {
+                    const ref = doc(db, 'app_data', 'shared_state');
+                    const snapshot = await transaction.get(ref);
+                    if (!snapshot.exists()) throw new Error('共有データがありません。');
+                    const data = snapshot.data();
+                    const items = data.inventoryItems || [];
+                    if (!items.some(item => item.id === itemId)) throw new Error('商品が見つかりません。');
+                    if (items.some(item => item.id !== itemId && ((normalizedChanges.barcode && normalizeInventoryName(item.barcode) === normalizedChanges.barcode) || (normalizedChanges.name && normalizeInventoryName(item.name).toLowerCase() === normalizedChanges.name.toLowerCase())))) throw new Error('同じ商品名またはバーコードがすでに登録されています。');
+                    const updatedItems = items.map(item => item.id === itemId ? { ...item, ...normalizedChanges } : item);
+                    const currentTeamData = data.teamData || {};
+                    const updatedTasks = Object.fromEntries(Object.entries(currentTeamData.tasks || {}).map(([dateStr, owners]) => [dateStr, Object.fromEntries(Object.entries(owners || {}).map(([ownerUid, tasks]) => [ownerUid, (tasks || []).map(task => task.productId === itemId ? { ...task, productName: inventoryProductLabel(normalizedChanges) } : task)]))]));
+                    const updatedTeamData = { ...currentTeamData, tasks: updatedTasks };
+                    transaction.update(ref, { inventoryItems: updatedItems, teamData: updatedTeamData });
+                    return { updatedItems, updatedTeamData };
+                  });
                   setInventoryItems(updatedItems);
                   setTeamData(updatedTeamData);
                 }}
