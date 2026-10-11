@@ -1,3 +1,5 @@
+import { yahooProductFields } from './_lib/yahoo-product-fields.js';
+
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'GET') return res.status(405).json({ error: 'GETのみ対応しています。' });
@@ -21,7 +23,7 @@ export default async function handler(req, res) {
       try { productUrl = new URL(hit.url); } catch { continue; }
       if (productUrl.protocol !== 'https:' || !['store.shopping.yahoo.co.jp', 'shopping.yahoo.co.jp', 'lohaco.yahoo.co.jp'].includes(productUrl.hostname)) continue;
       if (candidates.some(candidate => candidate.url === productUrl.href)) continue;
-      candidates.push({ title: hit.name.trim().slice(0, 180), url: productUrl.href, jan, exactCodeMatch: true, officialSource: false, likelyCommerce: true, sourceType: 'Yahoo!ショッピング', description: '販売店の商品情報（メーカー公式未確認）。型番・単品／セット数量を確認してください。' });
+      candidates.push({ ...yahooProductFields(hit.name.trim().slice(0, 180), typeof hit.brand?.name === 'string' ? hit.brand.name.slice(0, 100) : ''), title: hit.name.trim().slice(0, 180), url: productUrl.href, jan, exactCodeMatch: true, officialSource: false, likelyCommerce: true, sourceType: 'Yahoo!ショッピング', description: '販売店の商品情報（メーカー公式未確認）。型番・単品／セット数量を確認してください。' });
     }
     return res.status(200).json({ jan, candidates: candidates.slice(0, 6), message: candidates.length ? 'JANコードが一致する販売店の候補です。メーカー公式未確認です。型番・単品／セット数量を確認して選択してください。' : 'JANコードが一致する日本語の商品候補が見つかりませんでした。Google検索または手入力で登録できます。' });
   } catch {
