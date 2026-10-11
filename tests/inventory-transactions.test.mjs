@@ -93,3 +93,13 @@ test('different unnamed products can be registered while duplicate JAN is reject
   await assert.rejects(env.register({ id: 'c', modelNumber: 'C', barcode: '4900000000001', stock: 0 }), /すでに登録/);
   assert.equal(env.data().inventoryItems.length, 2);
 });
+
+ test('registration keeps reusable label photo metadata with the product', async () => {
+  const env = setup([]);
+  await env.register({ id: 'label-photo', modelNumber: 'LDA-test', stock: 0, imageUrl: 'https://example.com/label.jpg', imageName: 'label.jpg', imagePublicId: 'inventory/label', imageBytes: 12345 });
+  const saved = env.data().inventoryItems[0];
+  assert.equal(saved.imageUrl, 'https://example.com/label.jpg');
+  assert.equal(saved.imageName, 'label.jpg');
+  assert.equal(saved.imagePublicId, 'inventory/label');
+  assert.equal(saved.imageBytes, 12345);
+});

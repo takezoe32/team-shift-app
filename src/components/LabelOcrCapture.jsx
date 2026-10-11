@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 
-export default function LabelOcrCapture({ onApply, disabled = false }) {
+export default function LabelOcrCapture({ onApply, onUseImage, disabled = false }) {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState('');
   const [text, setText] = useState('');
   const [selectedText, setSelectedText] = useState('');
   const [preview, setPreview] = useState('');
+  const [photoFile, setPhotoFile] = useState(null);
   const [message, setMessage] = useState('');
   const sessionRef = useRef({ token: 0, worker: null, busy: false, timer: null });
 
@@ -46,6 +47,7 @@ export default function LabelOcrCapture({ onApply, disabled = false }) {
     setProgress('読み取りの準備中…');
     const imageUrl = URL.createObjectURL(file);
     setPreview(imageUrl);
+    setPhotoFile(null);
     let worker;
     session.timer = setTimeout(() => {
       if (token !== session.token) return;
@@ -57,6 +59,7 @@ export default function LabelOcrCapture({ onApply, disabled = false }) {
       image.src = imageUrl;
       await image.decode();
       if (token !== session.token) return;
+      setPhotoFile(file);
       const scale = Math.min(1, 2000 / Math.max(image.naturalWidth, image.naturalHeight));
       const canvas = document.createElement('canvas');
       canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
@@ -99,7 +102,7 @@ export default function LabelOcrCapture({ onApply, disabled = false }) {
   const lines = [...new Set(text.split(/\r?\n/).map(line => line.trim()).filter(Boolean))];
   return <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-3 space-y-3">
     <div className="text-sm font-bold text-indigo-900">商品ラベルから文字を読み取る</div>
-    <p className="text-xs text-gray-600">商品名・型番が大きく写るように撮影してください。写真は端末内で読み取り、アップロードしません。初回は読み取りデータのダウンロードが必要です。</p>
+    <p className="text-xs text-gray-600">商品名・型番が大きく写るように撮影してください。文字の読み取りは端末内で行います。「この写真を商品画像に使う」を選ぶと、商品登録時に写真をアップロードします。初回は読み取りデータのダウンロードが必要です。</p>
     <div className="flex flex-wrap gap-2">
       <label className={`inline-flex min-h-11 items-center rounded-lg bg-indigo-600 px-3 text-sm font-bold text-white cursor-pointer ${busy || disabled ? 'opacity-50' : ''}`}>ラベルを撮影
         <input aria-label="商品ラベルを撮影" type="file" accept="image/*" capture="environment" className="sr-only" disabled={busy || disabled} onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; void recognize(file); }}/>
@@ -110,6 +113,7 @@ export default function LabelOcrCapture({ onApply, disabled = false }) {
       {busy && <button type="button" onClick={cancel} className="min-h-11 rounded-lg border border-gray-300 bg-white px-3 text-sm">中止</button>}
     </div>
     {preview && <img src={preview} alt="読み取り対象の商品ラベル" className="max-h-48 w-full object-contain rounded-lg bg-white"/>}
+    {photoFile && onUseImage && <button type="button" disabled={disabled} onClick={() => onUseImage(photoFile)} className="min-h-11 w-full rounded-lg border border-indigo-300 bg-white px-3 text-sm font-bold text-indigo-800 disabled:opacity-50">この写真を商品画像に使う</button>}
     <div role="status" className="text-xs text-indigo-900">{progress || message}</div>
     {text && !busy && <div className="space-y-2">
       <label className="block text-xs font-bold text-gray-700">読み取った文字（修正できます）<textarea aria-label="読み取った文字" value={text} onChange={event => { setText(event.target.value); setSelectedText(''); }} rows={5} className="mt-1 w-full rounded-lg border border-gray-300 bg-white p-2 text-base"/></label>
