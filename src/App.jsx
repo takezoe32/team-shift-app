@@ -3100,6 +3100,9 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
   const [scanQuantity, setScanQuantity] = useState('1');
   const [scannedStockItemId, setScannedStockItemId] = useState('');
   const [barcodeLookupMessage, setBarcodeLookupMessage] = useState('');
+  const [productLookupCandidates, setProductLookupCandidates] = useState([]);
+  const [productLookupSource, setProductLookupSource] = useState('');
+  const [isLookingUpProduct, setIsLookingUpProduct] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editingKind, setEditingKind] = useState('');
   const [editingName, setEditingName] = useState('');
@@ -3134,6 +3137,8 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
       setNewMinStock('2');
       setNewStock('0');
       setBarcodeLookupMessage('');
+      setProductLookupCandidates([]);
+      setProductLookupSource('');
     } catch (error) {
       console.error('商品の登録に失敗しました:', error);
       alert('商品を登録できませんでした。もう一度お試しください。');
@@ -3175,6 +3180,40 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
     } finally { setIsSaving(false); }
   };
 
+  const lookupProductByBarcode = async (barcode) => {
+    const normalizedBarcode = normalizeInventoryName(barcode);
+    if (!/^\d{8,14}$/.test(normalizedBarcode)) {
+      setBarcodeLookupMessage('JANコードを8〜14桁の数字で入力してください。');
+      return;
+    }
+    setIsLookingUpProduct(true);
+    setProductLookupCandidates([]);
+    setProductLookupSource('');
+    setBarcodeLookupMessage('メーカー公式サイトの商品情報を検索しています…');
+    try {
+      const response = await fetch('/api/product-lookup?jan=' + encodeURIComponent(normalizedBarcode));
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || '商品情報を検索できませんでした。');
+      const candidates = Array.isArray(result.candidates) ? result.candidates : [];
+      setProductLookupCandidates(candidates);
+      const exactCandidate = candidates.find(candidate => candidate.exactCodeMatch && !candidate.likelyCommerce);
+      if (exactCandidate) {
+        setNewName(exactCandidate.title);
+        setProductLookupSource(exactCandidate.url);
+        setBarcodeLookupMessage('JANコードが掲載されたページから商品名を取得しました。登録前に内容を確認してください。');
+      } else if (candidates.length) {
+        setBarcodeLookupMessage('商品候補が見つかりました。メーカー公式ページを確認して候補を選択してください。');
+      } else {
+        setBarcodeLookupMessage(result.message || '商品情報が見つかりませんでした。Google検索または手入力をお試しください。');
+      }
+    } catch (error) {
+      console.error('商品情報の自動取得に失敗しました:', error);
+      setBarcodeLookupMessage('商品情報を自動取得できませんでした。Google検索または手入力をお試しください。');
+    } finally {
+      setIsLookingUpProduct(false);
+    }
+  };
+
   const handleBarcodeDetected = (code) => {
     const barcode = normalizeInventoryName(code);
     setScannerOpen(false);
@@ -3187,7 +3226,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
       return;
     }
     setScannedStockItemId('');
-    setBarcodeLookupMessage('JANコードを読み取りました。Google検索で商品名・メーカー・型番を確認してから登録してください。');
+    void lookupProductByBarcode(barcode);
   };
 
   const handleScannedStockAdd = async () => {
@@ -3261,7 +3300,8 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
       <form onSubmit={e => { e.preventDefault(); void handleAdd(); }} className="rounded-2xl border border-gray-200 bg-white p-4 space-y-3 shadow-sm">
         <div className="flex items-center justify-between gap-2"><h3 className="text-sm font-black text-gray-700">商品を追加・バーコード登録</h3><button type="button" onClick={()=>setScannerOpen(true)} className="shrink-0 inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-indigo-600 px-3 text-xs font-bold text-white"><Camera size={16}/>カメラで読取</button></div>
         <label className="block text-xs font-bold text-gray-600">バーコード番号（任意）<input value={newBarcode} onChange={e=>setNewBarcode(e.target.value)} inputMode="numeric" placeholder="バーコードを読み取るか入力" className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base" maxLength={80}/></label>
-        {barcodeLookupMessage && <div className="rounded-lg bg-blue-50 border border-blue-100 p-2 text-xs text-blue-800 space-y-2"><div>{barcodeLookupMessage}</div>{newBarcode && !scannedStockItemId && <a href={`https://www.google.com/search?q=${encodeURIComponent(newBarcode + ' 商品')}`} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-10 items-center justify-center rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white">Googleで商品を確認 ↗</a>}</div>}
+        {newBarcode && !scannedStockItemId && <button type="button" onClick={() => void lookupProductByBarcode(newBarcode)} disabled={isLookingUpProduct} className="w-full min-h-10 rounded-lg border border-blue-300 text-blue-800 text-xs font-bold disabled:opacity-50">{isLookingUpProduct ? '商品情報を検索中…' : 'JANコードから商品情報を自動検索'}</button>}
+        {barcodeLookupMessage && <div className="rounded-lg bg-blue-50 border border-blue-100 p-2 text-xs text-blue-800 space-y-2"><div>{barcodeLookupMessage}</div>{isLookingUpProduct && <div className="flex items-center gap-2"><Loader2 size={14} className="animate-spin"/>メーカーサイトを検索中…</div>}{productLookupSource && <a href={productLookupSource} target="_blank" rel="noopener noreferrer" className="block underline break-all">取得元の商品ページを確認 ↗</a>}{productLookupCandidates.length > 0 && !productLookupSource && <div className="space-y-2"><div className="font-bold">商品候補（選択すると商品名に入力します）</div>{productLookupCandidates.map((candidate, index) => <div key={candidate.url} className="rounded-lg border border-blue-200 bg-white p-2 space-y-1"><button type="button" onClick={() => { setNewName(candidate.title); setProductLookupSource(candidate.url); setBarcodeLookupMessage('候補の商品名を入力しました。メーカー公式ページと商品名を確認してから登録してください。'); setProductLookupCandidates([]); }} className="text-left font-bold underline">{candidate.title}</button><div className="text-[11px] text-gray-600">{candidate.description}</div><a href={candidate.url} target="_blank" rel="noopener noreferrer" className="break-all underline">ページを確認 ↗</a>{candidate.exactCodeMatch && <span className="inline-block rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">JANコード掲載あり</span>}</div>)}</div>}{newBarcode && !scannedStockItemId && <div className="flex flex-wrap gap-2"><button type="button" onClick={() => void lookupProductByBarcode(newBarcode)} disabled={isLookingUpProduct} className="inline-flex min-h-10 items-center justify-center rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">商品情報を再検索</button><a href={`https://www.google.com/search?q=${encodeURIComponent(newBarcode + ' 商品')}`} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-10 items-center justify-center rounded-lg border border-blue-300 px-3 py-2 text-xs font-bold text-blue-800">Googleで検索 ↗</a></div>}</div>}
         {scannedStockItemId && <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-2"><div className="text-sm font-bold text-emerald-800">登録済み商品の入庫：{inventoryItems.find(item=>item.id===scannedStockItemId)?.name}</div><div className="flex gap-2"><input type="number" min="1" step="1" value={scanQuantity} onChange={e=>setScanQuantity(e.target.value)} aria-label="入庫数量" className="min-h-11 w-24 rounded-lg border border-emerald-300 px-2 text-center text-base"/><button type="button" onClick={()=>void handleScannedStockAdd()} disabled={isSaving} className="flex-1 min-h-11 rounded-lg bg-emerald-600 px-3 text-sm font-bold text-white disabled:opacity-50">この数量を在庫に加算</button></div></div>}
         <label className="block text-xs font-bold text-gray-600">種類（任意）<input value={newKind} onChange={e=>setNewKind(e.target.value)} placeholder="種類を入力（省略可）" className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base" maxLength={80}/></label>
         <label className="block text-xs font-bold text-gray-600">商品名<input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="商品名を入力" className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base" maxLength={120} required/></label>
@@ -3318,7 +3358,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
         </div>;
       })}</div>}
       <section className="rounded-2xl border border-gray-200 bg-white p-4 space-y-2"><div className="flex items-center gap-2"><History size={17} className="text-gray-500"/><h3 className="text-sm font-black text-gray-700">在庫変動履歴</h3></div><p className="text-[11px] text-gray-500">入庫・在庫調整・タスク使用・タスク削除による戻しを記録します。月末の実在庫との差異は「在庫数を保存」で調整し、履歴を確認してください。</p>{inventoryMovements.length ? <div className="max-h-72 overflow-y-auto divide-y divide-gray-100">{[...inventoryMovements].sort((a,b)=>String(b.timestamp||'').localeCompare(String(a.timestamp||''))).slice(0,50).map(entry=><div key={entry.id} className="py-2 text-xs"><div className="flex items-start justify-between gap-2"><span className="font-bold text-gray-700">{entry.productName || '商品'}</span><span className={`font-black tabular-nums ${Number(entry.delta||0)<0?'text-red-600':'text-emerald-700'}`}>{Number(entry.delta||0)>0?'+':''}{Number(entry.delta||0)}個</span></div><div className="mt-0.5 text-gray-500">{entry.typeLabel || entry.type || '在庫変更'} ・ {entry.timestamp ? new Date(entry.timestamp).toLocaleString('ja-JP') : ''}</div>{entry.reason && <div className="mt-0.5 text-gray-600">理由：{entry.reason}</div>}</div>)}</div> : <p className="py-2 text-xs text-gray-400">まだ履歴はありません。今後の在庫変更から記録されます。</p>}</section>
-      <p className="text-[11px] text-gray-500">在庫が商品ごとの発注基準数以下になると赤く表示されます。バーコード読み取り後はGoogle検索で商品名・メーカー・型番を確認し、登録画面に戻って内容を入力・確認してから保存してください。</p>
+      <p className="text-[11px] text-gray-500">在庫が商品ごとの発注基準数以下になると赤く表示されます。バーコード読み取り後はメーカー公式サイトを優先して商品情報を自動検索します。自動入力された商品名と取得元を確認してから保存してください。</p>
     </div>
     {scannerOpen && <BarcodeScannerModal onDetected={handleBarcodeDetected} onClose={()=>setScannerOpen(false)}/>}
   </div>;
