@@ -1,3 +1,4 @@
+import { hasInventoryProductDetails, inventoryProductLabel } from './inventoryProduct.mjs';
 import LabelOcrCapture from './components/LabelOcrCapture';
 import React, { useState, useEffect, useRef } from 'react';
 import { GoogleOAuthProvider, GoogleLogin, googleLogout } from '@react-oauth/google';
@@ -1020,7 +1021,7 @@ const DailyDetailView = ({
     if (!product) { setProductScanMessage('このバーコードの商品は未登録です。在庫管理で商品登録してください。'); return; }
     if (Number(product.stock || 0) <= 0) { setProductScanMessage('この商品の在庫がありません。'); return; }
     setNewTaskProductId(product.id);
-    setProductScanMessage('選択しました：' + product.name);
+    setProductScanMessage('選択しました：' + inventoryProductLabel(product));
   };
 
   const handleAddTask = async () => {
@@ -1377,7 +1378,7 @@ const DailyDetailView = ({
             <div className="space-y-2 mb-2">
               {newTaskVisibility !== 'private' && <input type="text" value={newTaskSubject} onChange={e=>setNewTaskSubject(e.target.value)} placeholder="件名（例：備品の補充）" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm" disabled={isUploading}/>}
               {newTaskVisibility !== 'private' && <label className="flex items-center gap-2 text-xs text-gray-600"><span className="font-bold">終了予定時刻</span><div className="flex items-center gap-1"><select aria-label="終了予定時刻の時" value={newTaskEndTime ? newTaskEndTime.split(':')[0] : ''} onChange={e=>setNewTaskEndTime(e.target.value ? e.target.value+':'+((newTaskEndTime||'').split(':')[1]||'00') : '')} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" disabled={isUploading}><option value="">時</option>{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(v=><option key={v} value={v}>{v}</option>)}</select><span>:</span><select aria-label="終了予定時刻の分" value={newTaskEndTime ? newTaskEndTime.split(':')[1] : ''} onChange={e=>setNewTaskEndTime(((newTaskEndTime||'').split(':')[0]||'00')+':'+e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" disabled={isUploading}><option value="">分</option>{['00','15','30','45'].map(v=><option key={v} value={v}>{v}</option>)}</select></div></label>}
-              {newTaskVisibility !== 'private' && <div className="space-y-2"><label className="block text-xs text-gray-600"><span className="block font-bold mb-1">使用する商品（任意）</span><select value={newTaskProductId} onChange={e=>setNewTaskProductId(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white" disabled={isUploading}><option value="">商品を選択しない</option>{inventoryItems.map(item=><option key={item.id} value={item.id} disabled={Number(item.stock||0)<=0}>{item.kind ? item.kind + '：' : ''}{item.name}{item.usageLocation ? '／使用箇所：' + item.usageLocation : ''}（在庫 {Number(item.stock||0)} 個）</option>)}</select></label><div className="flex gap-2"><button type="button" onClick={()=>setProductScannerOpen(true)} disabled={isUploading} className="min-h-10 px-3 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-bold inline-flex items-center gap-1"><Camera size={15}/>バーコード読取</button><label className="flex-1 text-xs text-gray-600 flex items-center gap-2">使用数量<input type="number" min="1" step="1" value={newTaskProductQuantity} onChange={e=>setNewTaskProductQuantity(e.target.value)} className="min-h-10 w-20 rounded-lg border border-gray-200 px-2 text-center text-sm"/></label></div>{productScanMessage && <p className="text-xs text-blue-700">{productScanMessage}</p>}</div>}
+              {newTaskVisibility !== 'private' && <div className="space-y-2"><label className="block text-xs text-gray-600"><span className="block font-bold mb-1">使用する商品（任意）</span><select value={newTaskProductId} onChange={e=>setNewTaskProductId(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white" disabled={isUploading}><option value="">商品を選択しない</option>{inventoryItems.map(item=><option key={item.id} value={item.id} disabled={Number(item.stock||0)<=0}>{item.kind ? item.kind + '：' : ''}{inventoryProductLabel(item)}{item.usageLocation ? '／使用箇所：' + item.usageLocation : ''}（在庫 {Number(item.stock||0)} 個）</option>)}</select></label><div className="flex gap-2"><button type="button" onClick={()=>setProductScannerOpen(true)} disabled={isUploading} className="min-h-10 px-3 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-bold inline-flex items-center gap-1"><Camera size={15}/>バーコード読取</button><label className="flex-1 text-xs text-gray-600 flex items-center gap-2">使用数量<input type="number" min="1" step="1" value={newTaskProductQuantity} onChange={e=>setNewTaskProductQuantity(e.target.value)} className="min-h-10 w-20 rounded-lg border border-gray-200 px-2 text-center text-sm"/></label></div>{productScanMessage && <p className="text-xs text-blue-700">{productScanMessage}</p>}</div>}
             </div>
             <div className="flex gap-2 items-end">
               <textarea
@@ -3115,7 +3116,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
     const existing = barcode && inventoryItems.find(item => normalizeInventoryName(item.barcode) === barcode);
     setScannedStockItemId(existing?.id || '');
     setScanQuantity('1');
-    setBarcodeLookupMessage(existing ? '登録済み商品：' + existing.name + '。入出庫数を入力できます。' : '未登録商品はGoogle検索で確認し、商品名を手入力できます。');
+    setBarcodeLookupMessage(existing ? '登録済み商品：' + inventoryProductLabel(existing) + '。入出庫数を入力できます。' : '未登録商品はGoogle検索で確認し、商品名を手入力できます。');
   };
   useEffect(() => () => { ++lookupRequestRef.current; }, []);
   const [editingId, setEditingId] = useState(null);
@@ -3140,11 +3141,11 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
     const barcode = normalizeInventoryName(newBarcode);
     const minStock = Number(newMinStock);
     const stock = Number(newStock);
-    if (!name) { alert('商品名を入力してください。'); return; }
+    if (!hasInventoryProductDetails({ kind, name, manufacturer: newManufacturer, modelNumber: newModelNumber })) { alert('種類・商品名・メーカー・型番のいずれかを入力してください。'); return; }
     if (!Number.isInteger(stock) || stock < 0) { alert('在庫数は0以上の整数を入力してください。'); return; }
     if (!Number.isInteger(minStock) || minStock < 0) { alert('発注基準数は0以上の整数を入力してください。'); return; }
     if (barcode && inventoryItems.some(item => normalizeInventoryName(item.barcode) === barcode)) { alert('同じバーコードがすでに登録されています。'); return; }
-    if (inventoryItems.some(item => normalizeInventoryName(item.name).toLowerCase() === name.toLowerCase())) {
+    if (name && inventoryItems.some(item => normalizeInventoryName(item.name).toLowerCase() === name.toLowerCase())) {
       alert('同じ商品名がすでに登録されています。'); return;
     }
     setIsSaving(true);
@@ -3185,10 +3186,10 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
     const usageLocation = normalizeInventoryName(editingUsageLocation);
     const barcode = normalizeInventoryName(editingBarcode);
     const minStock = Number(editingMinStock);
-    if (!name) { alert('商品名を入力してください。'); return; }
+    if (!hasInventoryProductDetails({ kind, name, manufacturer: editingManufacturer, modelNumber: editingModelNumber })) { alert('種類・商品名・メーカー・型番のいずれかを入力してください。'); return; }
     if (!Number.isInteger(minStock) || minStock < 0) { alert('発注基準数は0以上の整数を入力してください。'); return; }
     if (barcode && inventoryItems.some(other => other.id !== item.id && normalizeInventoryName(other.barcode) === barcode)) { alert('同じバーコードがすでに登録されています。'); return; }
-    if (inventoryItems.some(other => other.id !== item.id && normalizeInventoryName(other.name).toLowerCase() === name.toLowerCase())) {
+    if (name && inventoryItems.some(other => other.id !== item.id && normalizeInventoryName(other.name).toLowerCase() === name.toLowerCase())) {
       alert('同じ商品名がすでに登録されています。'); return;
     }
     setIsSaving(true);
@@ -3218,7 +3219,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
       setProductLookupCandidates([]);
       setProductLookupSource('');
       setIsLookingUpProduct(false);
-      setBarcodeLookupMessage('登録済み商品：' + existing.name + '。入出庫数を入力できます。');
+      setBarcodeLookupMessage('登録済み商品：' + inventoryProductLabel(existing) + '。入出庫数を入力できます。');
       return;
     }
     setIsLookingUpProduct(true);
@@ -3258,7 +3259,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
     const existing = inventoryItems.find(item => normalizeInventoryName(item.barcode) === barcode);
     if (existing) {
       setScannedStockItemId(existing.id);
-      setBarcodeLookupMessage('登録済み商品：' + existing.name + '。入庫または出庫の数量を入力できます。');
+      setBarcodeLookupMessage('登録済み商品：' + inventoryProductLabel(existing) + '。入庫または出庫の数量を入力できます。');
       return;
     }
     setScannedStockItemId('');
@@ -3321,7 +3322,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
   };
 
   const handleDelete = async (item) => {
-    if (!window.confirm(`「${normalizeInventoryName(item.name)}」を在庫一覧から削除しますか？\\n関連する過去のタスク記録は残ります。`)) return;
+    if (!window.confirm(`「${inventoryProductLabel(item)}」を在庫一覧から削除しますか？\\n関連する過去のタスク記録は残ります。`)) return;
     setIsSaving(true);
     try {
       await deleteInventoryItem(item.id);
@@ -3340,27 +3341,27 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
         <label className="block text-xs font-bold text-gray-600">バーコード番号（任意）<input value={newBarcode} onChange={e=>changeBarcode(e.target.value)} inputMode="numeric" placeholder="バーコードを読み取るか入力" className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base" maxLength={80}/></label>
         {newBarcode && !scannedStockItemId && <button type="button" onClick={() => void lookupProductByBarcode(newBarcode)} disabled={isLookingUpProduct} className="w-full min-h-10 rounded-lg border border-blue-300 text-blue-800 text-xs font-bold disabled:opacity-50">{isLookingUpProduct ? '商品情報を検索中…' : 'メーカー公式サイトで候補を検索（任意）'}</button>}
         {barcodeLookupMessage && <div className="rounded-lg bg-blue-50 border border-blue-100 p-2 text-xs text-blue-800 space-y-2"><div>{barcodeLookupMessage}</div>{isLookingUpProduct && <div className="flex items-center gap-2"><Loader2 size={14} className="animate-spin"/>メーカーサイトを検索中…</div>}{productLookupSource && <a href={productLookupSource} target="_blank" rel="noopener noreferrer" className="block underline break-all">取得元の商品ページを確認 ↗</a>}{productLookupCandidates.length > 0 && !productLookupSource && <div className="space-y-2"><div className="font-bold">商品候補（選択すると商品名に入力します）</div>{productLookupCandidates.map((candidate) => <div key={candidate.url} className="rounded-lg border border-blue-200 bg-white p-2 space-y-1"><button type="button" onClick={() => { setNewName(candidate.title); setProductLookupSource(candidate.url); setBarcodeLookupMessage('候補の商品名を入力しました。メーカー公式ページと商品名を確認してから登録してください。'); setProductLookupCandidates([]); }} className="text-left font-bold underline">{candidate.title}</button><div className="text-[11px] text-gray-600">{candidate.manufacturer ? candidate.manufacturer + '・' : ''}{candidate.sourceType || 'メーカー公式サイト'}{candidate.description ? '：' + candidate.description : ''}</div><a href={candidate.url} target="_blank" rel="noopener noreferrer" className="break-all underline">ページを確認 ↗</a>{candidate.exactCodeMatch && <span className="inline-block rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">JANコード掲載あり</span>}</div>)}</div>}</div>}
-        {scannedStockItemId && <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-2"><div className="text-sm font-bold text-emerald-800">登録済み商品の入出庫：{inventoryItems.find(item=>item.id===scannedStockItemId)?.name}</div><div className="flex gap-2"><select aria-label="入出庫区分" value={scanDirection} onChange={e=>setScanDirection(e.target.value)} className="rounded-lg border border-emerald-300"><option value="in">入庫</option><option value="out">出庫</option></select><input type="number" min="1" step="1" value={scanQuantity} onChange={e=>setScanQuantity(e.target.value)} aria-label="入出庫数量" className="min-h-11 w-24 rounded-lg border border-emerald-300 px-2 text-center text-base"/><button type="button" onClick={()=>void handleScannedStockAdd()} disabled={isSaving} className="flex-1 min-h-11 rounded-lg bg-emerald-600 px-3 text-sm font-bold text-white disabled:opacity-50">この数量の入出庫を保存</button></div></div>}
+        {scannedStockItemId && <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-2"><div className="text-sm font-bold text-emerald-800">登録済み商品の入出庫：{inventoryProductLabel(inventoryItems.find(item=>item.id===scannedStockItemId))}</div><div className="flex gap-2"><select aria-label="入出庫区分" value={scanDirection} onChange={e=>setScanDirection(e.target.value)} className="rounded-lg border border-emerald-300"><option value="in">入庫</option><option value="out">出庫</option></select><input type="number" min="1" step="1" value={scanQuantity} onChange={e=>setScanQuantity(e.target.value)} aria-label="入出庫数量" className="min-h-11 w-24 rounded-lg border border-emerald-300 px-2 text-center text-base"/><button type="button" onClick={()=>void handleScannedStockAdd()} disabled={isSaving} className="flex-1 min-h-11 rounded-lg bg-emerald-600 px-3 text-sm font-bold text-white disabled:opacity-50">この数量の入出庫を保存</button></div></div>}
         {!scannedStockItemId && <div className="space-y-3">
-          <p className="text-xs text-gray-600">未登録商品はGoogle検索・ラベル撮影・手入力で確認できます。商品名を確認してから登録してください。</p>
+          <p className="text-xs text-gray-600">未登録商品はGoogle検索・ラベル撮影・手入力で確認できます。入力した商品情報を確認してから登録してください。</p>
           {newBarcode && <a href={`https://www.google.com/search?q=${encodeURIComponent(normalizeInventoryName(newBarcode) + ' 商品')}`} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center rounded-lg bg-blue-600 px-3 text-sm font-bold text-white">JANコードをGoogleで検索 ↗</a>}
           <button type="button" onClick={()=>setOcrOpen(open=>!open)} className="block min-h-11 w-full rounded-lg border border-indigo-300 bg-indigo-50 px-3 text-sm font-bold text-indigo-900">{ocrOpen ? 'ラベル読み取りを閉じる' : '商品ラベルを撮影して文字を読み取る'}</button>
           {ocrOpen && <LabelOcrCapture key={newBarcode} disabled={isSaving} onApply={(field, value)=>{ const text = normalizeInventoryName(value); if(field==='name')setNewName(text.slice(0,120)); if(field==='manufacturer')setNewManufacturer(text.slice(0,120)); if(field==='modelNumber')setNewModelNumber(text.slice(0,120)); }}/>}
         </div>}
         <label className="block text-xs font-bold text-gray-600">種類（任意）<input value={newKind} onChange={e=>setNewKind(e.target.value)} placeholder="種類を入力（省略可）" className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base" maxLength={80}/></label>
-        <label className="block text-xs font-bold text-gray-600">商品名<input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="商品名を入力" className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base" maxLength={120} required/></label>
+        <label className="block text-xs font-bold text-gray-600">商品名（任意）<input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="商品名を入力" className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base" maxLength={120}/></label>
         <label className="block text-xs font-bold text-gray-600">メーカー（任意）<input value={newManufacturer} onChange={e=>setNewManufacturer(e.target.value)} maxLength={120} className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base"/></label>
         <label className="block text-xs font-bold text-gray-600">型番（任意）<input value={newModelNumber} onChange={e=>setNewModelNumber(e.target.value)} maxLength={120} className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base"/></label>
         <label className="block text-xs font-bold text-gray-600">使用箇所（任意）<input value={newUsageLocation} onChange={e=>setNewUsageLocation(e.target.value)} placeholder="使用箇所を入力（省略可）" className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base" maxLength={120}/></label>
         <div className="flex items-center gap-3"><label className="text-sm font-bold text-gray-600 flex-1" htmlFor="inventory-new-min-stock">発注基準数</label><input id="inventory-new-min-stock" type="number" min="0" step="1" value={newMinStock} onChange={e=>setNewMinStock(e.target.value)} className="w-28 min-h-11 border border-gray-300 rounded-xl px-3 py-2 text-base text-right"/></div>
         <div className="flex items-center gap-3"><label className="text-sm font-bold text-gray-600 flex-1" htmlFor="inventory-new-stock">初期在庫数</label><input id="inventory-new-stock" type="number" inputMode="numeric" min="0" step="1" value={newStock} onChange={e=>setNewStock(e.target.value)} className="w-28 min-h-11 border border-gray-300 rounded-xl px-3 py-2 text-base text-right"/></div>
-        <button type="submit" disabled={isSaving || !newName.trim()} className="w-full min-h-11 rounded-xl bg-blue-600 text-white font-bold text-sm disabled:opacity-50">{isSaving?'登録中…':'商品を追加'}</button>
-        <p className="text-[11px] text-gray-500">種類・使用箇所は空欄でも登録できます。商品名は全角英数字で入力しても、登録時に半角英数字へ統一します。</p>
+        <button type="submit" disabled={isSaving || !hasInventoryProductDetails({ kind: newKind, name: newName, manufacturer: newManufacturer, modelNumber: newModelNumber })} className="w-full min-h-11 rounded-xl bg-blue-600 text-white font-bold text-sm disabled:opacity-50">{isSaving?'登録中…':'商品を追加'}</button>
+        <p className="text-[11px] text-gray-500">種類・商品名・メーカー・型番のいずれか1つを入力すると登録できます。JANコード・使用箇所だけでは登録できません。</p>
       </form>
       <div className="flex items-center justify-between"><h3 className="text-sm font-black text-gray-700">登録商品</h3><span className="text-xs text-gray-500">{sortedItems.length}商品</span></div>
       {sortedItems.length===0 ? <div className="rounded-xl bg-white border border-gray-200 p-6 text-center text-sm text-gray-500">商品が登録されていません。</div> : <div className="space-y-2">{sortedItems.map(item => {
         const kind = normalizeInventoryName(item.kind);
-        const name = normalizeInventoryName(item.name);
+        const name = inventoryProductLabel(item);
         const usageLocation = normalizeInventoryName(item.usageLocation);
         const stock = Math.max(0, Number(item.stock) || 0);
         const minStock = Math.max(0, item.minStock === undefined ? 2 : Number(item.minStock) || 0);
@@ -3371,7 +3372,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
             <div className={`min-w-0 flex-1 ${low?'text-red-700':'text-gray-800'}`}>
               {editingId === item.id ? <div className="space-y-2">
                 <label className="block text-xs font-bold text-gray-600">種類（任意）<input value={editingKind} onChange={e=>setEditingKind(e.target.value)} maxLength={80} placeholder="種類（省略可）" className="mt-1 w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white text-gray-800"/></label>
-                <label className="block text-xs font-bold text-gray-600">商品名<input autoFocus value={editingName} onChange={e=>setEditingName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void handleEdit(item);}if(e.key==='Escape'){setEditingId(null);setEditingName('');}}} maxLength={120} className="mt-1 w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white text-gray-800"/></label>
+                <label className="block text-xs font-bold text-gray-600">商品名（任意）<input autoFocus value={editingName} onChange={e=>setEditingName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void handleEdit(item);}if(e.key==='Escape'){setEditingId(null);setEditingName('');}}} maxLength={120} className="mt-1 w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white text-gray-800"/></label>
                 <label className="block text-xs font-bold text-gray-600">メーカー（任意）<input value={editingManufacturer} onChange={e=>setEditingManufacturer(e.target.value)} maxLength={120} className="mt-1 w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white"/></label>
                 <label className="block text-xs font-bold text-gray-600">型番（任意）<input value={editingModelNumber} onChange={e=>setEditingModelNumber(e.target.value)} maxLength={120} className="mt-1 w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white"/></label>
                 <label className="block text-xs font-bold text-gray-600">使用箇所（任意）<input value={editingUsageLocation} onChange={e=>setEditingUsageLocation(e.target.value)} maxLength={120} placeholder="使用箇所（省略可）" className="mt-1 w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white text-gray-800"/></label>
@@ -4075,13 +4076,14 @@ export default function App() {
                 inventoryMovements={inventoryMovements}
                 addInventoryItem={async (item) => {
                   const normalizedItem = { ...item, name: normalizeInventoryName(item.name), barcode: normalizeInventoryName(item.barcode), minStock: Math.max(0, Number(item.minStock) || 0), stock: Math.max(0, Number(item.stock) || 0) };
-                  const movement = { id: crypto.randomUUID(), timestamp: new Date().toISOString(), type: 'register', typeLabel: '商品登録・初期在庫', productId: normalizedItem.id, productName: normalizedItem.name, delta: normalizedItem.stock, stockBefore: 0, stockAfter: normalizedItem.stock, reason: 'バーコードまたは手入力で商品登録', actorUid: currentUser.id, actorName: currentUser.name || '' };
+                  if (!hasInventoryProductDetails(normalizedItem)) throw new Error('種類・商品名・メーカー・型番のいずれかを入力してください。');
+                  const movement = { id: crypto.randomUUID(), timestamp: new Date().toISOString(), type: 'register', typeLabel: '商品登録・初期在庫', productId: normalizedItem.id, productName: inventoryProductLabel(normalizedItem), delta: normalizedItem.stock, stockBefore: 0, stockAfter: normalizedItem.stock, reason: 'バーコードまたは手入力で商品登録', actorUid: currentUser.id, actorName: currentUser.name || '' };
                   const updatedItems = await runTransaction(db, async transaction => {
                     const ref = doc(db, 'app_data', 'shared_state');
                     const snapshot = await transaction.get(ref);
                     if (!snapshot.exists()) throw new Error('共有データがありません。');
                     const items = snapshot.data().inventoryItems || [];
-                    if (items.some(existing => (normalizedItem.barcode && normalizeInventoryName(existing.barcode) === normalizedItem.barcode) || normalizeInventoryName(existing.name).toLowerCase() === normalizedItem.name.toLowerCase())) {
+                    if (items.some(existing => (normalizedItem.barcode && normalizeInventoryName(existing.barcode) === normalizedItem.barcode) || (normalizedItem.name && normalizeInventoryName(existing.name).toLowerCase() === normalizedItem.name.toLowerCase()))) {
                       throw new Error('同じ商品名またはバーコードがすでに登録されています。');
                     }
                     const nextItems = [...items, normalizedItem];
@@ -4093,8 +4095,9 @@ export default function App() {
                 }}
                 editInventoryItem={async (itemId, changes) => {
                   const normalizedChanges = { kind: normalizeInventoryName(changes.kind), name: normalizeInventoryName(changes.name), manufacturer: normalizeInventoryName(changes.manufacturer), modelNumber: normalizeInventoryName(changes.modelNumber), usageLocation: normalizeInventoryName(changes.usageLocation), barcode: normalizeInventoryName(changes.barcode), minStock: Math.max(0, Number(changes.minStock) || 0) };
+                  if (!hasInventoryProductDetails(normalizedChanges)) throw new Error('種類・商品名・メーカー・型番のいずれかを入力してください。');
                   const updatedItems = inventoryItems.map(item => item.id === itemId ? { ...item, ...normalizedChanges } : item);
-                  const updatedTasks = Object.fromEntries(Object.entries(teamData.tasks || {}).map(([dateStr, owners]) => [dateStr, Object.fromEntries(Object.entries(owners || {}).map(([ownerUid, tasks]) => [ownerUid, (tasks || []).map(task => task.productId === itemId ? { ...task, productName: normalizedChanges.name } : task)]))]));
+                  const updatedTasks = Object.fromEntries(Object.entries(teamData.tasks || {}).map(([dateStr, owners]) => [dateStr, Object.fromEntries(Object.entries(owners || {}).map(([ownerUid, tasks]) => [ownerUid, (tasks || []).map(task => task.productId === itemId ? { ...task, productName: inventoryProductLabel(normalizedChanges) } : task)]))]));
                   const updatedTeamData = { ...teamData, tasks: updatedTasks };
                   await updateDoc(doc(db, 'app_data', 'shared_state'), { inventoryItems: updatedItems, teamData: updatedTeamData });
                   setInventoryItems(updatedItems);
@@ -4125,7 +4128,7 @@ export default function App() {
                     const nextStock = setExact ? quantity : oldStock + quantity;
                     if (nextStock < 0) throw new Error('在庫数が不足しています。');
                     const updatedItems = items.map(item => item.id === itemId ? { ...item, stock: nextStock } : item);
-                    const movement = { id: movementId, timestamp: new Date().toISOString(), type: setExact ? 'stocktake_adjustment' : (quantity >= 0 ? 'stock_in' : 'stock_out'), typeLabel: setExact ? '棚卸し調整' : (quantity >= 0 ? '入庫' : '出庫'), productId: itemId, productName: currentItem.name, delta: nextStock - oldStock, stockBefore: oldStock, stockAfter: nextStock, reason: setExact ? '入力した実在庫数へ調整' : '在庫管理画面から入出庫', actorUid: currentUser.id, actorName: currentUser.name || '' };
+                    const movement = { id: movementId, timestamp: new Date().toISOString(), type: setExact ? 'stocktake_adjustment' : (quantity >= 0 ? 'stock_in' : 'stock_out'), typeLabel: setExact ? '棚卸し調整' : (quantity >= 0 ? '入庫' : '出庫'), productId: itemId, productName: inventoryProductLabel(currentItem), delta: nextStock - oldStock, stockBefore: oldStock, stockAfter: nextStock, reason: setExact ? '入力した実在庫数へ調整' : '在庫管理画面から入出庫', actorUid: currentUser.id, actorName: currentUser.name || '' };
                     transaction.update(ref, { inventoryItems: updatedItems, inventoryMovements: arrayUnion(movement) });
                     return { updatedItems, movement };
                   });
@@ -4358,7 +4361,7 @@ export default function App() {
                     throw new Error('選択した商品の在庫がありません。');
                   }
                   const updatedInventoryItems = product ? inventoryItems.map(item => item.id === productId ? { ...item, stock: Math.max(0, Number(item.stock || 0) - quantity) } : item) : inventoryItems;
-                  const inventoryMovement = product ? { id: 'inv_' + Date.now() + '_' + Math.random().toString(36).slice(2,7), timestamp: new Date().toISOString(), type: 'task_use', typeLabel: '日別タスク登録時の使用', productId: product.id, productName: product.name, delta: -quantity, stockBefore: Number(product.stock || 0), stockAfter: Math.max(0, Number(product.stock || 0) - quantity), reason: 'タスク：' + (subject || text || '') } : null;
+                  const inventoryMovement = product ? { id: 'inv_' + Date.now() + '_' + Math.random().toString(36).slice(2,7), timestamp: new Date().toISOString(), type: 'task_use', typeLabel: '日別タスク登録時の使用', productId: product.id, productName: inventoryProductLabel(product), delta: -quantity, stockBefore: Number(product.stock || 0), stockAfter: Math.max(0, Number(product.stock || 0) - quantity), reason: 'タスク：' + (subject || text || '') } : null;
                   const dayTasks = teamData.tasks[dateStr] || {};
                   const userTasks = dayTasks[targetUid] || [];
                   const updatedTeamData = {
@@ -4380,7 +4383,7 @@ export default function App() {
                             ownerUid: targetUid,
                             assigneeIds: [targetUid],
                             visibility: visibility === 'private' ? 'private' : 'public',
-                            ...(product ? { productId: product.id, productName: product.name, inventoryQuantity: quantity, inventoryDeducted: true } : {}),
+                            ...(product ? { productId: product.id, productName: inventoryProductLabel(product), inventoryQuantity: quantity, inventoryDeducted: true } : {}),
                             completedAt: null,
                             ...(imageUrl ? {
                               imageUrl,
@@ -4426,7 +4429,7 @@ export default function App() {
                   const restoreQuantity = Math.max(1, Number(targetTask?.inventoryQuantity) || 1);
                   const currentProduct = shouldRestock ? inventoryItems.find(item => item.id === targetTask.productId) : null;
                   const updatedInventoryItems = shouldRestock ? inventoryItems.map(item => item.id === targetTask.productId ? { ...item, stock: (Number(item.stock) || 0) + restoreQuantity } : item) : inventoryItems;
-                  const restoreMovement = shouldRestock ? { id: 'inv_' + Date.now() + '_' + Math.random().toString(36).slice(2,7), timestamp: new Date().toISOString(), type: 'task_delete_restore', typeLabel: 'タスク削除による在庫戻し', productId: targetTask.productId, productName: currentProduct?.name || targetTask.productName || '', delta: restoreQuantity, stockBefore: Number(currentProduct?.stock || 0), stockAfter: Number(currentProduct?.stock || 0) + restoreQuantity, reason: '削除したタスク：' + (targetTask.subject || targetTask.text || '') } : null;
+                  const restoreMovement = shouldRestock ? { id: 'inv_' + Date.now() + '_' + Math.random().toString(36).slice(2,7), timestamp: new Date().toISOString(), type: 'task_delete_restore', typeLabel: 'タスク削除による在庫戻し', productId: targetTask.productId, productName: currentProduct ? inventoryProductLabel(currentProduct) : targetTask.productName || '', delta: restoreQuantity, stockBefore: Number(currentProduct?.stock || 0), stockAfter: Number(currentProduct?.stock || 0) + restoreQuantity, reason: '削除したタスク：' + (targetTask.subject || targetTask.text || '') } : null;
                   // 削除はFirestoreへの保存成功後に画面へ反映する。使用商品がある場合は在庫も戻す。
                   await updateDoc(doc(db, 'app_data', 'shared_state'), shouldRestock
                     ? { [`teamData.tasks.${dateStr}.${targetUid}`]: updatedOwnerTasks, inventoryItems: updatedInventoryItems, inventoryMovements: arrayUnion(restoreMovement) }
