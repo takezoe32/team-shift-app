@@ -3090,15 +3090,25 @@ const BarcodeScannerModal = ({ onDetected, onClose }) => {
 };
 
 const lookupBarcodeProduct = async (barcode) => {
+  // UPCitemdbは使用せず、JAN/EANコードをOpen Food Factsの公開データベースで検索する。
+  // 食品以外の商品は収録されていない場合があるため、見つからない場合は手入力へ誘導する。
   try {
-    const response = await fetch('https://api.upcitemdb.com/prod/trial/lookup?upc=' + encodeURIComponent(barcode));
+    const response = await fetch(
+      'https://world.openfoodfacts.org/api/v2/product/' + encodeURIComponent(barcode) +
+      '.json?fields=product_name,product_name_ja,brands,quantity,image_front_url,code'
+    );
     if (!response.ok) return null;
     const data = await response.json();
-    const item = data?.items?.[0];
+    const item = data?.status === 1 ? data?.product : null;
     if (!item) return null;
-    return { name: String(item.title || '').trim(), brand: String(item.brand || '').trim(), description: String(item.description || '').trim() };
+    const name = String(item.product_name_ja || item.product_name || '').trim();
+    const brand = String(item.brands || '').split(',')[0].trim();
+    const description = String(item.quantity || '').trim();
+    const imageUrl = String(item.image_front_url || '').trim();
+    if (!name && !brand && !imageUrl) return null;
+    return { name, brand, description, imageUrl, barcode: String(item.code || barcode) };
   } catch (error) {
-    console.warn('バーコード商品情報の検索に失敗しました:', error);
+    console.warn('JANコード商品情報の検索に失敗しました:', error);
     return null;
   }
 };
@@ -3204,12 +3214,15 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
     }
     setScannedStockItemId('');
     const found = await lookupBarcodeProduct(barcode);
-    if (found?.name) {
+    if (found && (found.name || found.brand || found.imageUrl)) {
       setNewName(current => current.trim() ? current : found.name);
       setNewKind(current => current.trim() ? current : found.brand);
-      setBarcodeLookupMessage('商品情報が見つかりました。内容を確認して登録してください。');
+      setBarcodeLookupMessage((found.name ? '商品名を取得しました。' : '商品名は未取得です。') +
+        (found.brand ? ' メーカー・ブランドを取得しました。' : '') +
+        (found.imageUrl ? ' 商品画像URLも取得しました。' : '') +
+        ' 内容を確認して登録してください。');
     } else {
-      setBarcodeLookupMessage('商品情報は見つかりませんでした。商品名を入力して登録してください。');
+      setBarcodeLookupMessage('JANコードの商品情報は見つかりませんでした。商品名を手入力して登録してください。');
     }
   };
 
