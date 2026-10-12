@@ -3598,15 +3598,6 @@ const BottomNav = ({ activeTab, setActiveTab, setSelectedDate, currentUser, role
         </button>
 
         <button
-          onClick={() => setActiveTab('inventory')}
-          className={`flex-1 flex flex-col items-center justify-center space-y-1.5 relative ${activeTab === 'inventory' ? 'text-emerald-600' : 'text-gray-400'}`}
-        >
-          <Package className="w-6 h-6"/>
-          <span className="text-[10px] font-bold">在庫管理</span>
-          {activeTab === 'inventory' && <div className="absolute top-0 w-1/2 h-0.5 bg-emerald-600 rounded-b-full"></div>}
-        </button>
-
-        <button
           onClick={() => setActiveTab('partner')}
           className={`flex-1 flex flex-col items-center justify-center space-y-1.5 relative ${activeTab === 'partner' ? 'text-blue-600' : 'text-gray-400'}`}
         >
@@ -3622,6 +3613,15 @@ const BottomNav = ({ activeTab, setActiveTab, setSelectedDate, currentUser, role
           <ClipboardList className="w-6 h-6"/>
           <span className="text-[10px] font-bold">終了履歴</span>
           {activeTab === 'completed' && <div className="absolute top-0 w-1/2 h-0.5 bg-green-600 rounded-b-full"></div>}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('inventory')}
+          className={`flex-1 flex flex-col items-center justify-center space-y-1.5 relative ${activeTab === 'inventory' ? 'text-emerald-600' : 'text-gray-400'}`}
+        >
+          <Package className="w-6 h-6"/>
+          <span className="text-[10px] font-bold">在庫管理</span>
+          {activeTab === 'inventory' && <div className="absolute top-0 w-1/2 h-0.5 bg-emerald-600 rounded-b-full"></div>}
         </button>
 
         {canManageSettings && (
