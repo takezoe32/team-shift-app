@@ -1,3 +1,4 @@
+import { planTaskEdit } from './taskEdit.mjs';
 import { prepareInventoryImage } from './inventoryImage.js';
 import { hasInventoryProductDetails, inventoryProductLabel } from './inventoryProduct.mjs';
 import LabelOcrCapture from './components/LabelOcrCapture';
@@ -1068,6 +1069,9 @@ const DailyDetailView = ({
     const [editVal, setEditVal] = useState(task.text || '');
     const [editSubject, setEditSubject] = useState(task.subject || task.text || '');
     const [editEndTime, setEditEndTime] = useState(task.endTime || '');
+    const [editDate, setEditDate] = useState(task.taskDate || selectedDate);
+    const [isSavingEdit, setIsSavingEdit] = useState(false);
+    const savingEditRef = useRef(false);
     const [selectedAssigneeIds, setSelectedAssigneeIds] = useState(
       Array.isArray(task.assigneeIds) && task.assigneeIds.length ? task.assigneeIds : [task.ownerUid || selectedUserUid]
     );
@@ -1111,6 +1115,7 @@ const DailyDetailView = ({
     if (isEditing) {
       return (
         <div className="bg-white p-3 rounded-xl border border-blue-400 shadow-sm space-y-2">
+          <label className="block text-xs font-bold text-gray-600">タスクの日付<input type="date" value={editDate} disabled={isSavingEdit} onChange={e=>setEditDate(e.target.value)} className="mt-1 min-h-11 w-full border border-gray-300 rounded-lg px-3 text-sm"/></label>
           <input type="text" value={editSubject} onChange={e=>setEditSubject(e.target.value)} placeholder="件名" className="w-full bg-blue-50/50 p-2 text-sm rounded outline-none" />
           <label className="flex items-center gap-2 text-xs text-gray-600">終了予定時刻 <div className="flex items-center gap-1"><select aria-label="終了予定時刻の時" value={editEndTime ? editEndTime.split(':')[0] : ''} onChange={e=>setEditEndTime(e.target.value ? e.target.value+':'+((editEndTime||'').split(':')[1]||'00') : '')} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" ><option value="">時</option>{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(v=><option key={v} value={v}>{v}</option>)}</select><span>:</span><select aria-label="終了予定時刻の分" value={editEndTime ? editEndTime.split(':')[1] : ''} onChange={e=>setEditEndTime(((editEndTime||'').split(':')[0]||'00')+':'+e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" ><option value="">分</option>{['00','15','30','45'].map(v=><option key={v} value={v}>{v}</option>)}</select></div></label>
           <div className="flex gap-2 items-start">
@@ -1122,9 +1127,16 @@ const DailyDetailView = ({
               autoFocus
             />
             <button type="button"
-              onClick={() => {
-                updateTaskText(task.taskDate || selectedDate, task.ownerUid || selectedUserUid, task.id, { subject: editSubject.trim(), text: editVal.trim(), endTime: editEndTime, updates: [...(Array.isArray(task.updates) ? task.updates : []), createPartnerUpdate(editVal.trim(), currentUser, null, 'handoff')] });
-                setIsEditing(false);
+              disabled={isSavingEdit || !editDate}
+              onClick={async () => {
+                if (savingEditRef.current) return;
+                savingEditRef.current = true;
+                setIsSavingEdit(true);
+                try {
+                  await updateTaskText(task.taskDate || selectedDate, task.ownerUid || selectedUserUid, task.id, { targetDate: editDate, subject: editSubject.trim(), text: editVal.trim(), endTime: editEndTime, updates: [...(Array.isArray(task.updates) ? task.updates : []), createPartnerUpdate(editVal.trim(), currentUser, null, 'handoff')] });
+                  setIsEditing(false);
+                } catch (error) { alert(error.message || 'タスクの保存に失敗しました。'); }
+                finally { savingEditRef.current = false; setIsSavingEdit(false); }
               }}
               className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg h-fit"
               title="保存"
@@ -4664,14 +4676,19 @@ export default function App() {
                     alert('タスクの完了状態を保存できませんでした。もう一度お試しください。');
                   }
                 }} 
-                updateTaskText={(dateStr, targetUid, taskId, newText) => {
-                  const updatedTeamData = {
-                    ...teamData,
-                    tasks: { ...teamData.tasks, [dateStr]: { ...(teamData.tasks[dateStr] || {}), [targetUid]: (teamData.tasks[dateStr]?.[targetUid] || []).map(t => t.id === taskId ? { ...t, ...(newText && typeof newText === 'object' ? newText : { text: newText }) } : t) } }
-                  };
-                  setTeamData(updatedTeamData);
-                  saveToFirestore({ teamData: updatedTeamData });
-                }} 
+                updateTaskText={async (dateStr, targetUid, taskId, newText) => {
+                  if (targetUid !== currentUser.id && (roles[currentUser.role]?.level || 0) < 40) throw new Error('このタスクを編集する権限がありません。');
+                  const latestTeamData = await runTransaction(db, async transaction => {
+                    const ref = doc(db, 'app_data', 'shared_state');
+                    const snapshot = await transaction.get(ref);
+                    if (!snapshot.exists()) throw new Error('共有データが見つかりません。');
+                    const plan = planTaskEdit(snapshot.data().teamData || {}, dateStr, targetUid, taskId, newText);
+                    transaction.update(ref, plan.updates);
+                    return plan.teamData;
+                  });
+                  setTeamData(latestTeamData);
+                  if (newText?.targetDate && newText.targetDate !== dateStr) setSelectedDate(newText.targetDate);
+                }}
                 users={users}
                 sortedUsers={sortedUsers}
               />
