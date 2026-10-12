@@ -1,4 +1,4 @@
-import { hasInventoryProductDetails, inventoryProductLabel } from '../src/inventoryProduct.mjs';
+import { hasInventoryProductDetails, inventoryProductLabel, validateInventoryReplacement } from '../src/inventoryProduct.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -11,7 +11,7 @@ const source = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
 function setup(initialItems) {
   let data = { inventoryItems: structuredClone(initialItems), inventoryMovements: [] };
   const context = {
-    hasInventoryProductDetails, inventoryProductLabel,
+    hasInventoryProductDetails, inventoryProductLabel, validateInventoryReplacement,
     crypto: { randomUUID }, db: {}, currentUser: { id: 'tester', name: 'テスト担当' },
     inventoryItems: [{ id: 'lamp', name: '電球', stock: 1 }],
     normalizeInventoryName: value => String(value || '').normalize('NFKC').trim(),
@@ -137,4 +137,18 @@ test('shelf number can be registered, edited and cleared while stock is preserve
   assert.equal(env.data().inventoryItems[0].stock, 5);
   await env.edit('shelf-test', { name: '棚テスト', shelfNumber: '' });
   assert.equal(env.data().inventoryItems[0].shelfNumber, '');
+});
+
+test('replacement registration/edit preserves stock and rejects missing/self/cyclic links', async () => {
+  const env = setup([{ id: 'replacement', name: '代替電球', stock: 8 }]);
+  await env.register({ id: 'original', name: '旧電球', stock: 3, discontinued: true, replacementProductId: 'replacement', replacementNote: '口金確認' });
+  let original = env.data().inventoryItems.find(item=>item.id==='original');
+  assert.equal(original.replacementProductId, 'replacement'); assert.equal(original.discontinued, true);
+  await assert.rejects(env.edit('original', { name: '旧電球', replacementProductId: 'original' }), /自分自身/);
+  await assert.rejects(env.edit('replacement', { name: '代替電球', replacementProductId: 'original' }), /循環/);
+  await assert.rejects(env.edit('original', { name: '旧電球', replacementProductId: 'missing' }), /見つかりません/);
+  await env.edit('original', { name: '旧電球', replacementProductId: '', discontinued: false, replacementNote: '' });
+  original = env.data().inventoryItems.find(item=>item.id==='original');
+  assert.equal(original.replacementProductId, ''); assert.equal(original.stock, 3);
+  assert.equal(env.data().inventoryItems.find(item=>item.id==='replacement').stock, 8);
 });
