@@ -127,3 +127,14 @@ test('editing a deleted product or stored duplicate JAN rejects without changing
   assert.equal(env.data().inventoryItems[0].stock, 10);
   assert.equal(env.data().inventoryItems[0].barcode, '123');
 });
+
+test('shelf number can be registered, edited and cleared while stock is preserved', async () => {
+  const env = setup([]);
+  await env.register({ id: 'shelf-test', name: '棚テスト', shelfNumber: 'Ａ－０１', stock: 5 });
+  assert.equal(env.data().inventoryItems[0].shelfNumber, 'A-01');
+  await env.edit('shelf-test', { name: '棚テスト', shelfNumber: 'Ｂ－０２' });
+  assert.equal(env.data().inventoryItems[0].shelfNumber, 'B-02');
+  assert.equal(env.data().inventoryItems[0].stock, 5);
+  await env.edit('shelf-test', { name: '棚テスト', shelfNumber: '' });
+  assert.equal(env.data().inventoryItems[0].shelfNumber, '');
+});
