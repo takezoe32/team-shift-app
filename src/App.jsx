@@ -3118,6 +3118,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
     setNewProductPhoto(file);
     setNewProductPhotoPreview(file ? URL.createObjectURL(file) : '');
   };
+  const [newShelfNumber, setNewShelfNumber] = useState('');
   const [newUsageLocation, setNewUsageLocation] = useState('');
   const [newBarcode, setNewBarcode] = useState('');
   const [newMinStock, setNewMinStock] = useState('2');
@@ -3157,6 +3158,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
   const [editingName, setEditingName] = useState('');
   const [editingManufacturer, setEditingManufacturer] = useState('');
   const [editingModelNumber, setEditingModelNumber] = useState('');
+  const [editingShelfNumber, setEditingShelfNumber] = useState('');
   const [editingUsageLocation, setEditingUsageLocation] = useState('');
   const [editingBarcode, setEditingBarcode] = useState('');
   const [editingMinStock, setEditingMinStock] = useState('0');
@@ -3222,7 +3224,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
         }
         imageData = uploadedProductPhotoRef.current.data;
       }
-      await addInventoryItem({ id: 'inventory_' + Date.now(), kind, name, manufacturer: normalizeInventoryName(newManufacturer), modelNumber: normalizeInventoryName(newModelNumber), usageLocation, barcode, minStock, stock, ...imageData });
+      await addInventoryItem({ id: 'inventory_' + Date.now(), kind, name, manufacturer: normalizeInventoryName(newManufacturer), modelNumber: normalizeInventoryName(newModelNumber), shelfNumber: normalizeInventoryName(newShelfNumber), usageLocation, barcode, minStock, stock, ...imageData });
       setNewProductPhoto(null);
       setSelectedYahooImage(null);
       setNewProductPhotoPreview('');
@@ -3233,6 +3235,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
       setNewManufacturer('');
       setNewModelNumber('');
       setOcrOpen(false);
+      setNewShelfNumber('');
       setNewUsageLocation('');
       setNewBarcode('');
       setNewMinStock('2');
@@ -3255,6 +3258,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
     setEditingName(normalizeInventoryName(item.name));
     setEditingManufacturer(normalizeInventoryName(item.manufacturer));
     setEditingModelNumber(normalizeInventoryName(item.modelNumber));
+    setEditingShelfNumber(normalizeInventoryName(item.shelfNumber));
     setEditingUsageLocation(normalizeInventoryName(item.usageLocation));
     setEditingBarcode(normalizeInventoryName(item.barcode));
     setEditingMinStock(String(Math.max(0, Number(item.minStock) || 0)));
@@ -3290,7 +3294,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
       } else if (editingImageRemoved) {
         imageChanges = { imageUrl: '', imageName: '', imagePublicId: '', imageBytes: 0 };
       }
-      await editInventoryItem(item.id, { kind, name, manufacturer: normalizeInventoryName(editingManufacturer), modelNumber: normalizeInventoryName(editingModelNumber), usageLocation, barcode, minStock, ...imageChanges });
+      await editInventoryItem(item.id, { kind, name, manufacturer: normalizeInventoryName(editingManufacturer), modelNumber: normalizeInventoryName(editingModelNumber), shelfNumber: normalizeInventoryName(editingShelfNumber), usageLocation, barcode, minStock, ...imageChanges });
       setEditingPhoto(null);
       setEditingPhotoPreview('');
       setEditingImageRemoved(false);
@@ -3484,7 +3488,8 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
                 <label className="block text-xs font-bold text-gray-600">商品名（任意）<input autoFocus value={editingName} onChange={e=>setEditingName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void handleEdit(item);}if(e.key==='Escape'){cancelEdit();}}} maxLength={120} className="mt-1 w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white text-gray-800"/></label>
                 <label className="block text-xs font-bold text-gray-600">メーカー（任意）<input value={editingManufacturer} onChange={e=>setEditingManufacturer(e.target.value)} maxLength={120} className="mt-1 w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white"/></label>
                 <label className="block text-xs font-bold text-gray-600">型番（任意）<input value={editingModelNumber} onChange={e=>setEditingModelNumber(e.target.value)} maxLength={120} className="mt-1 w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white"/></label>
-                <label className="block text-xs font-bold text-gray-600">使用箇所（任意）<input value={editingUsageLocation} onChange={e=>setEditingUsageLocation(e.target.value)} maxLength={120} placeholder="使用箇所（省略可）" className="mt-1 w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white text-gray-800"/></label>
+                <label className="block text-xs font-bold text-gray-600">棚番号（任意）<input value={editingShelfNumber} onChange={e=>setEditingShelfNumber(e.target.value)} maxLength={80} placeholder="例：A-01" className="mt-1 w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white text-gray-800"/></label>
+        <label className="block text-xs font-bold text-gray-600">使用箇所（任意）<input value={editingUsageLocation} onChange={e=>setEditingUsageLocation(e.target.value)} maxLength={120} placeholder="使用箇所（省略可）" className="mt-1 w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white text-gray-800"/></label>
                 <label className="block text-xs font-bold text-gray-600">バーコード番号<input value={editingBarcode} onChange={e=>setEditingBarcode(e.target.value)} maxLength={80} className="mt-1 w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white text-gray-800"/></label>
                 <label className="block text-xs font-bold text-gray-600">発注基準数<input type="number" min="0" step="1" value={editingMinStock} onChange={e=>setEditingMinStock(e.target.value)} className="mt-1 w-full min-h-10 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white text-gray-800"/></label>
               </div> : <div>
@@ -3492,6 +3497,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
                 <div className="font-bold text-sm break-words">{name}</div>
                 {item.manufacturer && <div className="mt-1 text-xs text-gray-600">メーカー：{item.manufacturer}</div>}
                 {item.modelNumber && <div className="mt-1 text-xs text-gray-600">型番：{item.modelNumber}</div>}
+                {item.shelfNumber && <div className="mt-1 text-xs text-gray-600">棚番号：{item.shelfNumber}</div>}
                 {usageLocation && <div className="mt-1 text-xs text-gray-600">使用箇所：{usageLocation}</div>}
                 {item.barcode && <div className="mt-1 text-[11px] text-gray-500">バーコード：{item.barcode}</div>}
                 <div className="mt-1 text-[11px] text-gray-500">発注基準：{minStock}個</div>
@@ -3542,6 +3548,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
         <label className="block text-xs font-bold text-gray-600">商品名（任意）<input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="商品名を入力" className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base" maxLength={120}/></label>
         <label className="block text-xs font-bold text-gray-600">メーカー（任意）<input value={newManufacturer} onChange={e=>setNewManufacturer(e.target.value)} maxLength={120} className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base"/></label>
         <label className="block text-xs font-bold text-gray-600">型番（任意）<input value={newModelNumber} onChange={e=>setNewModelNumber(e.target.value)} maxLength={120} className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base"/></label>
+        <label className="block text-xs font-bold text-gray-600">棚番号（任意）<input value={newShelfNumber} onChange={e=>setNewShelfNumber(e.target.value)} maxLength={80} placeholder="例：A-01" className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base"/></label>
         <label className="block text-xs font-bold text-gray-600">使用箇所（任意）<input value={newUsageLocation} onChange={e=>setNewUsageLocation(e.target.value)} placeholder="使用箇所を入力（省略可）" className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base" maxLength={120}/></label>
         <div className="flex items-center gap-3"><label className="text-sm font-bold text-gray-600 flex-1" htmlFor="inventory-new-min-stock">発注基準数</label><input id="inventory-new-min-stock" type="number" min="0" step="1" value={newMinStock} onChange={e=>setNewMinStock(e.target.value)} className="w-28 min-h-11 border border-gray-300 rounded-xl px-3 py-2 text-base text-right"/></div>
         <div className="flex items-center gap-3"><label className="text-sm font-bold text-gray-600 flex-1" htmlFor="inventory-new-stock">初期在庫数</label><input id="inventory-new-stock" type="number" inputMode="numeric" min="0" step="1" value={newStock} onChange={e=>setNewStock(e.target.value)} className="w-28 min-h-11 border border-gray-300 rounded-xl px-3 py-2 text-base text-right"/></div>
@@ -4220,7 +4227,7 @@ export default function App() {
                 inventoryItems={inventoryItems}
                 inventoryMovements={inventoryMovements}
                 addInventoryItem={async (item) => {
-                  const normalizedItem = { ...item, name: normalizeInventoryName(item.name), barcode: normalizeInventoryName(item.barcode), minStock: Math.max(0, Number(item.minStock) || 0), stock: Math.max(0, Number(item.stock) || 0) };
+                  const normalizedItem = { ...item, shelfNumber: normalizeInventoryName(item.shelfNumber), name: normalizeInventoryName(item.name), barcode: normalizeInventoryName(item.barcode), minStock: Math.max(0, Number(item.minStock) || 0), stock: Math.max(0, Number(item.stock) || 0) };
                   if (!hasInventoryProductDetails(normalizedItem)) throw new Error('種類・商品名・メーカー・型番のいずれかを入力してください。');
                   const movement = { id: crypto.randomUUID(), timestamp: new Date().toISOString(), type: 'register', typeLabel: '商品登録・初期在庫', productId: normalizedItem.id, productName: inventoryProductLabel(normalizedItem), delta: normalizedItem.stock, stockBefore: 0, stockAfter: normalizedItem.stock, reason: 'バーコードまたは手入力で商品登録', actorUid: currentUser.id, actorName: currentUser.name || '' };
                   const updatedItems = await runTransaction(db, async transaction => {
@@ -4239,7 +4246,7 @@ export default function App() {
                   setInventoryMovements(current => current.some(entry => entry.id === movement.id) ? current : [movement, ...current]);
                 }}
                 editInventoryItem={async (itemId, changes) => {
-                  const normalizedChanges = { kind: normalizeInventoryName(changes.kind), name: normalizeInventoryName(changes.name), manufacturer: normalizeInventoryName(changes.manufacturer), modelNumber: normalizeInventoryName(changes.modelNumber), usageLocation: normalizeInventoryName(changes.usageLocation), barcode: normalizeInventoryName(changes.barcode), minStock: Math.max(0, Number(changes.minStock) || 0) };
+                  const normalizedChanges = { kind: normalizeInventoryName(changes.kind), name: normalizeInventoryName(changes.name), manufacturer: normalizeInventoryName(changes.manufacturer), modelNumber: normalizeInventoryName(changes.modelNumber), shelfNumber: normalizeInventoryName(changes.shelfNumber), usageLocation: normalizeInventoryName(changes.usageLocation), barcode: normalizeInventoryName(changes.barcode), minStock: Math.max(0, Number(changes.minStock) || 0) };
                   if (Object.prototype.hasOwnProperty.call(changes, 'imageUrl')) {
                     Object.assign(normalizedChanges, { imageUrl: changes.imageUrl || '', imageName: changes.imageName || '', imagePublicId: changes.imagePublicId || '', imageBytes: Number(changes.imageBytes || 0) });
                   }
