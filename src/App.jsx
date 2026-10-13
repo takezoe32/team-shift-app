@@ -3098,8 +3098,8 @@ const BarcodeScannerModal = ({ onDetected, onClose }) => {
 const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInventoryItem, adjustInventoryStock, editInventoryItem, deleteInventoryItem, updateInventoryImage }) => {
   const [registrationOpen, setRegistrationOpen] = useState(false);
   const [unbarcodedOpen, setUnbarcodedOpen] = useState(false);
-  const [registeredOpen, setRegisteredOpen] = useState(true);
-  const [replenishmentOpen, setReplenishmentOpen] = useState(true);
+  const [registeredOpen, setRegisteredOpen] = useState(false);
+  const [replenishmentOpen, setReplenishmentOpen] = useState(false);
   const [newKind, setNewKind] = useState('');
   const [newName, setNewName] = useState('');
   const [newManufacturer, setNewManufacturer] = useState('');
@@ -3125,7 +3125,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
   const [newUsageLocation, setNewUsageLocation] = useState('');
   const [newBarcode, setNewBarcode] = useState('');
   const [newMinStock, setNewMinStock] = useState('2');
-  const [newStock, setNewStock] = useState('0');
+  const [newStock, setNewStock] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scanQuantity, setScanQuantity] = useState('1');
   const [scanDirection, setScanDirection] = useState('in');
@@ -3251,7 +3251,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
       setNewUsageLocation('');
       setNewBarcode('');
       setNewMinStock('2');
-      setNewStock('0');
+      setNewStock('');
       setBarcodeLookupMessage('');
       setProductLookupCandidates([]);
       setProductLookupSource('');
