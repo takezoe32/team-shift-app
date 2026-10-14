@@ -1,5 +1,5 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
-import {getTaskImages,mergeTaskImages,mergePartnerImageChanges,validateTaskImageFiles} from '../src/taskImages.mjs';
+import {getTaskImages,mergeTaskImages,mergePartnerImageChanges,validateTaskImageFiles,isTaskVideo,taskVideoPlaybackUrl,validateTaskVideo} from '../src/taskImages.mjs';
 import {planTaskEdit} from '../src/taskEdit.mjs';
 import fs from 'node:fs';import vm from 'node:vm';
 const a={imageUrl:'https://example.com/a.jpg',imageName:'a',imagePublicId:'a',imageBytes:123};
@@ -8,10 +8,13 @@ test('legacy image and collections coexist without duplicates',()=>{
  assert.deepEqual(getTaskImages(a),[a]);assert.deepEqual(getTaskImages({...a,images:[a,b]}),[a,b]);
  assert.deepEqual(mergeTaskImages(a,[a,b]),[a,b]);assert.deepEqual(getTaskImages({}),[]);
 });
-test('image limits reject video, oversized files and more than five images',()=>{
+test('attachment limits allow one video and reject oversize or excess images',()=>{
  const f={type:'image/jpeg',size:10*1024*1024};validateTaskImageFiles(Array(5).fill(f));
  assert.throws(()=>validateTaskImageFiles(Array(6).fill(f)),/5枚/);assert.throws(()=>validateTaskImageFiles([{...f,size:f.size+1}]),/10MB/);
- assert.throws(()=>validateTaskImageFiles([{type:'video/mp4',size:10}]),/動画/);
+ validateTaskImageFiles([{type:'video/mp4',size:20*1024*1024},...Array(5).fill(f)]);
+ assert.throws(()=>validateTaskImageFiles([{type:'video/mp4',size:20*1024*1024+1}]),/20MB/);
+ assert.throws(()=>validateTaskImageFiles(Array(2).fill({type:'video/mp4',size:10})),/1本/);
+ assert.throws(()=>validateTaskImageFiles([{type:'application/pdf',size:10}]),/画像または動画/);
 });
 test('task editing appends to latest images and keeps date/inventory and legacy image',()=>{
  const data={tasks:{'2026-10-14':{u:[{id:'t',...a,images:[a,b],productId:'p',inventoryDeducted:true}]}}};
@@ -21,7 +24,7 @@ test('task editing appends to latest images and keeps date/inventory and legacy 
 });
 test('partial upload retry reuses uploaded images and keeps original order',async()=>{
  const source=fs.readFileSync(new URL('../src/App.jsx',import.meta.url),'utf8');const a=source.indexOf('const taskImageUploadCache =');const b=source.indexOf('const INITIAL_ROLES =',a);
- let calls=0,fail=true;const context={validateTaskImageFiles,prepareInventoryImage:async x=>x,uploadTaskImageToCloudinary:async file=>{calls++;if(file.name==='b'&&fail)throw new Error('network');return {secure_url:'https://example.com/'+file.name,public_id:file.name,bytes:3}}};vm.createContext(context);vm.runInContext(source.slice(a,b)+';globalThis.upload=uploadTaskImages',context);
+ let calls=0,fail=true;const context={validateTaskImageFiles,isTaskVideo,validateTaskVideo,taskVideoPlaybackUrl,prepareInventoryImage:async x=>x,uploadTaskImageToCloudinary:async file=>{calls++;if(file.name==='b'&&fail)throw new Error('network');return {secure_url:'https://example.com/'+file.name,public_id:file.name,bytes:3}}};vm.createContext(context);vm.runInContext(source.slice(a,b)+';globalThis.upload=uploadTaskImages',context);
  const files=[{name:'a',type:'image/jpeg',size:3},{name:'b',type:'image/jpeg',size:3}];
  await assert.rejects(context.upload(files),/network/);fail=false;const images=await context.upload(files);assert.equal(calls,3);assert.equal(images[0].imageName,'a');assert.equal(images[1].imageName,'b');
 });
@@ -31,4 +34,20 @@ test('partner handoff merge retains concurrent images and notes',()=>{
  const c={...a,imageUrl:'https://example.com/c.jpg'};
  const next=mergePartnerImageChanges(current,{images:[a,c],updates:[{id:'old'},{id:'new',images:[c]}]});
  assert.equal(next.images.length,3);assert.deepEqual(next.updates.map(x=>x.id),['old','concurrent','new']);assert.equal(next.completed,true);
+});
+
+test('video metadata and MP4 playback URL survive merge and task date changes',()=>{
+ const video={imageUrl:'https://res.cloudinary.com/demo/video/upload/v1/folder/clip.mov',imageName:'clip.mov',imagePublicId:'folder/clip',imageBytes:1000,mediaType:'video',duration:12};
+ const media=getTaskImages({images:[video]})[0];assert.equal(media.mediaType,'video');assert.equal(media.duration,12);assert.match(media.playbackUrl,/f_mp4,vc_h264,ac_aac/);assert.match(media.playbackUrl,/clip.mp4$/);
+ const data={tasks:{'2026-10-14':{u:[{id:'t',images:[video],productId:'p',inventoryDeducted:true}]}}};
+ const p=planTaskEdit(data,'2026-10-14','u','t',{targetDate:'2026-10-15',newImages:[]});
+ assert.equal(p.teamData.tasks['2026-10-15'].u[0].images[0].duration,12);
+ assert.equal(isTaskVideo({name:'iPhone.MOV',type:''}),true);
+ assert.equal(taskVideoPlaybackUrl('https://example.com/clip.mov'),'https://example.com/clip.mov');
+});
+test('video uploader uses video endpoint, skips image compression and keeps audio-compatible playback metadata',async()=>{
+ const source=fs.readFileSync(new URL('../src/App.jsx',import.meta.url),'utf8');const start=source.indexOf('const taskImageUploadCache =');const end=source.indexOf('const INITIAL_ROLES =',start);
+ let compressed=0,calls=0;const context={validateTaskImageFiles,isTaskVideo,taskVideoPlaybackUrl,validateTaskVideo:async()=>1,prepareInventoryImage:async f=>{compressed++;return f},uploadTaskImageToCloudinary:async(file,type)=>{calls++;assert.equal(type,'video');return {secure_url:'https://res.cloudinary.com/demo/video/upload/v1/clip.mov',public_id:'clip',bytes:100,duration:1}}};vm.createContext(context);vm.runInContext(source.slice(start,end)+';globalThis.upload=uploadTaskImages',context);
+ const file={name:'clip.mov',type:'video/quicktime',size:100};const media=(await context.upload([file]))[0];assert.equal(compressed,0);assert.equal(media.mediaType,'video');assert.equal(media.duration,1);assert.match(media.playbackUrl,/ac_aac/);await context.upload([file]);assert.equal(calls,1);
+ context.validateTaskVideo=async()=>{throw new Error('30秒以内')};await assert.rejects(context.upload([{...file}]),/30秒/);assert.equal(calls,1);
 });
