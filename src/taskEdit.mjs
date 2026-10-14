@@ -1,3 +1,4 @@
+import { mergeTaskImages } from './taskImages.mjs';
 export function planTaskEdit(teamData, sourceDate, ownerUid, taskId, input) {
   const changes = typeof input === 'object' && input ? { ...input } : { text: input };
   const targetDate = Object.hasOwn(changes, 'targetDate') ? changes.targetDate : sourceDate;
@@ -11,6 +12,8 @@ export function planTaskEdit(teamData, sourceDate, ownerUid, taskId, input) {
   const destination = tasks[targetDate]?.[ownerUid] || [];
   if (targetDate !== sourceDate && destination.some(item => item.id === taskId)) throw new Error('変更先に同じタスクがあります。画面を更新してください。');
   if (Array.isArray(changes.updates)) changes.updates = [...(task.updates || []), ...changes.updates.slice(-1)];
+  if (Array.isArray(changes.newImages)) changes.images = mergeTaskImages(task, changes.newImages);
+  delete changes.newImages;
   const edited = { ...task, ...changes };
   const updates = targetDate === sourceDate
     ? { [`teamData.tasks.${sourceDate}.${ownerUid}`]: source.map(item => item.id === taskId ? edited : item) }
