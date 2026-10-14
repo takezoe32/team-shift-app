@@ -21,7 +21,6 @@ export function validateTaskImageFiles(files) {
   if (videos.length > 1) throw new Error('1回に追加できる動画は1本までです。');
   if (images.length + videos.length !== files.length) throw new Error('画像または動画ファイルを選択してください。');
   if (images.some(file => file.size > 10 * 1024 * 1024)) throw new Error('画像は1枚10MB以下にしてください。');
-  if (videos.some(file => file.size > 20 * 1024 * 1024)) throw new Error('動画は1本20MB以下にしてください。撮影画質を下げるか短く撮影してください。');
 }
 
 export const isTaskVideo = file => file.type?.startsWith('video/') || (!file.type && /\.(mp4|mov|m4v|webm|3gp)$/i.test(file.name || ''));
