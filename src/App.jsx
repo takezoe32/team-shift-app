@@ -1,3 +1,4 @@
+import { planCompletedTaskDelete } from './completedTaskDelete.mjs';
 import { confirmEditDiscard, confirmDiscardEdits, useEditGuard } from './editGuard';
 import { sortInventoryItems } from './inventorySort.mjs';
 import { planTaskDelete } from './taskDelete.mjs';
@@ -2856,7 +2857,18 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
   );
 };
 
-const CompletedTasksView = ({ teamData, partnerItems, sortedUsers }) => {
+const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUid, isAdmin, deleteCompletedTask }) => {
+  const deletingRef = useRef(false);
+  const [deletingKey, setDeletingKey] = useState(null);
+  const handleDelete = async (entry) => {
+    if (deletingRef.current) return;
+    if (!window.confirm(`「${entry.title}」の終了履歴を削除しますか？\n元の完了タスク・申し送り・添付の記録も一覧から削除され、元に戻せません。使用済み商品の在庫数は変わりません。`)) return;
+    deletingRef.current = true;
+    setDeletingKey(`${entry.type}-${entry.date}-${entry.ownerUid}-${entry.id}`);
+    try { await deleteCompletedTask(entry); }
+    catch (error) { alert(`終了履歴を削除できませんでした。\n${error.message || 'もう一度お試しください。'}`); }
+    finally { deletingRef.current = false; setDeletingKey(null); }
+  };
   const [memberFilter, setMemberFilter] = useState('all');
   const [openMonths, setOpenMonths] = useState({});
 
@@ -3005,6 +3017,13 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers }) => {
                 <div className="mt-2 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600 whitespace-pre-wrap break-words">{entry.content}</div>
               )}
               <ImageGallery item={entry}/>
+              {(entry.type === 'partner' || isAdmin || entry.ownerUid === currentUserUid) && (
+                <button type="button" onClick={() => handleDelete(entry)} disabled={deletingKey !== null}
+                  aria-label={`${entry.title}の終了履歴を削除`}
+                  className="mt-2 min-h-10 px-3 rounded-lg text-xs font-bold text-red-600 border border-red-200 flex items-center gap-1.5 disabled:opacity-50">
+                  <Trash2 size={14}/>{deletingKey === `${entry.type}-${entry.date}-${entry.ownerUid}-${entry.id}` ? '削除中…' : '削除'}
+                </button>
+              )}
             </div>
           </div>
         );
@@ -4167,6 +4186,20 @@ export default function App() {
     if (plan.restocked) { setInventoryItems(plan.inventoryItems); setInventoryMovements(plan.inventoryMovements); }
   };
 
+  const deleteCompletedTask = async (entry) => {
+    if (entry.type === 'member' && entry.ownerUid !== currentUser.id && (roles[currentUser.role]?.level || 0) < 40) throw new Error('この終了履歴を削除する権限がありません。');
+    const ref = doc(db, 'app_data', 'shared_state');
+    const plan = await runTransaction(db, async transaction => {
+      const snapshot = await transaction.get(ref);
+      if (!snapshot.exists()) throw new Error('共有データが見つかりません。');
+      const next = planCompletedTaskDelete(snapshot.data(), entry);
+      if (next) transaction.update(ref, next.updates);
+      return next;
+    });
+    if (plan?.teamData) setTeamData(plan.teamData);
+    if (plan?.partnerItems) setPartnerItems(plan.partnerItems);
+  };
+
   return (
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
       {!currentUser ? (
@@ -4576,6 +4609,8 @@ export default function App() {
                 partnerItems={partnerItems}
                 sortedUsers={sortedUsers}
                 currentUserUid={currentUser.id}
+                isAdmin={(roles[currentUser.role]?.level || 0) >= 40}
+                deleteCompletedTask={deleteCompletedTask}
               />
             ) : activeTab === 'daily' ? (
               <DailyDetailView 
