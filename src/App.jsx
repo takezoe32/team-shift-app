@@ -1,3 +1,4 @@
+import { prepareTaskVideo } from './videoCompression.mjs';
 import TaskSaveProgress from './components/TaskSaveProgress';
 import { uploadWithProgress } from './uploadProgress.mjs';
 import { ImagePicker, ImageGallery } from './components/TaskImages';
@@ -100,7 +101,7 @@ const uploadTaskImages = async (files, onProgress = () => {}) => {
   for (const file of files.filter(isTaskVideo)) videoDurations.set(file, await validateTaskVideo(file));
   onProgress({ stage: 'preparing' });
   const preparedFiles = new Map();
-  for (const file of files) if (!taskImageUploadCache.has(file)) preparedFiles.set(file, isTaskVideo(file) ? file : await prepareInventoryImage(file));
+  for (const file of files) if (!taskImageUploadCache.has(file)) preparedFiles.set(file, isTaskVideo(file) ? await prepareTaskVideo(file, videoDurations.get(file), onProgress) : await prepareInventoryImage(file));
   const pending = files.filter(file=>!taskImageUploadCache.has(file));
   const totalBytes = pending.reduce((sum,file)=>sum + preparedFiles.get(file).size,0);
   let completedBytes = 0;
@@ -120,7 +121,9 @@ const uploadTaskImages = async (files, onProgress = () => {}) => {
         onProgress({ ...base, stage: event.stage, percent: totalBytes && (event.stage === 'processing' || event.total > 0) ? Math.round(loaded / totalBytes * 100) : null, remainingSeconds: speed > 0 ? Math.ceil((totalBytes - loaded) / speed) : null });
       });
       completedBytes += prepared.size;
-      if (video && (!Number.isFinite(uploaded.duration) || uploaded.duration > 30 || uploaded.duration <= 0)) throw new Error('保存先で動画の長さを確認できませんでした。30秒以内の動画を選び直してください。');
+      // Encoders may add a few milliseconds of audio padding to an already validated 30-second source.
+      const durationLimit = prepared !== file ? 30.1 : 30;
+      if (video && (!Number.isFinite(uploaded.duration) || uploaded.duration > durationLimit || uploaded.duration <= 0)) throw new Error('保存先で動画の長さを確認できませんでした。30秒以内の動画を選び直してください。');
       image = { imageUrl: uploaded.secure_url, imageName: prepared.name, imagePublicId: uploaded.public_id || '', imageBytes: Number(uploaded.bytes || prepared.size || 0), ...(video ? { mediaType: 'video', duration: uploaded.duration || videoDurations.get(file), playbackUrl: taskVideoPlaybackUrl(uploaded.secure_url) } : {}) };
       taskImageUploadCache.set(file, image);
     }
