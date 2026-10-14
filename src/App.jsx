@@ -1,3 +1,5 @@
+import { confirmEditDiscard, confirmDiscardEdits, useEditGuard } from './editGuard';
+import { sortInventoryItems } from './inventorySort.mjs';
 import { planTaskDelete } from './taskDelete.mjs';
 import { prepareTaskVideo } from './videoCompression.mjs';
 import TaskSaveProgress from './components/TaskSaveProgress';
@@ -426,6 +428,9 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partne
   const datesToShow=Array.from(new Set([...Object.keys(teamData.tasks||{}).filter(d=>d<todayStr),selectedCalendarTaskDate])).sort();
   const selectedTasks=datesToShow.flatMap(taskDate=>(sortedUsers||[]).flatMap(member=>(teamData.tasks[taskDate]?.[member.id]||[]).filter(t=>t.visibility!=='private'&&!t.completed).map(task=>({...task,ownerUid:member.id,member,taskDate,assigneeIds:Array.isArray(task.assigneeIds)&&task.assigneeIds.length?task.assigneeIds:[member.id]}))));
   const startPartnerEdit=()=>{const [h='',m='']=String(detailPartner?.time||'').split(':');setPartnerEditName(detailPartner?.partnerName||'');setPartnerEditSubject(detailPartner?.subject||'');setPartnerEditAssigneeUid(detailPartner?.assigneeUid||'');setPartnerEditDate(detailPartner?.date||'');setPartnerEditHour(h);setPartnerEditMinute(m);setPartnerEditEndTime(detailPartner?.endTime||'');setPartnerEditNote('');setPartnerEditImages([]);setCalendarUploadProgress(null);setIsEditingPartner(true);};
+  useEditGuard(isEditingTask || isEditingPartner, isSaving);
+  const closeTaskDetail = () => { if (confirmEditDiscard(isEditingTask, isSaving)) { setDetailTask(null); setIsEditingTask(false); } };
+  const closePartnerDetail = () => { if (confirmEditDiscard(isEditingPartner, isSaving)) { setDetailPartner(null); setIsEditingPartner(false); } };
   const clearPartnerEditImage=()=>setPartnerEditImages([]);
   const openPartnerImage=(imageUrl,imageName='添付画像')=>{setSelectedPartnerImage({imageUrl,imageName});setPartnerImageScale(1);setPartnerImagePosition({x:0,y:0});};
   const closePartnerImage=()=>{setSelectedPartnerImage(null);setPartnerImageScale(1);setPartnerImagePosition({x:0,y:0});partnerPinchRef.current=null;partnerPanRef.current=null;};
@@ -494,7 +499,7 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partne
         <div className="border-t border-gray-200 bg-gray-50 px-3 py-2"><div className="flex items-center justify-between mb-1.5"><h3 className="text-[11px] font-bold text-gray-600">本日のタスク（全員）</h3><span className="text-[9px] text-gray-400">{selectedCalendarTaskDate.replace(/-/g,'/')}・{selectedTasks.length}件</span></div>{selectedTasks.length===0?<p className="text-[10px] text-gray-400 py-1">本日までに終了していないタスクはありません</p>:<div className="space-y-1.5">{selectedTasks.map(task=><button type="button" key={`${task.taskDate}-${task.ownerUid}-${task.id}`} onClick={()=>{setDetailTask(task);setSelectedAssigneeIds(task.assigneeIds);setAssigneeUpdateMessage('');setIsEditingTask(false);}} className="w-full text-left bg-white border rounded-md px-2 py-1.5 flex items-center gap-2 min-w-0 hover:border-purple-300 active:bg-purple-50">{task.taskDate<todayStr&&<span className="shrink-0 text-[8px] font-bold text-red-500 whitespace-nowrap">対象日 {task.taskDate.replace(/-/g,'/')}</span>}<span className="min-w-0 flex-1 text-[10px] truncate text-gray-700"><span className="font-bold">{task.subject||task.text||'📷 画像タスク'}</span>{task.subject&&task.text&&<span className="ml-1 text-gray-500">{task.text}</span>}</span><span className="shrink-0 text-[8px] text-orange-600">終了予定 {task.endTime||'未設定'}</span><span className="shrink-0 max-w-32 text-[8px] text-purple-600 truncate">担当: {task.assigneeIds.map(id=>sortedUsers.find(u=>u.id===id)?.name?.split(' ')[0]||'').filter(Boolean).join('・')}</span><span className="shrink-0 text-[8px] text-gray-400">開始 {task.createdAt?new Date(task.createdAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}):'--:--'}</span></button>)}</div>}</div>
       </div>
     </div>
-    {detailPartner&&<div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-2 sm:p-4" onClick={()=>setDetailPartner(null)}><div className="w-full max-w-md max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col" onClick={e=>e.stopPropagation()}><div className="px-4 py-3 border-b flex items-center justify-between shrink-0"><div><div className="text-sm font-bold text-gray-800">パートナータスク詳細</div><div className="text-[10px] text-gray-400">{detailPartner.date?.replace(/-/g,'/')} {detailPartner.time||'--:--'} ・ 終了予定 {detailPartner.endTime||'未設定'}</div></div><button onClick={()=>setDetailPartner(null)} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-full"><X size={18}/></button></div><div className="p-4 space-y-3 overflow-y-auto min-h-0 flex-1">{isEditingPartner?<><select value={partnerEditName} onChange={e=>setPartnerEditName(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm"><option value="">パートナーを選択</option>{(partnerNames||[]).map(n=><option key={n} value={n}>{n}</option>)}</select><input type="text" value={partnerEditSubject} onChange={e=>setPartnerEditSubject(e.target.value)} placeholder="件名" className="w-full border rounded-lg px-3 py-2 text-sm"/><select value={partnerEditAssigneeUid} onChange={e=>setPartnerEditAssigneeUid(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm"><option value="">主担当者を選択</option>{(sortedUsers||[]).map(user=><option key={user.id} value={user.id}>{user.name}</option>)}</select><div className="grid grid-cols-2 gap-2"><input type="date" value={partnerEditDate} onChange={e=>setPartnerEditDate(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm"/><div className="flex gap-1"><select value={partnerEditHour} onChange={e=>setPartnerEditHour(e.target.value)} className="w-1/2 border rounded-lg px-1 py-2 text-sm"><option value="">時</option>{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(v=><option key={v} value={v}>{v}</option>)}</select><select value={partnerEditMinute} onChange={e=>setPartnerEditMinute(e.target.value)} className="w-1/2 border rounded-lg px-1 py-2 text-sm"><option value="">分</option>{['00','15','30','45'].map(v=><option key={v} value={v}>{v}</option>)}</select></div><label className="block"><span className="text-[10px] font-bold text-gray-500">終了予定時刻</span><div className="flex items-center gap-1"><select aria-label="終了予定時刻の時" value={partnerEditEndTime ? partnerEditEndTime.split(':')[0] : ''} onChange={e=>setPartnerEditEndTime(e.target.value ? e.target.value+':'+((partnerEditEndTime||'').split(':')[1]||'00') : '')} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" ><option value="">時</option>{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(v=><option key={v} value={v}>{v}</option>)}</select><span>:</span><select aria-label="終了予定時刻の分" value={partnerEditEndTime ? partnerEditEndTime.split(':')[1] : ''} onChange={e=>setPartnerEditEndTime(((partnerEditEndTime||'').split(':')[0]||'00')+':'+e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" ><option value="">分</option>{['00','15','30','45'].map(v=><option key={v} value={v}>{v}</option>)}</select></div></label></div><div className="space-y-2"><PartnerUpdateHistory item={detailPartner}/><div><div className="text-[10px] font-bold text-gray-500 mb-1">今回の申し送り・追記</div><textarea value={partnerEditNote} onChange={e=>setPartnerEditNote(e.target.value)} rows={5} placeholder="今回追加する申し送りを入力" className="w-full border rounded-lg px-3 py-2 text-sm resize-y"/><ImagePicker files={partnerEditImages} onChange={setPartnerEditImages} disabled={isSaving}/><TaskSaveProgress progress={calendarUploadProgress}/><p className="text-[9px] text-gray-400 mt-1">画像は各10MB以下。動画は30秒以内。20MBを超える動画は自動圧縮します。添付だけでも保存できます。</p></div></div><div className="flex gap-2 sticky bottom-0 bg-white pt-2 pb-1 border-t border-gray-100"><button type="button" onClick={()=>setIsEditingPartner(false)} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-xs font-bold">キャンセル</button><button type="button" disabled={isSaving} onClick={savePartnerEdit} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold"><span>{isSaving?'保存中…':'変更を保存'}</span></button></div></>:<><div className="text-xs font-bold text-purple-600">{detailPartner.partnerName||'パートナー未設定'}</div><div className="text-base font-bold text-gray-800">{detailPartner.subject||(detailPartner.content||'').split(/\r?\n/)[0]||'件名未設定'}</div>{((detailPartner.updates||[]).some(u=>u?.kind==='handoff')||(detailPartner.updates||[]).length>1)&&<div className="inline-flex px-2 py-1 rounded-full bg-orange-50 text-orange-700 text-[10px] font-bold">申し送りあり</div>}<div className="text-xs font-bold text-blue-600">主担当: {(sortedUsers||[]).find(user=>user.id===detailPartner.assigneeUid)?.name||'未設定'}</div><div className="space-y-2 max-h-64 overflow-y-auto pr-1">{getPartnerUpdates(detailPartner).map(update=><div key={update.id} className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2"><div className="text-[9px] font-bold text-gray-500 mb-1">（{update.authorName||'不明なユーザー'}）</div><div className="text-sm text-gray-700 whitespace-pre-wrap break-words">{update.text}</div><ImageGallery item={update} onOpen={openPartnerImage}/>{update.createdAt&&<div className="text-[8px] text-gray-400 mt-1">{new Date(update.createdAt).toLocaleString('ja-JP')}</div>}</div>)}</div><ImageGallery item={detailPartner} onOpen={openPartnerImage}/><button type="button" onClick={startPartnerEdit} className="w-full py-2.5 rounded-xl bg-blue-50 text-blue-700 text-xs font-bold flex items-center justify-center gap-1.5"><Edit2 size={14}/><span>編集</span></button></>}</div></div></div>}
+    {detailPartner&&<div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-2 sm:p-4" onClick={closePartnerDetail}><div className="w-full max-w-md max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col" onClick={e=>e.stopPropagation()}><div className="px-4 py-3 border-b flex items-center justify-between shrink-0"><div><div className="text-sm font-bold text-gray-800">パートナータスク詳細</div><div className="text-[10px] text-gray-400">{detailPartner.date?.replace(/-/g,'/')} {detailPartner.time||'--:--'} ・ 終了予定 {detailPartner.endTime||'未設定'}</div></div><button onClick={closePartnerDetail} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-full"><X size={18}/></button></div><div className="p-4 space-y-3 overflow-y-auto min-h-0 flex-1">{isEditingPartner?<><select value={partnerEditName} onChange={e=>setPartnerEditName(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm"><option value="">パートナーを選択</option>{(partnerNames||[]).map(n=><option key={n} value={n}>{n}</option>)}</select><input type="text" value={partnerEditSubject} onChange={e=>setPartnerEditSubject(e.target.value)} placeholder="件名" className="w-full border rounded-lg px-3 py-2 text-sm"/><select value={partnerEditAssigneeUid} onChange={e=>setPartnerEditAssigneeUid(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm"><option value="">主担当者を選択</option>{(sortedUsers||[]).map(user=><option key={user.id} value={user.id}>{user.name}</option>)}</select><div className="grid grid-cols-2 gap-2"><input type="date" value={partnerEditDate} onChange={e=>setPartnerEditDate(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm"/><div className="flex gap-1"><select value={partnerEditHour} onChange={e=>setPartnerEditHour(e.target.value)} className="w-1/2 border rounded-lg px-1 py-2 text-sm"><option value="">時</option>{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(v=><option key={v} value={v}>{v}</option>)}</select><select value={partnerEditMinute} onChange={e=>setPartnerEditMinute(e.target.value)} className="w-1/2 border rounded-lg px-1 py-2 text-sm"><option value="">分</option>{['00','15','30','45'].map(v=><option key={v} value={v}>{v}</option>)}</select></div><label className="block"><span className="text-[10px] font-bold text-gray-500">終了予定時刻</span><div className="flex items-center gap-1"><select aria-label="終了予定時刻の時" value={partnerEditEndTime ? partnerEditEndTime.split(':')[0] : ''} onChange={e=>setPartnerEditEndTime(e.target.value ? e.target.value+':'+((partnerEditEndTime||'').split(':')[1]||'00') : '')} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" ><option value="">時</option>{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(v=><option key={v} value={v}>{v}</option>)}</select><span>:</span><select aria-label="終了予定時刻の分" value={partnerEditEndTime ? partnerEditEndTime.split(':')[1] : ''} onChange={e=>setPartnerEditEndTime(((partnerEditEndTime||'').split(':')[0]||'00')+':'+e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" ><option value="">分</option>{['00','15','30','45'].map(v=><option key={v} value={v}>{v}</option>)}</select></div></label></div><div className="space-y-2"><PartnerUpdateHistory item={detailPartner}/><div><div className="text-[10px] font-bold text-gray-500 mb-1">今回の申し送り・追記</div><textarea value={partnerEditNote} onChange={e=>setPartnerEditNote(e.target.value)} rows={5} placeholder="今回追加する申し送りを入力" className="w-full border rounded-lg px-3 py-2 text-sm resize-y"/><ImagePicker files={partnerEditImages} onChange={setPartnerEditImages} disabled={isSaving}/><TaskSaveProgress progress={calendarUploadProgress}/><p className="text-[9px] text-gray-400 mt-1">画像は各10MB以下。動画は30秒以内。20MBを超える動画は自動圧縮します。添付だけでも保存できます。</p></div></div><div className="flex gap-2 sticky bottom-0 bg-white pt-2 pb-1 border-t border-gray-100"><button type="button" onClick={()=>{if(confirmEditDiscard(true,isSaving))setIsEditingPartner(false);}} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-xs font-bold">キャンセル</button><button type="button" disabled={isSaving} onClick={savePartnerEdit} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold"><span>{isSaving?'保存中…':'変更を保存'}</span></button></div></>:<><div className="text-xs font-bold text-purple-600">{detailPartner.partnerName||'パートナー未設定'}</div><div className="text-base font-bold text-gray-800">{detailPartner.subject||(detailPartner.content||'').split(/\r?\n/)[0]||'件名未設定'}</div>{((detailPartner.updates||[]).some(u=>u?.kind==='handoff')||(detailPartner.updates||[]).length>1)&&<div className="inline-flex px-2 py-1 rounded-full bg-orange-50 text-orange-700 text-[10px] font-bold">申し送りあり</div>}<div className="text-xs font-bold text-blue-600">主担当: {(sortedUsers||[]).find(user=>user.id===detailPartner.assigneeUid)?.name||'未設定'}</div><div className="space-y-2 max-h-64 overflow-y-auto pr-1">{getPartnerUpdates(detailPartner).map(update=><div key={update.id} className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2"><div className="text-[9px] font-bold text-gray-500 mb-1">（{update.authorName||'不明なユーザー'}）</div><div className="text-sm text-gray-700 whitespace-pre-wrap break-words">{update.text}</div><ImageGallery item={update} onOpen={openPartnerImage}/>{update.createdAt&&<div className="text-[8px] text-gray-400 mt-1">{new Date(update.createdAt).toLocaleString('ja-JP')}</div>}</div>)}</div><ImageGallery item={detailPartner} onOpen={openPartnerImage}/><button type="button" onClick={startPartnerEdit} className="w-full py-2.5 rounded-xl bg-blue-50 text-blue-700 text-xs font-bold flex items-center justify-center gap-1.5"><Edit2 size={14}/><span>編集</span></button></>}</div></div></div>}
     {selectedPartnerImage&&<div className="fixed inset-0 z-[70] bg-black/90 flex flex-col" onClick={closePartnerImage}>
       <div className="shrink-0 flex items-center justify-between px-3 py-2 text-white bg-black/60" onClick={e=>e.stopPropagation()}>
         <div className="text-xs font-bold truncate pr-2">{selectedPartnerImage.imageName||'添付画像'}</div>
@@ -520,7 +525,7 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partne
         />
       </div>
     </div>}
-    {detailTask&&<div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={()=>setDetailTask(null)}><div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden" onClick={e=>e.stopPropagation()}><div className="px-4 py-3 border-b flex items-center justify-between"><div><div className="text-sm font-bold text-gray-800">タスク詳細</div><div className="text-[10px] text-gray-400">登録者: {detailTask.member.name}</div>{!canEditTask&&<div className="text-[9px] text-gray-400">他のメンバーのタスクは操作できません</div>}</div><button onClick={()=>setDetailTask(null)} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-full"><X size={18}/></button></div><div className="p-4 space-y-3">{isEditingTask?<><ImageGallery item={detailTask}/><ImagePicker files={calendarTaskImages} onChange={setCalendarTaskImages} disabled={isSaving}/><TaskSaveProgress progress={calendarUploadProgress}/><textarea value={editingTaskText} onChange={e=>setEditingTaskText(e.target.value)} rows={5} className="w-full border rounded-xl px-3 py-2.5 text-sm resize-y"/><div className="flex gap-2"><button type="button" onClick={()=>setIsEditingTask(false)} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-xs font-bold">キャンセル</button><button type="button" disabled={isSaving} onClick={saveTaskEdit} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold"><span>{isSaving?'保存中…':'変更を保存'}</span></button></div></>:<><div className="text-base font-bold text-gray-800 whitespace-pre-wrap break-words">{detailTask.subject||detailTask.text||'📷 画像タスク'}</div>{detailTask.subject&&detailTask.text&&<div className="text-sm text-gray-700 whitespace-pre-wrap break-words">{detailTask.text}</div>}<div className="text-xs text-orange-600 font-bold">終了予定: {detailTask.endTime||'未設定'}</div><ImageGallery item={detailTask}/><div className="grid grid-cols-2 gap-2 text-[10px] text-gray-500"><div className="bg-gray-50 rounded-lg p-2">開始<br/><span className="font-bold text-gray-700">{detailTask.createdAt?new Date(detailTask.createdAt).toLocaleString('ja-JP'):'--'}</span></div><div className="bg-gray-50 rounded-lg p-2">終了<br/><span className="font-bold text-gray-700">{detailTask.completedAt?new Date(detailTask.completedAt).toLocaleString('ja-JP'):'--'}</span></div></div><div><div className="text-xs font-bold text-gray-600 mb-2">担当者（複数選択可）</div><div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">{(sortedUsers||[]).map(member=>{const checked=selectedAssigneeIds.includes(member.id);return <label key={member.id} className={`flex items-center gap-2 p-2 rounded-lg border ${canEditTask?'cursor-pointer':'cursor-not-allowed opacity-70'} ${checked?'border-purple-400 bg-purple-50':'border-gray-200'}`}><input type="checkbox" disabled={!canEditTask} checked={checked} onChange={()=>setSelectedAssigneeIds(p=>checked?p.filter(id=>id!==member.id):[...p,member.id])}/><span className="text-xs font-bold text-gray-700 truncate">{member.name.split(' ')[0]}</span></label>})}</div></div>{canEditTask&&<><button type="button" disabled={!selectedAssigneeIds.length||isUpdatingAssignees} onClick={async()=>{setIsUpdatingAssignees(true);setAssigneeUpdateMessage('');try{await updateTaskAssignees(detailTask.ownerUid,detailTask.taskDate,detailTask.id,selectedAssigneeIds);setDetailTask(p=>p?{...p,assigneeIds:[...selectedAssigneeIds]}:p);setAssigneeUpdateMessage('担当者を更新しました');}catch{setAssigneeUpdateMessage('担当者の更新に失敗しました。')}finally{setIsUpdatingAssignees(false);}}} className="w-full py-2.5 rounded-xl bg-purple-600 text-white text-xs font-bold disabled:opacity-40"><span>{isUpdatingAssignees?'更新中…':'担当者を更新'}</span></button><div className="flex gap-2"><button type="button" onClick={()=>{setEditingTaskText(detailTask.text||'');setCalendarTaskImages([]);setIsEditingTask(true);}} className="flex-1 py-2 rounded-xl bg-blue-50 text-blue-700 text-xs font-bold"><span>編集</span></button><button type="button" onClick={finishTask} className="flex-1 py-2 rounded-xl bg-green-50 text-green-700 text-xs font-bold"><span>終了にする</span></button><button type="button" disabled={isSaving} aria-label="タスクを削除" onClick={removeTask} className="p-2 rounded-xl bg-red-50 text-red-600"><Trash2 size={16}/></button></div></>}{assigneeUpdateMessage&&<div className="text-[10px] text-green-600 font-bold">{assigneeUpdateMessage}</div>}</>}</div></div></div>}
+    {detailTask&&<div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={closeTaskDetail}><div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden" onClick={e=>e.stopPropagation()}><div className="px-4 py-3 border-b flex items-center justify-between"><div><div className="text-sm font-bold text-gray-800">タスク詳細</div><div className="text-[10px] text-gray-400">登録者: {detailTask.member.name}</div>{!canEditTask&&<div className="text-[9px] text-gray-400">他のメンバーのタスクは操作できません</div>}</div><button onClick={closeTaskDetail} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-full"><X size={18}/></button></div><div className="p-4 space-y-3">{isEditingTask?<><ImageGallery item={detailTask}/><ImagePicker files={calendarTaskImages} onChange={setCalendarTaskImages} disabled={isSaving}/><TaskSaveProgress progress={calendarUploadProgress}/><textarea value={editingTaskText} onChange={e=>setEditingTaskText(e.target.value)} rows={5} className="w-full border rounded-xl px-3 py-2.5 text-sm resize-y"/><div className="flex gap-2"><button type="button" onClick={()=>{if(confirmEditDiscard(true,isSaving))setIsEditingTask(false);}} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-xs font-bold">キャンセル</button><button type="button" disabled={isSaving} onClick={saveTaskEdit} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold"><span>{isSaving?'保存中…':'変更を保存'}</span></button></div></>:<><div className="text-base font-bold text-gray-800 whitespace-pre-wrap break-words">{detailTask.subject||detailTask.text||'📷 画像タスク'}</div>{detailTask.subject&&detailTask.text&&<div className="text-sm text-gray-700 whitespace-pre-wrap break-words">{detailTask.text}</div>}<div className="text-xs text-orange-600 font-bold">終了予定: {detailTask.endTime||'未設定'}</div><ImageGallery item={detailTask}/><div className="grid grid-cols-2 gap-2 text-[10px] text-gray-500"><div className="bg-gray-50 rounded-lg p-2">開始<br/><span className="font-bold text-gray-700">{detailTask.createdAt?new Date(detailTask.createdAt).toLocaleString('ja-JP'):'--'}</span></div><div className="bg-gray-50 rounded-lg p-2">終了<br/><span className="font-bold text-gray-700">{detailTask.completedAt?new Date(detailTask.completedAt).toLocaleString('ja-JP'):'--'}</span></div></div><div><div className="text-xs font-bold text-gray-600 mb-2">担当者（複数選択可）</div><div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">{(sortedUsers||[]).map(member=>{const checked=selectedAssigneeIds.includes(member.id);return <label key={member.id} className={`flex items-center gap-2 p-2 rounded-lg border ${canEditTask?'cursor-pointer':'cursor-not-allowed opacity-70'} ${checked?'border-purple-400 bg-purple-50':'border-gray-200'}`}><input type="checkbox" disabled={!canEditTask} checked={checked} onChange={()=>setSelectedAssigneeIds(p=>checked?p.filter(id=>id!==member.id):[...p,member.id])}/><span className="text-xs font-bold text-gray-700 truncate">{member.name.split(' ')[0]}</span></label>})}</div></div>{canEditTask&&<><button type="button" disabled={!selectedAssigneeIds.length||isUpdatingAssignees} onClick={async()=>{setIsUpdatingAssignees(true);setAssigneeUpdateMessage('');try{await updateTaskAssignees(detailTask.ownerUid,detailTask.taskDate,detailTask.id,selectedAssigneeIds);setDetailTask(p=>p?{...p,assigneeIds:[...selectedAssigneeIds]}:p);setAssigneeUpdateMessage('担当者を更新しました');}catch{setAssigneeUpdateMessage('担当者の更新に失敗しました。')}finally{setIsUpdatingAssignees(false);}}} className="w-full py-2.5 rounded-xl bg-purple-600 text-white text-xs font-bold disabled:opacity-40"><span>{isUpdatingAssignees?'更新中…':'担当者を更新'}</span></button><div className="flex gap-2"><button type="button" onClick={()=>{setEditingTaskText(detailTask.text||'');setCalendarTaskImages([]);setIsEditingTask(true);}} className="flex-1 py-2 rounded-xl bg-blue-50 text-blue-700 text-xs font-bold"><span>編集</span></button><button type="button" onClick={finishTask} className="flex-1 py-2 rounded-xl bg-green-50 text-green-700 text-xs font-bold"><span>終了にする</span></button><button type="button" disabled={isSaving} aria-label="タスクを削除" onClick={removeTask} className="p-2 rounded-xl bg-red-50 text-red-600"><Trash2 size={16}/></button></div></>}{assigneeUpdateMessage&&<div className="text-[10px] text-green-600 font-bold">{assigneeUpdateMessage}</div>}</>}</div></div></div>}
     </div>
   </div>;
 };
@@ -894,217 +899,8 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
   );
 };
 
-const DailyDetailView = ({ 
-  selectedDate, changeDay, teamData, currentUserUid, shiftTypes, inventoryItems = [],
-  addTask, toggleTask, deleteTask, updateTaskText, updateTaskAssignees, users, roles, sortedUsers
-}) => {
-  const [newTaskSubject, setNewTaskSubject] = useState('');
-  const [newTaskText, setNewTaskText] = useState('');
-  const [newTaskEndTime, setNewTaskEndTime] = useState('');
-  const [newTaskProductId, setNewTaskProductId] = useState('');
-  const [newTaskProductQuantity, setNewTaskProductQuantity] = useState('1');
-  const [productScannerOpen, setProductScannerOpen] = useState(false);
-  const [productScanMessage, setProductScanMessage] = useState('');
-  const [newTaskVisibility, setNewTaskVisibility] = useState('public');
-  const [selectedUserUid, setSelectedUserUid] = useState(currentUserUid);
-  const [selectedTaskId, setSelectedTaskId] = useState(null);
-  const [pastFinishConfirmTaskKey, setPastFinishConfirmTaskKey] = useState(null);
-  const [newTaskImages, setNewTaskImages] = useState([]);
-  const newTaskImage = newTaskImages[0] || null;
-  const [isUploading, setIsUploading] = useState(false);
-  const addTaskSavingRef = useRef(false);
-  const [taskUploadProgress, setTaskUploadProgress] = useState(null);
-  const [selectedPersonalMemoKey, setSelectedPersonalMemoKey] = useState('');
-  const [isEditingPersonalMemo, setIsEditingPersonalMemo] = useState(false);
-  const [personalMemoEditText, setPersonalMemoEditText] = useState('');
-  const [personalMemoEditImage, setPersonalMemoEditImage] = useState(null);
-  const [isSavingPersonalMemo, setIsSavingPersonalMemo] = useState(false);
-  const [isDeletingPersonalMemo, setIsDeletingPersonalMemo] = useState(false);
-  
-  const currentUser = users[currentUserUid];
-  const isAdmin = !!currentUser && !!roles[currentUser.role] && (roles[currentUser.role].level || 0) >= 40;
-  const canViewTask = (task, ownerUid) => task?.visibility !== 'private' || ownerUid === currentUserUid;
-  const selectedDateTasks = Object.entries(teamData.tasks[selectedDate] || {}).flatMap(([ownerUid, tasks]) => (tasks || []).filter(task => { if (task?.visibility === 'private' || !canViewTask(task, ownerUid)) return false; const assignees = Array.isArray(task.assigneeIds) && task.assigneeIds.length ? task.assigneeIds : [ownerUid]; return assignees.includes(selectedUserUid); }).map(task => ({ ...task, ownerUid, taskDate: selectedDate })));
-  const selectedDateActiveTasks = selectedDateTasks.filter(task => !task.completed);
-  const unfinishedPastTasks = Object.keys(teamData.tasks || {})
-    .filter(dateStr => dateStr < selectedDate)
-    .sort((a, b) => b.localeCompare(a))
-    .flatMap(dateStr =>
-      Object.entries(teamData.tasks[dateStr] || {})
-        .flatMap(([ownerUid, tasks]) => (tasks || [])
-          .filter(task => {
-            if (task?.visibility === 'private' || !canViewTask(task, ownerUid)) return false;
-            if (task.completed) return false;
-            const assignees = Array.isArray(task.assigneeIds) && task.assigneeIds.length
-              ? task.assigneeIds
-              : [ownerUid];
-            return assignees.includes(selectedUserUid);
-          })
-          .map(task => ({ ...task, ownerUid, taskDate: dateStr })))
-    );
-  const selectedDateShifts = teamData.shifts[selectedDate] || {};
-
-  // 個人メモは日付に関係なく、自分が登録した private タスクを一覧化する。
-  // 他のユーザーの個人メモは検索・表示対象にしない。
-  const personalMemoTasks = Object.entries(teamData.tasks || {})
-    .flatMap(([dateStr, owners]) => (owners?.[currentUserUid] || [])
-      .filter(task => task?.visibility === 'private')
-      .map(task => ({ ...task, ownerUid: currentUserUid, taskDate: dateStr })))
-    .sort((a, b) => (b.taskDate || '').localeCompare(a.taskDate || '') ||
-      (b.createdAt || '').localeCompare(a.createdAt || ''));
-  const selectedPersonalMemo = personalMemoTasks.find(
-    task => `${task.taskDate}-${task.id}` === selectedPersonalMemoKey
-  ) || null;
-
-  const openPersonalMemo = (task) => {
-    setSelectedPersonalMemoKey(`${task.taskDate}-${task.id}`);
-    setIsEditingPersonalMemo(false);
-    setPersonalMemoEditImage(null);
-  };
-
-  const startPersonalMemoEdit = () => {
-    if (!selectedPersonalMemo) return;
-    setPersonalMemoEditText(selectedPersonalMemo.text || '');
-    setPersonalMemoEditImage(null);
-    setIsEditingPersonalMemo(true);
-  };
-
-  const closePersonalMemoDetail = () => {
-    setSelectedPersonalMemoKey('');
-    setIsEditingPersonalMemo(false);
-    setPersonalMemoEditImage(null);
-  };
-
-  const handlePersonalMemoImageChange = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      alert('画像ファイルを選択してください。');
-      e.target.value = '';
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      alert('画像は10MB以下にしてください。');
-      e.target.value = '';
-      return;
-    }
-    setPersonalMemoEditImage(file);
-  };
-
-  const savePersonalMemo = async () => {
-    if (!selectedPersonalMemo) return;
-    if (!personalMemoEditText.trim() && !selectedPersonalMemo.imageUrl && !personalMemoEditImage) {
-      alert('内容または画像を追加してください。');
-      return;
-    }
-    setIsSavingPersonalMemo(true);
-    try {
-      const changes = {
-        subject: '',
-        text: personalMemoEditText.trim(),
-        endTime: '',
-        visibility: 'private',
-        assigneeIds: [currentUserUid]
-      };
-      if (personalMemoEditImage) {
-        const result = await uploadTaskImageToCloudinary(personalMemoEditImage);
-        changes.imageUrl = result.secure_url || result.url || '';
-        changes.imageName = personalMemoEditImage.name;
-        changes.imagePublicId = result.public_id || '';
-        changes.imageBytes = Number(result.bytes || personalMemoEditImage.size || 0);
-        changes.imageUploadedAt = new Date().toISOString();
-      }
-      await updateTaskText(selectedPersonalMemo.taskDate, currentUserUid, selectedPersonalMemo.id, changes);
-      setIsEditingPersonalMemo(false);
-      setPersonalMemoEditImage(null);
-    } catch (error) {
-      console.error('個人メモの更新に失敗しました:', error);
-      alert(`個人メモを保存できませんでした。\n${error?.message || 'もう一度お試しください。'}`);
-    } finally {
-      setIsSavingPersonalMemo(false);
-    }
-  };
-
-  const deletePersonalMemo = async () => {
-    if (
-      !selectedPersonalMemo ||
-      selectedPersonalMemo.visibility !== 'private' ||
-      selectedPersonalMemo.ownerUid !== currentUserUid
-    ) return;
-
-    if (!window.confirm('この個人メモを削除しますか？\n削除したメモは元に戻せません。')) return;
-
-    setIsDeletingPersonalMemo(true);
-    try {
-      await deleteTask(selectedPersonalMemo.taskDate, currentUserUid, selectedPersonalMemo.id);
-      closePersonalMemoDetail();
-    } catch (error) {
-      console.error('個人メモの削除に失敗しました:', error);
-      alert(`個人メモを削除できませんでした。\n${error?.message || 'もう一度お試しください。'}`);
-    } finally {
-      setIsDeletingPersonalMemo(false);
-    }
-  };
-
-  const clearNewTaskImage = () => setNewTaskImages([]);
-
-  const handleProductBarcodeDetected = (code) => {
-    setProductScannerOpen(false);
-    const barcode = normalizeInventoryName(code);
-    const product = inventoryItems.find(item => normalizeInventoryName(item.barcode) === barcode);
-    if (!product) { setProductScanMessage('このバーコードの商品は未登録です。在庫管理で商品登録してください。'); return; }
-    if (Number(product.stock || 0) <= 0) { setProductScanMessage('この商品の在庫がありません。'); return; }
-    setNewTaskProductId(product.id);
-    setProductScanMessage('選択しました：' + inventoryProductLabel(product));
-  };
-
-  const handleAddTask = async () => {
-    if (newTaskVisibility === 'private' ? (!newTaskText.trim() && !newTaskImage) : (!newTaskSubject.trim() || (!newTaskText.trim() && !newTaskImage))) { alert(newTaskVisibility === 'private' ? '内容または画像を追加してください。' : '件名と内容または画像を入力してください。'); return; }
-    if (addTaskSavingRef.current) return;
-    addTaskSavingRef.current = true;
-    setIsUploading(true);
-    try {
-      const images = await uploadTaskImages(newTaskImages, setTaskUploadProgress);
-      const { imageUrl = '', imageName = '', imagePublicId = '', imageBytes = 0 } = images.find(media=>media.mediaType !== 'video') || {};
-      if (newTaskVisibility === 'private' && selectedUserUid !== currentUserUid) {
-        alert('個人メモは、自分の名前を選んでいるときだけ登録できます。');
-        return;
-      }
-      const productQuantity = Number(newTaskProductQuantity);
-      if (newTaskProductId && (!Number.isInteger(productQuantity) || productQuantity < 1)) { alert('使用数量は1以上の整数を入力してください。'); return; }
-      await addTask(selectedDate, selectedUserUid, newTaskText.trim(), imageUrl, imageName, imagePublicId, imageBytes, newTaskVisibility, newTaskVisibility === 'private' ? '' : newTaskSubject.trim(), newTaskVisibility === 'private' ? '' : newTaskEndTime, newTaskVisibility === 'private' ? '' : newTaskProductId, newTaskProductId ? productQuantity : 1, images);
-      setTaskUploadProgress({stage:'done'});
-      setNewTaskVisibility('public');
-      setNewTaskSubject('');
-      setNewTaskText('');
-      setNewTaskEndTime('');
-      setNewTaskProductId('');
-      setNewTaskProductQuantity('1');
-      setProductScanMessage('');
-      clearNewTaskImage();
-    } catch (error) {
-      setTaskUploadProgress({stage:'error',message:error.message});
-      console.error('画像のアップロードに失敗しました:', error);
-      alert(`タスクの保存に失敗しました。\n${error?.message || 'もう一度お試しください。'}`);
-    } finally {
-      addTaskSavingRef.current = false;
-      setIsUploading(false);
-    }
-  };
-
-  const deletingTaskRef = useRef(false);
-  const [deletingTaskId, setDeletingTaskId] = useState(null);
-  const handleDeleteDailyTask = async (task) => {
-    if (deletingTaskRef.current || (!isAdmin && (task.ownerUid || selectedUserUid) !== currentUserUid)) return;
-    if (!window.confirm(`「${task.subject || task.text || 'このタスク'}」を削除しますか？\n使用済みの商品がある場合は在庫へ戻します。`)) return;
-    deletingTaskRef.current = true;
-    setDeletingTaskId(task.id);
-    try { await deleteTask(task.taskDate || selectedDate, task.ownerUid || selectedUserUid, task.id); }
-    catch (error) { alert(`タスクを削除できませんでした。\n${error.message || 'もう一度お試しください。'}`); }
-    finally { deletingTaskRef.current = false; setDeletingTaskId(null); }
-  };
-
-  const TaskItem = ({ task }) => {
+// A stable component keeps edit state when another task or the shared snapshot changes.
+const DailyTaskItem = ({ task, selectedDate, selectedUserUid, currentUserUid, currentUser, isAdmin, selectedTaskId, setSelectedTaskId, setPastFinishConfirmTaskKey, updateTaskAssignees, updateTaskText, toggleTask, sortedUsers, inventoryItems, users, pastFinishConfirmTaskKey, deletingTaskId, handleDeleteDailyTask }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [editVal, setEditVal] = useState(task.text || '');
     const [editSubject, setEditSubject] = useState(task.subject || task.text || '');
@@ -1154,6 +950,7 @@ const DailyDetailView = ({
       }
     };
 
+    useEditGuard(isEditing, isSavingEdit);
     if (isEditing) {
       return (
         <div className="bg-white p-3 rounded-xl border border-blue-400 shadow-sm space-y-2">
@@ -1190,7 +987,7 @@ const DailyDetailView = ({
             </button>
           </div>
           <p className="text-[10px] text-gray-400">Enterで改行できます。保存は右のボタンを押してください。</p>
-          <button type="button" disabled={isSavingEdit} onClick={() => setIsEditing(false)} className="min-h-10 px-3 text-xs font-bold text-gray-600">キャンセル</button>
+          <button type="button" disabled={isSavingEdit} onClick={() => { if (confirmEditDiscard(true, isSavingEdit)) setIsEditing(false); }} className="min-h-10 px-3 text-xs font-bold text-gray-600">キャンセル</button>
         </div>
       );
     }
@@ -1372,7 +1169,7 @@ const DailyDetailView = ({
         <div className="shrink-0 flex gap-1" onClick={(e) => e.stopPropagation()}>
           <button type="button"
             disabled={!canEditTask || deletingTaskId !== null}
-            onClick={() => setIsEditing(true)}
+            onClick={() => { setEditVal(task.text || ''); setEditSubject(task.subject || task.text || ''); setEditEndTime(task.endTime || ''); setEditDate(task.taskDate || selectedDate); setEditTaskImages([]); setEditUploadProgress(null); setIsEditing(true); }}
             className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-gray-100 rounded-lg active:scale-95"
             title="編集"
           >
@@ -1391,13 +1188,227 @@ const DailyDetailView = ({
     );
   };
 
+const DailyDetailView = ({
+  selectedDate, changeDay, teamData, currentUserUid, shiftTypes, inventoryItems = [],
+  addTask, toggleTask, deleteTask, updateTaskText, updateTaskAssignees, users, roles, sortedUsers
+}) => {
+  const [newTaskSubject, setNewTaskSubject] = useState('');
+  const [newTaskText, setNewTaskText] = useState('');
+  const [newTaskEndTime, setNewTaskEndTime] = useState('');
+  const [newTaskProductId, setNewTaskProductId] = useState('');
+  const [newTaskProductQuantity, setNewTaskProductQuantity] = useState('1');
+  const [productScannerOpen, setProductScannerOpen] = useState(false);
+  const [productScanMessage, setProductScanMessage] = useState('');
+  const [newTaskVisibility, setNewTaskVisibility] = useState('public');
+  const [selectedUserUid, setSelectedUserUid] = useState(currentUserUid);
+  const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const [pastFinishConfirmTaskKey, setPastFinishConfirmTaskKey] = useState(null);
+  const [newTaskImages, setNewTaskImages] = useState([]);
+  const newTaskImage = newTaskImages[0] || null;
+  const [isUploading, setIsUploading] = useState(false);
+  const addTaskSavingRef = useRef(false);
+  const [taskUploadProgress, setTaskUploadProgress] = useState(null);
+  const [selectedPersonalMemoKey, setSelectedPersonalMemoKey] = useState('');
+  const [isEditingPersonalMemo, setIsEditingPersonalMemo] = useState(false);
+  const [personalMemoEditText, setPersonalMemoEditText] = useState('');
+  const [personalMemoEditImage, setPersonalMemoEditImage] = useState(null);
+  const [isSavingPersonalMemo, setIsSavingPersonalMemo] = useState(false);
+  const [isDeletingPersonalMemo, setIsDeletingPersonalMemo] = useState(false);
+
+  const currentUser = users[currentUserUid];
+  const isAdmin = !!currentUser && !!roles[currentUser.role] && (roles[currentUser.role].level || 0) >= 40;
+  const canViewTask = (task, ownerUid) => task?.visibility !== 'private' || ownerUid === currentUserUid;
+  const selectedDateTasks = Object.entries(teamData.tasks[selectedDate] || {}).flatMap(([ownerUid, tasks]) => (tasks || []).filter(task => { if (task?.visibility === 'private' || !canViewTask(task, ownerUid)) return false; const assignees = Array.isArray(task.assigneeIds) && task.assigneeIds.length ? task.assigneeIds : [ownerUid]; return assignees.includes(selectedUserUid); }).map(task => ({ ...task, ownerUid, taskDate: selectedDate })));
+  const selectedDateActiveTasks = selectedDateTasks.filter(task => !task.completed);
+  const unfinishedPastTasks = Object.keys(teamData.tasks || {})
+    .filter(dateStr => dateStr < selectedDate)
+    .sort((a, b) => b.localeCompare(a))
+    .flatMap(dateStr =>
+      Object.entries(teamData.tasks[dateStr] || {})
+        .flatMap(([ownerUid, tasks]) => (tasks || [])
+          .filter(task => {
+            if (task?.visibility === 'private' || !canViewTask(task, ownerUid)) return false;
+            if (task.completed) return false;
+            const assignees = Array.isArray(task.assigneeIds) && task.assigneeIds.length
+              ? task.assigneeIds
+              : [ownerUid];
+            return assignees.includes(selectedUserUid);
+          })
+          .map(task => ({ ...task, ownerUid, taskDate: dateStr })))
+    );
+  const selectedDateShifts = teamData.shifts[selectedDate] || {};
+
+  // 個人メモは日付に関係なく、自分が登録した private タスクを一覧化する。
+  // 他のユーザーの個人メモは検索・表示対象にしない。
+  const personalMemoTasks = Object.entries(teamData.tasks || {})
+    .flatMap(([dateStr, owners]) => (owners?.[currentUserUid] || [])
+      .filter(task => task?.visibility === 'private')
+      .map(task => ({ ...task, ownerUid: currentUserUid, taskDate: dateStr })))
+    .sort((a, b) => (b.taskDate || '').localeCompare(a.taskDate || '') ||
+      (b.createdAt || '').localeCompare(a.createdAt || ''));
+  const selectedPersonalMemo = personalMemoTasks.find(
+    task => `${task.taskDate}-${task.id}` === selectedPersonalMemoKey
+  ) || null;
+
+  const openPersonalMemo = (task) => {
+    setSelectedPersonalMemoKey(`${task.taskDate}-${task.id}`);
+    setIsEditingPersonalMemo(false);
+    setPersonalMemoEditImage(null);
+  };
+
+  const startPersonalMemoEdit = () => {
+    if (!selectedPersonalMemo) return;
+    setPersonalMemoEditText(selectedPersonalMemo.text || '');
+    setPersonalMemoEditImage(null);
+    setIsEditingPersonalMemo(true);
+  };
+
+  useEditGuard(isEditingPersonalMemo, isSavingPersonalMemo);
+  const resetPersonalMemoDetail = () => {
+    setSelectedPersonalMemoKey(''); setIsEditingPersonalMemo(false); setPersonalMemoEditImage(null);
+  };
+  const closePersonalMemoDetail = () => {
+    if (confirmEditDiscard(isEditingPersonalMemo, isSavingPersonalMemo || isDeletingPersonalMemo)) resetPersonalMemoDetail();
+  };
+
+  const handlePersonalMemoImageChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('画像ファイルを選択してください。');
+      e.target.value = '';
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      alert('画像は10MB以下にしてください。');
+      e.target.value = '';
+      return;
+    }
+    setPersonalMemoEditImage(file);
+  };
+
+  const savePersonalMemo = async () => {
+    if (!selectedPersonalMemo) return;
+    if (!personalMemoEditText.trim() && !selectedPersonalMemo.imageUrl && !personalMemoEditImage) {
+      alert('内容または画像を追加してください。');
+      return;
+    }
+    setIsSavingPersonalMemo(true);
+    try {
+      const changes = {
+        subject: '',
+        text: personalMemoEditText.trim(),
+        endTime: '',
+        visibility: 'private',
+        assigneeIds: [currentUserUid]
+      };
+      if (personalMemoEditImage) {
+        const result = await uploadTaskImageToCloudinary(personalMemoEditImage);
+        changes.imageUrl = result.secure_url || result.url || '';
+        changes.imageName = personalMemoEditImage.name;
+        changes.imagePublicId = result.public_id || '';
+        changes.imageBytes = Number(result.bytes || personalMemoEditImage.size || 0);
+        changes.imageUploadedAt = new Date().toISOString();
+      }
+      await updateTaskText(selectedPersonalMemo.taskDate, currentUserUid, selectedPersonalMemo.id, changes);
+      setIsEditingPersonalMemo(false);
+      setPersonalMemoEditImage(null);
+    } catch (error) {
+      console.error('個人メモの更新に失敗しました:', error);
+      alert(`個人メモを保存できませんでした。\n${error?.message || 'もう一度お試しください。'}`);
+    } finally {
+      setIsSavingPersonalMemo(false);
+    }
+  };
+
+  const deletePersonalMemo = async () => {
+    if (
+      !selectedPersonalMemo ||
+      selectedPersonalMemo.visibility !== 'private' ||
+      selectedPersonalMemo.ownerUid !== currentUserUid
+    ) return;
+
+    if (!window.confirm('この個人メモを削除しますか？\n削除したメモは元に戻せません。')) return;
+
+    setIsDeletingPersonalMemo(true);
+    try {
+      await deleteTask(selectedPersonalMemo.taskDate, currentUserUid, selectedPersonalMemo.id);
+      resetPersonalMemoDetail();
+    } catch (error) {
+      console.error('個人メモの削除に失敗しました:', error);
+      alert(`個人メモを削除できませんでした。\n${error?.message || 'もう一度お試しください。'}`);
+    } finally {
+      setIsDeletingPersonalMemo(false);
+    }
+  };
+
+  const clearNewTaskImage = () => setNewTaskImages([]);
+
+  const handleProductBarcodeDetected = (code) => {
+    setProductScannerOpen(false);
+    const barcode = normalizeInventoryName(code);
+    const product = inventoryItems.find(item => normalizeInventoryName(item.barcode) === barcode);
+    if (!product) { setProductScanMessage('このバーコードの商品は未登録です。在庫管理で商品登録してください。'); return; }
+    if (Number(product.stock || 0) <= 0) { setProductScanMessage('この商品の在庫がありません。'); return; }
+    setNewTaskProductId(product.id);
+    setProductScanMessage('選択しました：' + inventoryProductLabel(product));
+  };
+
+  const handleAddTask = async () => {
+    if (newTaskVisibility === 'private' ? (!newTaskText.trim() && !newTaskImage) : (!newTaskSubject.trim() || (!newTaskText.trim() && !newTaskImage))) { alert(newTaskVisibility === 'private' ? '内容または画像を追加してください。' : '件名と内容または画像を入力してください。'); return; }
+    if (addTaskSavingRef.current) return;
+    addTaskSavingRef.current = true;
+    setIsUploading(true);
+    try {
+      const images = await uploadTaskImages(newTaskImages, setTaskUploadProgress);
+      const { imageUrl = '', imageName = '', imagePublicId = '', imageBytes = 0 } = images.find(media=>media.mediaType !== 'video') || {};
+      if (newTaskVisibility === 'private' && selectedUserUid !== currentUserUid) {
+        alert('個人メモは、自分の名前を選んでいるときだけ登録できます。');
+        return;
+      }
+      const productQuantity = Number(newTaskProductQuantity);
+      if (newTaskProductId && (!Number.isInteger(productQuantity) || productQuantity < 1)) { alert('使用数量は1以上の整数を入力してください。'); return; }
+      await addTask(selectedDate, selectedUserUid, newTaskText.trim(), imageUrl, imageName, imagePublicId, imageBytes, newTaskVisibility, newTaskVisibility === 'private' ? '' : newTaskSubject.trim(), newTaskVisibility === 'private' ? '' : newTaskEndTime, newTaskVisibility === 'private' ? '' : newTaskProductId, newTaskProductId ? productQuantity : 1, images);
+      setTaskUploadProgress({stage:'done'});
+      setNewTaskVisibility('public');
+      setNewTaskSubject('');
+      setNewTaskText('');
+      setNewTaskEndTime('');
+      setNewTaskProductId('');
+      setNewTaskProductQuantity('1');
+      setProductScanMessage('');
+      clearNewTaskImage();
+    } catch (error) {
+      setTaskUploadProgress({stage:'error',message:error.message});
+      console.error('画像のアップロードに失敗しました:', error);
+      alert(`タスクの保存に失敗しました。\n${error?.message || 'もう一度お試しください。'}`);
+    } finally {
+      addTaskSavingRef.current = false;
+      setIsUploading(false);
+    }
+  };
+
+  const deletingTaskRef = useRef(false);
+  const [deletingTaskId, setDeletingTaskId] = useState(null);
+  const handleDeleteDailyTask = async (task) => {
+    if (deletingTaskRef.current || (!isAdmin && (task.ownerUid || selectedUserUid) !== currentUserUid)) return;
+    if (!window.confirm(`「${task.subject || task.text || 'このタスク'}」を削除しますか？\n使用済みの商品がある場合は在庫へ戻します。`)) return;
+    deletingTaskRef.current = true;
+    setDeletingTaskId(task.id);
+    try { await deleteTask(task.taskDate || selectedDate, task.ownerUid || selectedUserUid, task.id); }
+    catch (error) { alert(`タスクを削除できませんでした。\n${error.message || 'もう一度お試しください。'}`); }
+    finally { deletingTaskRef.current = false; setDeletingTaskId(null); }
+  };
+
+  const taskItemProps = { selectedDate, selectedUserUid, currentUserUid, currentUser, isAdmin, selectedTaskId, setSelectedTaskId, setPastFinishConfirmTaskKey, updateTaskAssignees, updateTaskText, toggleTask, sortedUsers, inventoryItems, users, pastFinishConfirmTaskKey, deletingTaskId, handleDeleteDailyTask };
+
   return (
     <div className="flex-1 flex flex-col bg-gray-50 pb-[68px] h-full overflow-hidden">
       <div className="flex-1 overflow-y-auto flex flex-col relative">
         <div className="bg-white px-4 py-2 flex items-center justify-between border-b border-gray-100 shrink-0 sticky top-0 z-20 shadow-sm">
-          <button type="button" onClick={() => changeDay(-1)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full active:scale-95"><ChevronLeft className="w-5 h-5"/></button>
+          <button type="button" onClick={() => { if(confirmDiscardEdits()) changeDay(-1); }} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full active:scale-95"><ChevronLeft className="w-5 h-5"/></button>
           <h2 className="text-sm font-bold text-gray-800">{selectedDate.replace(/-/g, '/')}</h2>
-          <button type="button" onClick={() => changeDay(1)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full active:scale-95"><ChevronRight className="w-5 h-5"/></button>
+          <button type="button" onClick={() => { if(confirmDiscardEdits()) changeDay(1); }} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full active:scale-95"><ChevronRight className="w-5 h-5"/></button>
         </div>
 
         <div className="bg-white px-3 py-2 border-b border-gray-200 flex overflow-x-auto gap-2 no-scrollbar shadow-sm shrink-0 items-center min-h-[56px] sticky top-[53px] z-10">
@@ -1409,7 +1420,7 @@ const DailyDetailView = ({
               return (
                 <button type="button"
                   key={member.id}
-                  onClick={() => { setSelectedUserUid(member.id); setSelectedTaskId(null); }}
+                  onClick={() => { if(member.id !== selectedUserUid && !confirmDiscardEdits())return; setSelectedUserUid(member.id); setSelectedTaskId(null); }}
                   className={`flex flex-col items-center px-3 py-1.5 rounded-xl border transition-all shrink-0 active:scale-95 ${isSelected ? 'bg-purple-50 border-purple-400 ring-2 ring-purple-400/20 shadow-sm' : 'bg-white border-gray-200 hover:bg-gray-50'}`}
                 >
                   <div className={`text-xs font-bold ${isSelected ? 'text-purple-700' : 'text-gray-700'}`}>{member.name.split(' ')[0]}</div>
@@ -1467,7 +1478,7 @@ const DailyDetailView = ({
               {unfinishedPastTasks.map(task => (
                 <div key={`${task.taskDate}-${task.ownerUid}-${task.id}`}>
                   <div className="text-[9px] font-bold text-red-500 mb-1">未終了 {task.taskDate.replace(/-/g, '/')}</div>
-                  <TaskItem task={task} />
+                  <DailyTaskItem task={task} {...taskItemProps}/>
                 </div>
               ))}
             </div>
@@ -1480,7 +1491,7 @@ const DailyDetailView = ({
               <ClipboardList className="mx-auto text-gray-300 mb-2" size={40}/>
               <p className="text-gray-400 text-sm">未終了タスクはありません</p>
             </div>
-          ) : selectedDateActiveTasks.map(task => <TaskItem key={task.id} task={task}/>)}
+          ) : selectedDateActiveTasks.map(task => <DailyTaskItem key={task.id} task={task} {...taskItemProps}/>)}
 
           {selectedUserUid === currentUserUid && (
             <section className="mt-4 rounded-2xl border border-purple-200 bg-white overflow-hidden">
@@ -1561,7 +1572,7 @@ const DailyDetailView = ({
             <div className="border-t p-3 flex gap-2 shrink-0">
               {isEditingPersonalMemo ? (
                 <>
-                  <button type="button" onClick={() => { setIsEditingPersonalMemo(false); setPersonalMemoEditImage(null); }} disabled={isSavingPersonalMemo} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-xs font-bold">キャンセル</button>
+                  <button type="button" onClick={() => { if (!confirmEditDiscard(true, isSavingPersonalMemo)) return; setIsEditingPersonalMemo(false); setPersonalMemoEditImage(null); }} disabled={isSavingPersonalMemo} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-xs font-bold">キャンセル</button>
                   <button type="button" onClick={savePersonalMemo} disabled={isSavingPersonalMemo} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold disabled:opacity-50">{isSavingPersonalMemo ? '保存中…' : '変更を保存'}</button>
                 </>
               ) : (
@@ -2423,6 +2434,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
   const partnerFormRef = useRef(null);
   const deletingPartnerRef = useRef(false);
   const [deletingPartnerId, setDeletingPartnerId] = useState(null);
+  useEditGuard(!!editingItemId || !!editingPartnerName, isSaving);
   const revealPartnerForm = () => requestAnimationFrame(() => {
     partnerFormRef.current?.scrollIntoView({ block: 'start', behavior: 'instant' });
     partnerFormRef.current?.focus({ preventScroll: true });
@@ -2561,6 +2573,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
                 </div>
                 <div className="shrink-0 flex gap-0.5">
                   <button type="button" disabled={isSaving || deletingPartnerId !== null} aria-label={`${item.subject || 'パートナータスク'}を編集`} onClick={() => {
+                    if (editingItemId && editingItemId !== item.id && !confirmEditDiscard(true, isSaving)) return;
                     setEditingItemId(item.id);
                     setPartnerName(item.partnerName || '');
                     setSubject(item.subject || (item.content || '').split(/\r?\n/)[0] || '');
@@ -2594,6 +2607,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
             <div className="flex items-center justify-between bg-blue-50 border border-blue-100 rounded-xl px-3 py-2">
               <span className="text-[10px] font-bold text-blue-700">パートナー予定を編集中</span>
               <button type="button" onClick={() => {
+                if (!confirmEditDiscard(true, isSaving)) return;
                 setEditingItemId(null); setPartnerName(''); setSubject(''); setAssigneeUid(''); setDate(formatDate(new Date())); setTimeHour(''); setTimeMinute(''); setEndTime(''); setContent(''); setNewPartnerImages([]);
               }} className="text-[10px] font-bold text-gray-500 hover:text-gray-800">キャンセル</button>
             </div>
@@ -3088,6 +3102,7 @@ const BarcodeScannerModal = ({ onDetected, onClose }) => {
 };
 
 const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInventoryItem, adjustInventoryStock, editInventoryItem, deleteInventoryItem, updateInventoryImage }) => {
+  const [sortOrder, setSortOrder] = useState(() => localStorage.getItem('inventory_sort_order') || 'name');
   const [registrationOpen, setRegistrationOpen] = useState(false);
   const [unbarcodedOpen, setUnbarcodedOpen] = useState(false);
   const [registeredOpen, setRegisteredOpen] = useState(false);
@@ -3178,7 +3193,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
     setEditingImageRemoved(false);
   };
   const cancelEdit = () => {
-    if (editingSaveRef.current) return;
+    if (!confirmEditDiscard(true, editingSaveRef.current)) return;
     setEditingId(null);
     setEditingOcrOpen(false);
     selectEditingPhoto(null);
@@ -3192,6 +3207,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
   const [stockDrafts, setStockDrafts] = useState({});
   const [uploadingImageId, setUploadingImageId] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  useEditGuard(editingId !== null, isSaving);
 
   const handleAdd = async () => {
     if (isSaving || registrationSaveRef.current) return;
@@ -3255,6 +3271,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
 
   const startEdit = (item) => {
     if (isSaving || uploadingImageId) return;
+    if (editingId && editingId !== item.id && !confirmEditDiscard(true)) return;
     selectEditingPhoto(null);
     setEditingOcrOpen(false);
     setEditingId(item.id);
@@ -3463,7 +3480,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
     } finally { setIsSaving(false); }
   };
 
-  const sortedItems = [...inventoryItems].sort((a,b) => normalizeInventoryName(a.kind).localeCompare(normalizeInventoryName(b.kind), 'ja') || normalizeInventoryName(a.name).localeCompare(normalizeInventoryName(b.name), 'ja'));
+  const sortedItems = sortInventoryItems(inventoryItems, sortOrder);
   const needsReplenishment = item => Math.max(0, Number(item.stock) || 0) <= Math.max(0, item.minStock === undefined ? 2 : Number(item.minStock) || 0);
   const replenishmentItems = sortedItems.filter(needsReplenishment);
   const remainingItems = sortedItems.filter(item=>!needsReplenishment(item));
@@ -3581,6 +3598,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
         <p className="text-[11px] text-gray-500">種類・商品名・メーカー・型番のいずれか1つを入力すると登録できます。JANコード・使用箇所だけでは登録できません。</p>
       </form>}
       {sortedItems.length===0 && <div className="rounded-xl bg-white border border-gray-200 p-6 text-center text-sm text-gray-500">商品が登録されていません。</div>}
+      <label className="flex flex-wrap items-center gap-2 text-sm font-bold text-gray-700">各一覧の並び順<select aria-label="商品の並び順" value={sortOrder} onChange={e=>{setSortOrder(e.target.value);localStorage.setItem('inventory_sort_order',e.target.value);}} className="min-h-11 rounded-lg border border-gray-300 bg-white px-3"><option value="name">種類・商品名順</option><option value="shelf-asc">棚番号順（昇順）</option><option value="shelf-desc">棚番号順（降順）</option></select><span className="text-xs font-normal text-gray-500">棚番号が空欄の商品は末尾</span></label>
       <section className="space-y-2"><button type="button" aria-expanded={replenishmentOpen} aria-controls="inventory-replenishment" disabled={isSaving} onClick={()=>setReplenishmentOpen(open=>!open)} className="w-full min-h-11 rounded-xl border border-red-300 bg-red-50 px-3 text-left text-sm font-bold text-red-800">補充商品（{replenishmentItems.length}件） {replenishmentOpen ? '▲ 閉じる' : '▼ 開く'}</button>{replenishmentOpen && <div id="inventory-replenishment" className="space-y-2">{replenishmentItems.length ? replenishmentItems.map(renderInventoryItem) : <p className="p-3 text-xs text-gray-500">補充が必要な商品はありません。</p>}</div>}</section>
       <section className="space-y-2"><button type="button" aria-expanded={registeredOpen} aria-controls="inventory-registered" disabled={isSaving} onClick={()=>setRegisteredOpen(open=>!open)} className="w-full min-h-11 rounded-xl border border-gray-300 bg-white px-3 text-left text-sm font-bold text-gray-700">登録商品（{barcodedItems.length}件） {registeredOpen ? '▲ 閉じる' : '▼ 開く'}</button>{registeredOpen && <div id="inventory-registered" className="space-y-2">{barcodedItems.length ? barcodedItems.map(renderInventoryItem) : <p className="p-3 text-xs text-gray-500">補充商品以外のバーコード登録済み商品はありません。</p>}</div>}</section>
       {unbarcodedItems.length > 0 && <section className="space-y-2"><button type="button" aria-expanded={unbarcodedOpen} aria-controls="inventory-unbarcoded" disabled={isSaving} onClick={()=>setUnbarcodedOpen(open=>!open)} className="w-full min-h-11 rounded-xl border border-gray-300 bg-white px-3 text-left text-sm font-bold text-gray-700">バーコード未登録の商品（{unbarcodedItems.length}件） {unbarcodedOpen ? '▲ 閉じる' : '▼ 開く'}</button>{unbarcodedOpen && <div id="inventory-unbarcoded" className="space-y-2">{unbarcodedItems.map(renderInventoryItem)}</div>}</section>}
@@ -3601,7 +3619,7 @@ const BottomNav = ({ activeTab, setActiveTab, setSelectedDate, currentUser, role
     <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 pb-safe z-20 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
       <div className="flex h-[68px] w-full max-w-full">
         <button 
-          onClick={() => setActiveTab('calendar')}
+          onClick={() => {if(confirmDiscardEdits()) setActiveTab('calendar');}}
           className={`flex-1 flex flex-col items-center justify-center space-y-1.5 relative ${activeTab === 'calendar' ? 'text-blue-600' : 'text-gray-400'}`}
         >
           <CalendarIcon className="w-6 h-6"/>
@@ -3611,7 +3629,7 @@ const BottomNav = ({ activeTab, setActiveTab, setSelectedDate, currentUser, role
         
         {canManageShift && (
           <button 
-            onClick={() => setActiveTab('team-shift')}
+            onClick={() => {if(confirmDiscardEdits()) setActiveTab('team-shift');}}
             className={`flex-1 flex flex-col items-center justify-center space-y-1.5 relative ${activeTab === 'team-shift' ? 'text-purple-600' : 'text-gray-400'}`}
           >
             <Table className="w-6 h-6"/>
@@ -3621,7 +3639,7 @@ const BottomNav = ({ activeTab, setActiveTab, setSelectedDate, currentUser, role
         )}
 
         <button 
-          onClick={() => { setSelectedDate(formatDate(new Date())); setActiveTab('daily'); }}
+          onClick={() => { if(!confirmDiscardEdits())return; setSelectedDate(formatDate(new Date())); setActiveTab('daily'); }}
           className={`flex-1 flex flex-col items-center justify-center space-y-1.5 relative ${activeTab === 'daily' ? 'text-blue-600' : 'text-gray-400'}`}
         >
           <CheckSquare className="w-6 h-6"/>
@@ -3630,7 +3648,7 @@ const BottomNav = ({ activeTab, setActiveTab, setSelectedDate, currentUser, role
         </button>
 
         <button
-          onClick={() => setActiveTab('partner')}
+          onClick={() => {if(confirmDiscardEdits()) setActiveTab('partner');}}
           className={`flex-1 flex flex-col items-center justify-center space-y-1.5 relative ${activeTab === 'partner' ? 'text-blue-600' : 'text-gray-400'}`}
         >
           <Handshake className="w-6 h-6"/>
@@ -3639,7 +3657,7 @@ const BottomNav = ({ activeTab, setActiveTab, setSelectedDate, currentUser, role
         </button>
 
         <button
-          onClick={() => setActiveTab('completed')}
+          onClick={() => {if(confirmDiscardEdits()) setActiveTab('completed');}}
           className={`flex-1 flex flex-col items-center justify-center space-y-1.5 relative ${activeTab === 'completed' ? 'text-green-600' : 'text-gray-400'}`}
         >
           <ClipboardList className="w-6 h-6"/>
@@ -3648,7 +3666,7 @@ const BottomNav = ({ activeTab, setActiveTab, setSelectedDate, currentUser, role
         </button>
 
         <button
-          onClick={() => setActiveTab('inventory')}
+          onClick={() => {if(confirmDiscardEdits()) setActiveTab('inventory');}}
           className={`flex-1 flex flex-col items-center justify-center space-y-1.5 relative ${activeTab === 'inventory' ? 'text-emerald-600' : 'text-gray-400'}`}
         >
           <Package className="w-6 h-6"/>
@@ -3658,7 +3676,7 @@ const BottomNav = ({ activeTab, setActiveTab, setSelectedDate, currentUser, role
 
         {canManageSettings && (
           <button 
-            onClick={() => setActiveTab('settings')}
+            onClick={() => {if(confirmDiscardEdits()) setActiveTab('settings');}}
             className={`flex-1 flex flex-col items-center justify-center space-y-1.5 relative ${activeTab === 'settings' ? 'text-blue-600' : 'text-gray-400'}`}
           >
             <Settings className="w-6 h-6"/>
@@ -4110,6 +4128,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    if (!confirmDiscardEdits()) return;
     googleLogout();
     setCurrentUser(null);
     setAuthError('');
@@ -4169,7 +4188,7 @@ export default function App() {
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setActiveTab('help')}
+                  onClick={() => {if(confirmDiscardEdits()) setActiveTab('help');}}
                   className="flex items-center gap-2 bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-2 rounded-full transition-colors active:scale-95"
                   aria-label="使い方"
                 >
