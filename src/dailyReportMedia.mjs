@@ -65,7 +65,7 @@ export function mediaSheetRequests(sheetId, media, rowCount = 1000, columnCount 
 
 export function taskAttachmentRequests(sheetId, report, media, page = 0) {
   const requests = [];
-  for (const [items, start, count, column] of [[report.entries, 13, 22, 3], [report.handoff || [], 5, 8, 2]]) {
+  for (const [items, start, count, column] of [[report.entries, 13, 22, 3], [[], 5, 8, 2]]) {
     for (let i = 0; i < count; i++) {
       const entry = items[page * count + i];
       const attachment = entry && media.find(item => item.taskKey === entry.key);
@@ -76,5 +76,30 @@ export function taskAttachmentRequests(sheetId, report, media, page = 0) {
       } });
     }
   }
+  return requests;
+}
+
+
+// Keep the report compact; the count opens its complete title list below the form.
+export function handoffListRequests(sheetId, handoff, media, rowCount = 43) {
+  const endRowIndex = Math.max(rowCount, 46 + handoff.length);
+  const range = { sheetId, startRowIndex: 43, endRowIndex, startColumnIndex: 3, endColumnIndex: 29 };
+  const requests = [
+    { updateSheetProperties: { properties: { sheetId, gridProperties: { rowCount: endRowIndex } }, fields: 'gridProperties.rowCount' } },
+    { unmergeCells: { range } },
+    { mergeCells: { range: { ...range, endRowIndex: 45 + Math.max(1, handoff.length) }, mergeType: 'MERGE_ROWS' } },
+    { updateCells: { range, rows: [], fields: 'userEnteredValue,userEnteredFormat' } },
+    { repeatCell: { range, cell: { userEnteredFormat: { textFormat: { fontSize: 10 }, wrapStrategy: 'WRAP', verticalAlignment: 'MIDDLE' } }, fields: 'userEnteredFormat' } },
+    { updateCells: { start: { sheetId, rowIndex: 43, columnIndex: 3 }, rows: [{ values: [literal(`終了していないタスク（${handoff.length}件）`)] }], fields: 'userEnteredValue' } },
+    { updateCells: { start: { sheetId, rowIndex: 5, columnIndex: 2 }, rows: [{ values: [formula(`=HYPERLINK("#gid=${sheetId}&range=D44",${quote(`終了していないタスク（${handoff.length}件）`)})`)] }], fields: 'userEnteredValue' } }
+  ];
+  const entries = handoff.length ? handoff : [{ text: '終了していないタスクはありません。' }];
+  entries.forEach((entry, i) => {
+    const row = 44 + i;
+    const attachment = media.find(item => item.taskKey === entry.key);
+    requests.push({ updateCells: { start: { sheetId, rowIndex: row, columnIndex: 3 }, rows: [{ values: [{ ...literal(entry.text), userEnteredFormat: { textFormat: attachment ? { link: { uri: attachment.savedUrl } } : {} } }] }], fields: 'userEnteredValue,userEnteredFormat.textFormat.link' } });
+    requests.push({ updateDimensionProperties: { range: { sheetId, dimension: 'ROWS', startIndex: row, endIndex: row + 1 }, properties: { pixelSize: Math.max(28, Math.ceil([...entry.text].length / 40) * 19 + 6) }, fields: 'pixelSize' } });
+  });
+  requests.push({ updateCells: { start: { sheetId, rowIndex: 44 + entries.length, columnIndex: 3 }, rows: [{ values: [formula(`=HYPERLINK("#gid=${sheetId}&range=C6","日報へ戻る")`)] }], fields: 'userEnteredValue,userEnteredFormat.textFormat.link' } });
   return requests;
 }

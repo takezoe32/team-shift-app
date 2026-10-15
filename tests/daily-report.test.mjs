@@ -22,7 +22,7 @@ test('RAW range mapping preserves manual sections when omitted and paginates wit
   const report = { date: '2026-10-15', entries: Array.from({ length: 25 }, (_, i) => ({ text: '=' + i, names: '担当' })) };
   const map = Object.fromEntries(reportValueRanges(report, {}, '15').map(r => [r.range, r.values[0][0]]));
   assert.equal(map["'15'!D14"], '=0'); assert.equal(map["'15'!D35"], '=21');
-  assert.equal(map["'15'!C6"], ''); assert.equal(map["'15'!T3"], ''); assert.equal(map["'15'!C40"], undefined);
+  assert.equal(map["'15'!C6"], '終了していないタスク（0件）'); assert.equal(map["'15'!T3"], ''); assert.equal(map["'15'!C40"], undefined);
   const overflow = Object.fromEntries(reportValueRanges(report, {}, '15-2', 1).map(r => [r.range, r.values[0][0]]));
   assert.equal(overflow["'15-2'!D14"], '=22'); assert.equal(overflow["'15-2'!D17"], '');
 });
@@ -42,8 +42,8 @@ test('Drive save reuses monthly file, creates visible overflow sheets, writes RA
   assert.equal(saved.count, 25);
   assert.equal(calls.filter(c => c.url.includes('upload/')).length, 0);
   const batches = calls.filter(c => c.url.endsWith(':batchUpdate')).map(c => JSON.parse(c.options.body));
-  assert.equal(batches[0].requests[0].duplicateSheet.newSheetName, '15-2');
-  assert.equal(batches[0].requests[1].updateSheetProperties.properties.hidden, false);
+  assert.equal(batches[0].requests.find(r => r.duplicateSheet).duplicateSheet.newSheetName, '15-2');
+  assert.ok(batches[0].requests.some(r => r.updateSheetProperties?.properties.hidden === false));
   const values = JSON.parse(calls.find(c => c.url.endsWith('/values:batchUpdate')).options.body);
   assert.equal(values.valueInputOption, 'RAW');
   assert.equal(values.data.find(r => r.range === "'15-2'!D14").values[0][0], '作業22');
@@ -125,10 +125,11 @@ test('visitor overflow creates continuation sheets and the original video is arc
   };
   await saveDailyReportToDrive('fake-token', { date: '2026-10-14', entries: [], visitors: Array.from({ length: 5 }, (_, i) => ({ text: '業者' + i })), handoff: [], media: [{ imageUrl: 'https://res.cloudinary.com/demo/video/upload/test.mp4', mediaType: 'video', imageName: '動画.mp4' }] }, {}, fetcher);
   const batches = calls.filter(call => call.url.endsWith(':batchUpdate')).map(call => JSON.parse(call.options.body));
-  assert.equal(batches[0].requests[0].duplicateSheet.newSheetName, '14-2');
+  assert.equal(batches[0].requests.find(r => r.duplicateSheet).duplicateSheet.newSheetName, '14-2');
   const tables = batches[1].requests.filter(item => item.updateCells).map(item => item.updateCells);
   assert.ok(tables.find(item => item.range.sheetId === 2 && item.range.startColumnIndex === 32).rows[2].values[2].userEnteredValue.formulaValue.includes('archived-video'));
   assert.equal(tables.find(item => item.range.sheetId === 3).rows.length, 2);
+  assert.ok(batches[1].requests.some(item => item.updateSheetProperties?.properties.sheetId === 3 && item.updateSheetProperties.properties.hidden === true));
   const values = JSON.parse(calls.find(call => call.url.endsWith('/values:batchUpdate')).options.body).data;
   assert.equal(values.find(item => item.range === "'14-2'!C36").values[0][0], '業者4');
   assert.equal(values.find(item => item.range === "'14-3'!C36").values[0][0], '');
@@ -169,4 +170,13 @@ test('date tabs sort numerically with continuations after their day', async () =
   const requests = reportSheetOrderRequests({ '15-2': 4, '15': 3, '_様式': 9, '2': 2, '1': 1, '14': 5, '14-2': 6 });
   assert.deepEqual(requests.map(r => r.updateSheetProperties.properties.sheetId), [1, 2, 5, 6, 3, 4]);
   assert.deepEqual(requests.map(r => r.updateSheetProperties.properties.index), [0, 1, 2, 3, 4, 5]);
+});
+
+
+test('unfinished tasks use a count in the report and do not create overflow pages', () => {
+  const report = { date: '2026-10-15', entries: [], handoff: Array.from({ length: 50 }, (_, i) => ({ text: '未完了' + i })) };
+  assert.equal(reportPageCount(report), 1);
+  const values = Object.fromEntries(reportValueRanges(report, {}, '15').map(r => [r.range, r.values[0][0]]));
+  assert.equal(values["'15'!C6"], '終了していないタスク（50件）');
+  assert.equal(values["'15'!C7"], '');
 });

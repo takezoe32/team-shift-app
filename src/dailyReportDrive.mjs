@@ -1,4 +1,4 @@
-import { archiveReportMedia, mediaSheetRequests, taskAttachmentRequests } from './dailyReportMedia.mjs';
+import { archiveReportMedia, mediaSheetRequests, taskAttachmentRequests, handoffListRequests } from './dailyReportMedia.mjs';
 import { REPORT_FOLDER_ID, reportValueRanges, reportPageCount } from './dailyReport.mjs';
 
 export async function saveDailyReportToDrive(token, report, fields = {}, fetcher = fetch) {
@@ -48,6 +48,8 @@ export async function saveDailyReportToDrive(token, report, fields = {}, fetcher
       usedIds.add(id); sheetIds[title] = id;
       requests.push({ duplicateSheet: { sourceSheetId: template.properties.sheetId, newSheetName: title, newSheetId: id } });
       requests.push({ updateSheetProperties: { properties: { sheetId: id, hidden: false }, fields: 'hidden' } });
+    } else {
+      requests.push({ updateSheetProperties: { properties: { sheetId: sheetIds[title], hidden: false }, fields: 'hidden' } });
     }
   }
   requests.push(...reportSheetOrderRequests(sheetIds));
@@ -72,7 +74,7 @@ export async function saveDailyReportToDrive(token, report, fields = {}, fetcher
     const grid = spreadsheet.sheets.find(sheet => sheet.properties.title === title)?.properties.gridProperties || template.properties.gridProperties || {};
     heights.push(...mediaSheetRequests(sheetIds[title], page === 0 ? archivedMedia : [], grid.rowCount, grid.columnCount));
     for (const [field, start, count] of [['handoff', 5, 8], ['visitors', 35, 4]]) for (let i = 0; i < count; i++) {
-      const text = report[field]?.[page * count + i]?.text || '';
+      const text = field === 'handoff' ? '' : report[field]?.[page * count + i]?.text || '';
       const lines = Math.max(1, ...text.split('\n').map(line => Math.ceil([...line].length / 32)));
       heights.push({ updateDimensionProperties: { range: { sheetId: sheetIds[title], dimension: 'ROWS', startIndex: start + i, endIndex: start + i + 1 }, properties: { pixelSize: Math.max(30, lines * 23 + 12) }, fields: 'pixelSize' } });
     }
@@ -80,6 +82,7 @@ export async function saveDailyReportToDrive(token, report, fields = {}, fetcher
   for (const title of existingTitles) if (title.startsWith(day + '-') && /^\d+-\d+$/.test(title) && Number(title.split('-')[1]) > pageCount) {
     const grid = spreadsheet.sheets.find(sheet => sheet.properties.title === title).properties.gridProperties || {};
     heights.push(...mediaSheetRequests(sheetIds[title], [], grid.rowCount, grid.columnCount));
+    heights.push({ updateSheetProperties: { properties: { sheetId: sheetIds[title], hidden: true }, fields: 'hidden' } });
   }
   await call(`https://sheets.googleapis.com/v4/spreadsheets/${file.id}:batchUpdate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: heights }) });
   const data = [];
@@ -92,6 +95,8 @@ export async function saveDailyReportToDrive(token, report, fields = {}, fetcher
     const page = title === day ? 0 : Number(title.split('-')[1]) - 1;
     links.push(...taskAttachmentRequests(sheetIds[title], report, archivedMedia, page));
   }
+  const grid = spreadsheet.sheets.find(sheet => sheet.properties.title === day)?.properties.gridProperties || template.properties.gridProperties || {};
+  links.push(...handoffListRequests(sheetIds[day], report.handoff || [], archivedMedia, Math.max(grid.rowCount || 43, archivedMedia.length + 2)));
   await call(`https://sheets.googleapis.com/v4/spreadsheets/${file.id}:batchUpdate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: links }) });
   const first = data.find(item => item.range.endsWith('!N5'));
   const check = await call(`https://sheets.googleapis.com/v4/spreadsheets/${file.id}/values/${encodeURIComponent(first.range)}`);

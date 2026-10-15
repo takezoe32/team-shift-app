@@ -58,7 +58,7 @@ export function collectDailyReport(source, date) {
   return { date, entries, staff, visitors, handoff, media, unknownDates };
 }
 export function reportPageCount(report) {
-  return Math.max(1, Math.ceil(report.entries.length / 22), Math.ceil((report.handoff || []).length / 8), Math.ceil((report.visitors || []).length / 4));
+  return Math.max(1, Math.ceil(report.entries.length / 22), Math.ceil((report.visitors || []).length / 4));
 }
 
 export function reportValueRanges(report, fields, sheetTitle, page = 0) {
@@ -70,9 +70,10 @@ export function reportValueRanges(report, fields, sheetTitle, page = 0) {
   const names = report.staff || [];
   ['T3', 'W3', 'Z3', 'AC3', 'AF3'].forEach((cell, i) => { cells[cell] = i === 4 ? names.slice(4).join('・') : names[i] || ''; });
   for (const [field, start, count] of [['handoff', 6, 8], ['visitors', 36, 4]]) {
-    const lines = (report[field] || []).slice(page * count, (page + 1) * count);
+    const lines = field === 'handoff' ? [] : (report[field] || []).slice(page * count, (page + 1) * count);
     for (let i = 0; i < count; i++) cells['C' + (start + i)] = lines[i]?.text || '';
   }
+  if (page === 0) cells.C6 = `終了していないタスク（${(report.handoff || []).length}件）`;
   // Omitted manual fields preserve saved edits on the first page.
   if (page === 0) {
     if (fields.weather !== undefined) cells.AA5 = '天候：' + fields.weather;
