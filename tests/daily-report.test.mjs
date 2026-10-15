@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { collectDailyReport, reportValueRanges, tokyoDate, REPORT_FOLDER_ID, reportPageCount } from '../src/dailyReport.mjs';
+import { collectDailyReport, reportValueRanges, tokyoDate, REPORT_FOLDER_ID, reportPageCount, MEDIA_FOLDER_ID, reportSurname } from '../src/dailyReport.mjs';
 import { saveDailyReportToDrive } from '../src/dailyReportDrive.mjs';
 
 test('completion date in Japan is used instead of planned date; private and unfinished tasks excluded', () => {
@@ -90,7 +90,7 @@ test('handoff includes overdue and same-day unfinished work and partners; future
   const report = collectDailyReport(source, '2026-10-14');
   assert.equal(report.handoff.length, 4); assert.equal(report.entries.length, 1); assert.equal(report.visitors.length, 1);
   assert.ok(report.handoff.some(entry => entry.text.includes('翌日完了')));
-  assert.ok(report.visitors[0].text.includes('終了業者'));
+  assert.ok(report.visitors[0].text.includes('終了業者')); assert.ok(report.handoff.every(item => !item.text.includes('担当：')));
 });
 
 test('all automatic sections paginate independently and regeneration clears stale values', () => {
@@ -113,7 +113,11 @@ test('visitor overflow creates continuation sheets and the original video is arc
     calls.push({ url, options });
     if (url.startsWith('https://res.cloudinary.com/')) { assert.equal(options.headers, undefined); return { ok: true, blob: async () => new Blob(['video'], { type: 'video/mp4' }) }; }
     if (url.includes('/drive/v3/files/' + REPORT_FOLDER_ID)) return response({ mimeType: 'application/vnd.google-apps.folder', capabilities: { canAddChildren: true } });
-    if (url.includes('/drive/v3/files?q=')) return response({ files: decodeURIComponent(url).includes('teamShiftMediaDate') ? [] : [{ id: 'month', mimeType: 'application/vnd.google-apps.spreadsheet' }] });
+    if (url.includes('/drive/v3/files/' + MEDIA_FOLDER_ID)) return response({ mimeType: 'application/vnd.google-apps.folder', capabilities: { canAddChildren: true } });
+    if (url.includes('/drive/v3/files?q=')) {
+      const query = decodeURIComponent(url);
+      return response({ files: query.includes('teamShiftMediaKey') ? [] : query.includes("name='2026-10'") ? [{ id: 'media-month', mimeType: 'application/vnd.google-apps.folder' }] : [{ id: 'month', mimeType: 'application/vnd.google-apps.spreadsheet' }] });
+    }
     if (url.includes('/upload/drive/')) return response({ id: 'archived-video' });
     if (url.includes('?fields=spreadsheetUrl')) return response({ spreadsheetUrl: 'https://docs.google.com/spreadsheets/d/month/edit', sheets: [{ properties: { title: '_様式', sheetId: 1, hidden: true, gridProperties: { columnCount: 32, rowCount: 43 } } }, { properties: { title: '14', sheetId: 2, gridProperties: { columnCount: 32, rowCount: 43 } } }, { properties: { title: '14-3', sheetId: 3 } }] });
     if (url.includes('/values/') && !url.endsWith('batchUpdate')) return response({ values: [['2026年']] });
@@ -128,4 +132,26 @@ test('visitor overflow creates continuation sheets and the original video is arc
   const values = JSON.parse(calls.find(call => call.url.endsWith('/values:batchUpdate')).options.body).data;
   assert.equal(values.find(item => item.range === "'14-2'!C36").values[0][0], '業者4');
   assert.equal(values.find(item => item.range === "'14-3'!C36").values[0][0], '');
+});
+
+
+test('staff surname supports registered names, spaces and explicit surname without blind two-character slicing', () => {
+  assert.equal(reportSurname({ name: '竹添三剛' }), '竹添');
+  assert.equal(reportSurname({ name: '井上珠生' }), '井上');
+  assert.equal(reportSurname({ name: '長谷川 太郎' }), '長谷川');
+  assert.equal(reportSurname({ name: '小笠原太郎', surname: '小笠原' }), '小笠原');
+  assert.equal(reportSurname({ name: '未知の氏名' }), '未知の氏名');
+});
+
+test('work and handoff show only titles, with first-line fallback for legacy tasks; attachments use the same title', () => {
+  const source = { users: { u: { name: '竹添三剛' } }, teamData: { shifts: { '2026-10-14': { u: 'work' } }, tasks: { '2026-10-14': { u: [
+    { id: 'done', subject: '交換', text: '詳しい本文', completed: true, completedAt: '2026-10-14T01:00:00Z', updates: [{ text: '追記' }], images: [{ imageUrl: 'https://res.cloudinary.com/demo/image/upload/a.jpg' }] },
+    { id: 'todo', subject: '修理', text: '担当への説明' },
+    { id: 'legacy', text: '旧タスクの題名\n詳しい説明' }
+  ] } } }, partnerItems: [{ id: 'p', date: '2026-10-14', partnerName: '業者', subject: '点検', content: '詳細' }] };
+  const report = collectDailyReport(source, '2026-10-14');
+  assert.deepEqual(report.staff, ['竹添']);
+  assert.deepEqual(report.entries.map(item => item.text), ['交換']);
+  assert.deepEqual(new Set(report.handoff.map(item => item.text)), new Set(['修理', '旧タスクの題名', '点検']));
+  assert.equal(report.media[0].task, '交換');
 });
