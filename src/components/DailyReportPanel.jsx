@@ -21,14 +21,14 @@ export default function DailyReportPanel({ getSource }) {
       const request = requestRef.current;
       if (!request) { clearBusy(); return; }
       try {
-        setMessage('完了タスクを確認しています…');
+        setMessage('シフト・タスク・添付ファイルを確認しています…');
         const source = await getSource();
         const report = collectDailyReport(source, request.date);
         setMessage(`${report.entries.length}件の日報をGoogle Driveに保存しています…`);
         const saved = await saveDailyReportToDrive(response.access_token, report, request.fields);
         setResult(saved);
         setFields({});
-        setMessage(`${request.date}の完了タスク${saved.count}件を保存しました。${report.unknownDates ? `終了日時不明の${report.unknownDates}件は集計に含めていません。` : ''}`);
+        setMessage(`${request.date}の業務${saved.count}件・来館業者${report.visitors.length}件・引き継ぎ${report.handoff.length}件・添付${report.media.length}件を保存しました。${report.unknownDates ? `終了日時不明の${report.unknownDates}件は集計に含めていません。` : ''}`);
       } catch (error) { setMessage(error.message || '日報を保存できませんでした。'); }
       finally { clearBusy(); }
     },
@@ -48,8 +48,8 @@ export default function DailyReportPanel({ getSource }) {
     <button type="button" onClick={() => setOpen(v => !v)} className="min-h-10 text-sm font-bold text-blue-800" aria-expanded={open}>日報作成（テスト） {open ? '▲' : '▼'}</button>
     {open && <>
       <label className="block text-xs font-bold">対象日（実際の終了日・日本時間）<input type="date" disabled={busy} value={date} onChange={e => { if (!confirmEditDiscard(Object.keys(fields).length > 0, busy)) return; setDate(e.target.value); setFields({}); setResult(null); setMessage(''); }} className="mt-1 block min-h-11 w-full rounded-lg border px-2 text-sm"/></label>
-      <p className="text-xs text-gray-600">月ごとのファイルに、日別シートで保存します。再作成はその日の業務・担当者欄を更新します。以下の欄は入力した項目だけ更新し、未入力の項目は保存済みの内容を残します。個人メモは含めません。</p>
-      <div className="grid gap-2 sm:grid-cols-2">{field('staff', '出勤者（読点または改行で区切る）')}{field('weather', '天候')}{field('chlorine', '塩素投入数')}{field('handoff', '連絡引継事項', true)}{field('visitors', '来館業者', true)}{field('remarks', '備考', true)}</div>
+      <p className="text-xs text-gray-600">月ごとのファイルに、日別シートで保存します。出勤者は当日のシフト、来館業者は当日に終了したパートナータスク、連絡引継事項は対象日までの未完了タスクを自動入力します。画像・動画は同じシートの右側に保存します。再作成時も自動入力欄を更新します。以下の欄は入力した項目だけ更新し、未入力の項目は保存済みの内容を残します。個人メモは含めません。</p>
+      <div className="grid gap-2 sm:grid-cols-2">{field('weather', '天候')}{field('chlorine', '塩素投入数')}{field('remarks', '備考', true)}</div>
       <button type="button" disabled={busy} onClick={create} className="min-h-11 w-full rounded-lg bg-blue-600 px-3 text-sm font-bold text-white disabled:opacity-50">{busy ? '日報を作成中…' : '日報作成・Google Driveへ保存'}</button>
       <a href={`https://drive.google.com/drive/folders/${REPORT_FOLDER_ID}`} target="_blank" rel="noopener noreferrer" className="block text-xs text-blue-800 underline">指定の保存先フォルダを開く</a>
       <p className="text-xs text-gray-600">テスト中はボタンで実行します。0時の自動作成はまだ有効にしていません。</p>
