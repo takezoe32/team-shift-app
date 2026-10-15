@@ -1,7 +1,17 @@
-import { REPORT_FOLDER_ID } from './dailyReport.mjs';
+import { REPORT_FOLDER_ID, MEDIA_FOLDER_ID } from './dailyReport.mjs';
 
 // Copy attachments into Drive so deleting the original task cannot remove the report's files.
 export async function archiveReportMedia(report, call, fetcher) {
+  if (!(report.media || []).length) return [];
+  const root = await call(`https://www.googleapis.com/drive/v3/files/${MEDIA_FOLDER_ID}?fields=id,mimeType,capabilities&supportsAllDrives=true`);
+  if (root.mimeType !== 'application/vnd.google-apps.folder' || !root.capabilities?.canAddChildren) throw new Error('画像・動画の保存先フォルダにファイルを追加する権限がありません。');
+  const month = report.date.slice(0, 7);
+  const folderQuery = `'${MEDIA_FOLDER_ID}' in parents and trashed=false and name='${month}'`;
+  const folders = await call(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(folderQuery)}&fields=files(id,mimeType)&supportsAllDrives=true&includeItemsFromAllDrives=true`);
+  if (folders.files?.length > 1) throw new Error('画像・動画の月別フォルダが重複しています。保存先を確認してください。');
+  let folder = folders.files?.[0];
+  if (folder && folder.mimeType !== 'application/vnd.google-apps.folder') throw new Error('画像・動画の月別保存先がフォルダではありません。');
+  if (!folder) folder = await call('https://www.googleapis.com/drive/v3/files?fields=id&supportsAllDrives=true', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: month, mimeType: 'application/vnd.google-apps.folder', parents: [MEDIA_FOLDER_ID] }) });
   const saved = [];
   for (const media of report.media || []) {
     let source;
@@ -9,9 +19,17 @@ export async function archiveReportMedia(report, call, fetcher) {
     if (source.protocol !== 'https:' || source.hostname !== 'res.cloudinary.com') throw new Error('添付ファイルの保存元を確認できません。');
     const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(source.href));
     const key = Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, '0')).join('');
-    const query = `'${REPORT_FOLDER_ID}' in parents and trashed=false and appProperties has { key='teamShiftMediaDate' and value='${report.date}' } and appProperties has { key='teamShiftMediaKey' and value='${key}' }`;
+    const query = `'${folder.id}' in parents and trashed=false and appProperties has { key='teamShiftMediaKey' and value='${key}' }`;
     const found = await call(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,webViewLink)&supportsAllDrives=true&includeItemsFromAllDrives=true`);
     let file = found.files?.[0];
+    if (!file) {
+      // Move the already archived file instead of creating another copy.
+      const legacyQuery = `'${REPORT_FOLDER_ID}' in parents and trashed=false and appProperties has { key='teamShiftMediaDate' and value='${report.date}' } and appProperties has { key='teamShiftMediaKey' and value='${key}' }`;
+      const legacy = await call(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(legacyQuery)}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`);
+      if (legacy.files?.[0]) {
+        file = await call(`https://www.googleapis.com/drive/v3/files/${legacy.files[0].id}?addParents=${folder.id}&removeParents=${REPORT_FOLDER_ID}&fields=id&supportsAllDrives=true`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ appProperties: { teamShiftMediaMonth: month, teamShiftMediaDate: report.date, teamShiftMediaKey: key } }) });
+      }
+    }
     if (!file) {
       // Never send the user's Google token to the attachment host.
       const response = await fetcher(source.href);
@@ -19,7 +37,7 @@ export async function archiveReportMedia(report, call, fetcher) {
       const blob = await response.blob();
       if (!/^(image|video)\//.test(blob.type)) throw new Error('添付ファイルが画像・動画として取得できませんでした。');
       const name = media.imageName || source.pathname.split('/').at(-1) || (media.mediaType === 'video' ? '動画' : '画像');
-      const metadata = { name: `${report.date}_${name}`, parents: [REPORT_FOLDER_ID], mimeType: blob.type, appProperties: { teamShiftMediaDate: report.date, teamShiftMediaKey: key } };
+      const metadata = { name: `${report.date}_${name}`, parents: [folder.id], mimeType: blob.type, appProperties: { teamShiftMediaDate: report.date, teamShiftMediaMonth: month, teamShiftMediaKey: key } };
       const boundary = 'teamshift_media_' + crypto.randomUUID();
       const body = new Blob([`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: ${blob.type}\r\n\r\n`, blob, `\r\n--${boundary}--`]);
       file = await call('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink&supportsAllDrives=true', { method: 'POST', headers: { 'Content-Type': `multipart/related; boundary=${boundary}` }, body });

@@ -65,8 +65,8 @@ export async function saveDailyReportToDrive(token, report, fields = {}, fetcher
     heights.push(...mediaSheetRequests(sheetIds[title], page === 0 ? archivedMedia : [], grid.rowCount, grid.columnCount));
     for (const [field, start, count] of [['handoff', 5, 8], ['visitors', 35, 4]]) for (let i = 0; i < count; i++) {
       const text = report[field]?.[page * count + i]?.text || '';
-      const lines = Math.max(1, ...text.split('\n').map(line => Math.ceil([...line].length / 44)));
-      heights.push({ updateDimensionProperties: { range: { sheetId: sheetIds[title], dimension: 'ROWS', startIndex: start + i, endIndex: start + i + 1 }, properties: { pixelSize: Math.max(24, lines * 19 + 6) }, fields: 'pixelSize' } });
+      const lines = Math.max(1, ...text.split('\n').map(line => Math.ceil([...line].length / 32)));
+      heights.push({ updateDimensionProperties: { range: { sheetId: sheetIds[title], dimension: 'ROWS', startIndex: start + i, endIndex: start + i + 1 }, properties: { pixelSize: Math.max(30, lines * 23 + 12) }, fields: 'pixelSize' } });
     }
   }
   for (const title of existingTitles) if (title.startsWith(day + '-') && /^\d+-\d+$/.test(title) && Number(title.split('-')[1]) > pageCount) {

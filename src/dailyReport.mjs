@@ -1,4 +1,12 @@
 import { getTaskImages } from './taskImages.mjs';
+export const MEDIA_FOLDER_ID = '1ZH9lLBsZE0wtXvA_Cdq48Hl7PY3Ld-gw';
+export function reportSurname(user) {
+  const name = String(user?.name || '').trim();
+  if (user?.surname || user?.lastName) return String(user.surname || user.lastName).trim();
+  if (/\s/.test(name)) return name.split(/\s+/)[0];
+  // Registered team surnames; never assume every Japanese surname has two characters.
+  return ['戸田', '竹添', '高橋', '江藤', '平川', '井上'].find(surname => name.startsWith(surname)) || name || '氏名不明';
+}
 export const REPORT_FOLDER_ID = '1WeUCx0SPcPLXLEzqyNhaMAod22TBjoBO';
 export function tokyoDate(value) {
   const date = new Date(value);
@@ -19,7 +27,7 @@ export function collectDailyReport(source, date) {
   const staff = Object.entries(source.teamData?.shifts?.[date] || {})
     .filter(([uid, id]) => users[uid] && !absentIds.has(id) && (id === 'work' || types.has(id)) && !/休|有給|有休|欠勤|講習|未定|^[/／]$/.test(types.get(id)?.label || ''))
     .sort(([a], [b]) => (order.includes(a) ? order.indexOf(a) : Infinity) - (order.includes(b) ? order.indexOf(b) : Infinity) || a.localeCompare(b))
-    .map(([uid]) => users[uid].name || '氏名不明');
+    .map(([uid]) => reportSurname(users[uid]));
   const add = (task, type, ownerUid, key, scheduledDate) => {
     if (!task || task.visibility === 'private') return;
     const completedDate = tokyoDate(task.completedAt);
@@ -34,11 +42,12 @@ export function collectDailyReport(source, date) {
     const updates = (Array.isArray(task.updates) ? task.updates : []).filter(update => !tokyoDate(update.createdAt) || tokyoDate(update.createdAt) <= date);
     const notes = updates.map(update => String(update.text || '').trim());
     const description = [...new Set([subject, body, ...notes, task.productName ? `${task.productName} × ${task.inventoryQuantity || 1}個` : ''].filter(Boolean))].join('／');
+    const title = String(task.subject || '').trim() || body.split(/\r?\n/)[0] || (type === 'partner' ? String(task.partnerName || '').trim() : '') || '題名なし';
     const entry = { key, text: (type === 'partner' ? `【パートナー${task.partnerName ? '：' + task.partnerName : ''}】` : '') + (description || '内容なし'), names: [...new Set(ids.map(id => users[id]?.name || '担当者不明'))].join('・') || '未割り当て', completedAt: task.completedAt, scheduledDate };
-    if (finished) (type === 'partner' ? visitors : entries).push(entry);
-    else handoff.push({ ...entry, text: `【${scheduledDate}】${entry.text}（担当：${entry.names}）` });
+    if (finished) (type === 'partner' ? visitors : entries).push(type === 'partner' ? entry : { ...entry, text: title });
+    else handoff.push({ ...entry, text: title });
     for (const attachment of [...getTaskImages(task), ...updates.flatMap(getTaskImages)]) {
-      if (!media.some(item => item.imageUrl === attachment.imageUrl)) media.push({ ...attachment, task: entry.text, names: entry.names });
+      if (!media.some(item => item.imageUrl === attachment.imageUrl)) media.push({ ...attachment, task: title, names: entry.names });
     }
   };
   for (const [taskDate, day] of Object.entries(source.teamData?.tasks || {})) for (const [uid, tasks] of Object.entries(day || {})) for (const task of tasks || []) add(task, 'member', uid, `member:${taskDate}:${uid}:${task.id}`, taskDate);
