@@ -55,6 +55,10 @@ export async function saveDailyReportToDrive(token, report, fields = {}, fetcher
   if (requests.length) await call(`https://sheets.googleapis.com/v4/spreadsheets/${file.id}:batchUpdate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requests }) });
   const archivedMedia = await archiveReportMedia(report, call, fetcher);
   const heights = [];
+  if (fields.weather !== undefined) {
+    heights.push({ repeatCell: { range: { sheetId: sheetIds[day], startRowIndex: 4, endRowIndex: 5, startColumnIndex: 26, endColumnIndex: 31 }, cell: { userEnteredFormat: { textFormat: { fontSize: 9 }, wrapStrategy: 'WRAP', verticalAlignment: 'CENTER' } }, fields: 'userEnteredFormat.textFormat.fontSize,userEnteredFormat.wrapStrategy,userEnteredFormat.verticalAlignment' } });
+    heights.push({ updateDimensionProperties: { range: { sheetId: sheetIds[day], dimension: 'ROWS', startIndex: 4, endIndex: 5 }, properties: { pixelSize: Math.max(26, Math.ceil([...('天候：' + fields.weather)].length / 10) * 16 + 4) }, fields: 'pixelSize' } });
+  }
   for (let page = 0; page < pageCount; page++) for (let i = 0; i < 22; i++) {
     const entry = report.entries[page * 22 + i];
     const lines = Math.max(1, ...(entry?.text || '').split('\n').map(line => Math.ceil([...line].length / 42)));

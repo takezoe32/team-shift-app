@@ -71,7 +71,7 @@ export function taskAttachmentRequests(sheetId, report, media, page = 0) {
       const attachment = entry && media.find(item => item.taskKey === entry.key);
       requests.push({ repeatCell: {
         range: { sheetId, startRowIndex: start + i, endRowIndex: start + i + 1, startColumnIndex: column, endColumnIndex: column + 1 },
-        cell: { userEnteredFormat: { textFormat: { link: attachment ? { uri: attachment.savedUrl } : {} } } },
+        cell: { userEnteredFormat: { textFormat: attachment ? { link: { uri: attachment.savedUrl } } : {} } },
         fields: 'userEnteredFormat.textFormat.link'
       } });
     }
