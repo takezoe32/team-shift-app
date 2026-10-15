@@ -1,0 +1,8 @@
+{
+  "functions": {
+    "api/daily-report.js": {
+      "includeFiles": "public/templates/daily-report.xlsx",
+      "maxDuration": 300
+    }
+  }
+}
