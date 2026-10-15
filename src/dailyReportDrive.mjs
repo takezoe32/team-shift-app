@@ -54,7 +54,7 @@ export async function saveDailyReportToDrive(token, report, fields = {}, fetcher
   const heights = [];
   for (let page = 0; page < pageCount; page++) for (let i = 0; i < 22; i++) {
     const entry = report.entries[page * 22 + i];
-    const lines = Math.max(1, ...(entry?.text || '').split('\n').map(line => Math.ceil([...line].length / 42)), Math.ceil([...(entry?.names || '')].length / 7));
+    const lines = Math.max(1, ...(entry?.text || '').split('\n').map(line => Math.ceil([...line].length / 42)), Math.ceil([...(entry?.names || '')].length / 2));
     heights.push({ updateDimensionProperties: { range: { sheetId: sheetIds[page === 0 ? day : `${day}-${page + 1}`], dimension: 'ROWS', startIndex: 13 + i, endIndex: 14 + i }, properties: { pixelSize: Math.max(24, lines * 19 + 6) }, fields: 'pixelSize' } });
   }
   await call(`https://sheets.googleapis.com/v4/spreadsheets/${file.id}:batchUpdate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: heights }) });
@@ -63,7 +63,7 @@ export async function saveDailyReportToDrive(token, report, fields = {}, fetcher
   // Clear obsolete overflow task rows after regeneration without deleting handwritten sections.
   for (const title of existingTitles) if (title.startsWith(day + '-') && /^\d+-\d+$/.test(title) && Number(title.split('-')[1]) > pageCount) data.push(...reportValueRanges({ ...report, entries: [] }, {}, title, 1));
   await call(`https://sheets.googleapis.com/v4/spreadsheets/${file.id}/values:batchUpdate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ valueInputOption: 'RAW', data }) });
-  const first = data[0];
+  const first = data.find(item => item.range.endsWith('!N5'));
   const check = await call(`https://sheets.googleapis.com/v4/spreadsheets/${file.id}/values/${encodeURIComponent(first.range)}`);
   if (String(check.values?.[0]?.[0]) !== String(first.values[0][0])) throw new Error('日報の保存結果を確認できませんでした。もう一度実行してください。');
   return { id: file.id, url: spreadsheet.spreadsheetUrl, count: report.entries.length, name: file.name };

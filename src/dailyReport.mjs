@@ -32,7 +32,7 @@ export function collectDailyReport(source, date) {
 export function reportValueRanges(report, fields, sheetTitle, page = 0) {
   const [year, month, day] = report.date.split('-');
   const quoted = `'${sheetTitle.replaceAll("'", "''")}'`;
-  const cells = { N5: year + '年', S5: Number(month) + '月', V5: Number(day) + '日', Y5: '(' + new Intl.DateTimeFormat('ja-JP', { weekday: 'short', timeZone: 'Asia/Tokyo' }).format(new Date(report.date + 'T12:00:00+09:00')) + ')' };
+  const cells = { B1: '施 設 業 務 日 誌', N5: year + '年', S5: Number(month) + '月', V5: Number(day) + '日', Y5: '(' + new Intl.DateTimeFormat('ja-JP', { weekday: 'short', timeZone: 'Asia/Tokyo' }).format(new Date(report.date + 'T12:00:00+09:00')) + ')' };
   const rows = report.entries.slice(page * 22, page * 22 + 22);
   for (let i = 0; i < 22; i++) { cells['D' + (14 + i)] = rows[i]?.text || ''; cells['AD' + (14 + i)] = rows[i]?.names || ''; }
   // Only the first page owns manually entered sections. Omitted fields preserve saved edits.
