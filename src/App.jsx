@@ -279,6 +279,7 @@ const LoginScreen = ({ onGoogleLoginSuccess, authError }) => (
           useOneTap
         />
       </div>
+      <a href="/privacy.html" className="block text-xs text-blue-700 underline">プライバシーポリシー</a>
     </div>
   </div>
 );
