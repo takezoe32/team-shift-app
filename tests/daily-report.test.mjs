@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { collectDailyReport, reportValueRanges, tokyoDate, REPORT_FOLDER_ID } from '../src/dailyReport.mjs';
+import { collectDailyReport, reportValueRanges, tokyoDate, REPORT_FOLDER_ID, reportPageCount } from '../src/dailyReport.mjs';
 import { saveDailyReportToDrive } from '../src/dailyReportDrive.mjs';
 
 test('completion date in Japan is used instead of planned date; private and unfinished tasks excluded', () => {
@@ -12,7 +12,7 @@ test('completion date in Japan is used instead of planned date; private and unfi
     { id: 'unknown', completed: true }
   ] } } }, partnerItems: [{ id: 'p', completed: true, completedAt: '2026-10-15T01:00:00Z', partnerName: '業者', content: '確認', assigneeUid: 'u' }] };
   const report = collectDailyReport(source, '2026-10-15');
-  assert.equal(report.entries.length, 2); assert.equal(report.unknownDates, 1);
+  assert.equal(report.entries.length, 1); assert.equal(report.visitors.length, 1); assert.equal(report.unknownDates, 1);
   assert.equal(report.entries[0].names, '担当者・共同担当');
   assert.equal(tokyoDate('2026-10-14T14:59:59Z'), '2026-10-14');
   assert.throws(() => collectDailyReport({}, '2026-02-30'), /日付/);
@@ -22,7 +22,7 @@ test('RAW range mapping preserves manual sections when omitted and paginates wit
   const report = { date: '2026-10-15', entries: Array.from({ length: 25 }, (_, i) => ({ text: '=' + i, names: '担当' })) };
   const map = Object.fromEntries(reportValueRanges(report, {}, '15').map(r => [r.range, r.values[0][0]]));
   assert.equal(map["'15'!D14"], '=0'); assert.equal(map["'15'!D35"], '=21');
-  assert.equal(map["'15'!C6"], undefined); assert.equal(map["'15'!T3"], undefined);
+  assert.equal(map["'15'!C6"], ''); assert.equal(map["'15'!T3"], ''); assert.equal(map["'15'!C40"], undefined);
   const overflow = Object.fromEntries(reportValueRanges(report, {}, '15-2', 1).map(r => [r.range, r.values[0][0]]));
   assert.equal(overflow["'15-2'!D14"], '=22'); assert.equal(overflow["'15-2'!D17"], '');
 });
@@ -72,4 +72,60 @@ test('first monthly save imports the clean template as a native Sheet into only 
   assert.ok(uploaded.includes('"teamShiftReportMonth":"2026-10"'));
   assert.ok(uploaded.includes('template-bytes'));
   assert.ok(!uploaded.includes('fake-token'));
+});
+
+
+test('attendance follows the selected day and user order, excluding leave, courses and unknown shifts', () => {
+  const users = Object.fromEntries(['a', 'b', 'c', 'd', 'e', 'f', 'g'].map(id => [id, { name: id }]));
+  const report = collectDailyReport({ users, userOrder: ['b', 'a'], shiftTypes: [{ id: 'early', label: '早番' }, { id: 'leave', label: '有休' }], teamData: { shifts: { '2026-10-14': { a: 'work', b: 'early', c: 'off', d: 'course', e: 'leave', f: 'none', g: 'deleted', missing: 'work' }, '2026-10-15': { c: 'work' } } } }, '2026-10-14');
+  assert.deepEqual(report.staff, ['b', 'a']);
+});
+
+test('handoff includes overdue and same-day unfinished work and partners; future, private and later-created work excluded', () => {
+  const source = { users: { u: { name: '担当' } }, teamData: { tasks: {
+    '2026-10-13': { u: [{ id: 'overdue', text: '持越し' }, { id: 'nextday', text: '翌日完了', completed: true, completedAt: '2026-10-15T00:09:00Z' }, { id: 'private', text: '個人', visibility: 'private' }, { id: 'later', text: '翌日登録', createdAt: '2026-10-15T00:00:00Z' }] },
+    '2026-10-14': { u: [{ id: 'today', text: '当日未完了' }, { id: 'finished', text: '当日完了', completed: true, completedAt: '2026-10-14T02:00:00Z' }] },
+    '2026-10-15': { u: [{ id: 'future', text: '未来' }] }
+  } }, partnerItems: [{ id: 'pending', date: '2026-10-14', partnerName: '未完業者' }, { id: 'done', date: '2026-10-13', partnerName: '終了業者', completed: true, completedAt: '2026-10-14T04:00:00Z' }] };
+  const report = collectDailyReport(source, '2026-10-14');
+  assert.equal(report.handoff.length, 4); assert.equal(report.entries.length, 1); assert.equal(report.visitors.length, 1);
+  assert.ok(report.handoff.some(entry => entry.text.includes('翌日完了')));
+  assert.ok(report.visitors[0].text.includes('終了業者'));
+});
+
+test('all automatic sections paginate independently and regeneration clears stale values', () => {
+  const report = { date: '2026-10-14', entries: [], staff: ['甲', '乙'], handoff: Array.from({ length: 10 }, (_, i) => ({ text: '引継' + i })), visitors: Array.from({ length: 9 }, (_, i) => ({ text: '業者' + i })) };
+  assert.equal(reportPageCount(report), 3);
+  const map = Object.fromEntries(reportValueRanges(report, {}, '14-3', 2).map(item => [item.range, item.values[0][0]]));
+  assert.equal(map["'14-3'!C36"], '業者8'); assert.equal(map["'14-3'!C37"], ''); assert.equal(map["'14-3'!C6"], ''); assert.equal(map["'14-3'!T3"], '甲');
+});
+
+test('attachments include legacy and update files once, exclude personal and future tasks', () => {
+  const image = { imageUrl: 'https://res.cloudinary.com/demo/image/upload/a.jpg', imageName: '画像.jpg' };
+  const video = { imageUrl: 'https://res.cloudinary.com/demo/video/upload/a.mp4', imageName: '動画.mp4', mediaType: 'video' };
+  const report = collectDailyReport({ teamData: { tasks: { '2026-10-14': { u: [{ id: 'one', completed: true, completedAt: '2026-10-14T01:00:00Z', ...image, images: [image], updates: [{ images: [video], createdAt: '2026-10-14T01:00:00Z' }] }, { id: 'private', visibility: 'private', images: [{ imageUrl: 'secret' }] }] } } } }, '2026-10-14');
+  assert.deepEqual(report.media.map(item => item.imageName), ['画像.jpg', '動画.mp4']);
+});
+
+test('visitor overflow creates continuation sheets and the original video is archived and linked on the first sheet', async () => {
+  const calls = [];
+  const fetcher = async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url.startsWith('https://res.cloudinary.com/')) { assert.equal(options.headers, undefined); return { ok: true, blob: async () => new Blob(['video'], { type: 'video/mp4' }) }; }
+    if (url.includes('/drive/v3/files/' + REPORT_FOLDER_ID)) return response({ mimeType: 'application/vnd.google-apps.folder', capabilities: { canAddChildren: true } });
+    if (url.includes('/drive/v3/files?q=')) return response({ files: decodeURIComponent(url).includes('teamShiftMediaDate') ? [] : [{ id: 'month', mimeType: 'application/vnd.google-apps.spreadsheet' }] });
+    if (url.includes('/upload/drive/')) return response({ id: 'archived-video' });
+    if (url.includes('?fields=spreadsheetUrl')) return response({ spreadsheetUrl: 'https://docs.google.com/spreadsheets/d/month/edit', sheets: [{ properties: { title: '_様式', sheetId: 1, hidden: true, gridProperties: { columnCount: 32, rowCount: 43 } } }, { properties: { title: '14', sheetId: 2, gridProperties: { columnCount: 32, rowCount: 43 } } }, { properties: { title: '14-3', sheetId: 3 } }] });
+    if (url.includes('/values/') && !url.endsWith('batchUpdate')) return response({ values: [['2026年']] });
+    return response({});
+  };
+  await saveDailyReportToDrive('fake-token', { date: '2026-10-14', entries: [], visitors: Array.from({ length: 5 }, (_, i) => ({ text: '業者' + i })), handoff: [], media: [{ imageUrl: 'https://res.cloudinary.com/demo/video/upload/test.mp4', mediaType: 'video', imageName: '動画.mp4' }] }, {}, fetcher);
+  const batches = calls.filter(call => call.url.endsWith(':batchUpdate')).map(call => JSON.parse(call.options.body));
+  assert.equal(batches[0].requests[0].duplicateSheet.newSheetName, '14-2');
+  const tables = batches[1].requests.filter(item => item.updateCells).map(item => item.updateCells);
+  assert.ok(tables.find(item => item.range.sheetId === 2 && item.range.startColumnIndex === 38).rows[2].values[3].userEnteredValue.formulaValue.includes('archived-video'));
+  assert.equal(tables.find(item => item.range.sheetId === 3).rows.length, 2);
+  const values = JSON.parse(calls.find(call => call.url.endsWith('/values:batchUpdate')).options.body).data;
+  assert.equal(values.find(item => item.range === "'14-2'!C36").values[0][0], '業者4');
+  assert.equal(values.find(item => item.range === "'14-3'!C36").values[0][0], '');
 });

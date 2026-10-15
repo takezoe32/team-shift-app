@@ -1,4 +1,5 @@
-import { REPORT_FOLDER_ID, reportValueRanges } from './dailyReport.mjs';
+import { archiveReportMedia, mediaSheetRequests } from './dailyReportMedia.mjs';
+import { REPORT_FOLDER_ID, reportValueRanges, reportPageCount } from './dailyReport.mjs';
 
 export async function saveDailyReportToDrive(token, report, fields = {}, fetcher = fetch) {
   const call = async (url, options = {}) => {
@@ -34,7 +35,7 @@ export async function saveDailyReportToDrive(token, report, fields = {}, fetcher
   const template = spreadsheet.sheets.find(sheet => sheet.properties.title === '_様式');
   if (!template) throw new Error('月次日報に様式シートがありません。削除せず残してください。');
   const day = String(Number(report.date.slice(8)));
-  const pageCount = Math.max(1, Math.ceil(report.entries.length / 22));
+  const pageCount = reportPageCount(report);
   const existingTitles = spreadsheet.sheets.map(s => s.properties.title);
   const sheetIds = Object.fromEntries(spreadsheet.sheets.map(s => [s.properties.title, s.properties.sheetId]));
   const usedIds = new Set(Object.values(sheetIds));
@@ -51,17 +52,32 @@ export async function saveDailyReportToDrive(token, report, fields = {}, fetcher
   }
   if (!template.properties.hidden) requests.push({ updateSheetProperties: { properties: { sheetId: template.properties.sheetId, hidden: true }, fields: 'hidden' } });
   if (requests.length) await call(`https://sheets.googleapis.com/v4/spreadsheets/${file.id}:batchUpdate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requests }) });
+  const archivedMedia = await archiveReportMedia(report, call, fetcher);
   const heights = [];
   for (let page = 0; page < pageCount; page++) for (let i = 0; i < 22; i++) {
     const entry = report.entries[page * 22 + i];
     const lines = Math.max(1, ...(entry?.text || '').split('\n').map(line => Math.ceil([...line].length / 42)), Math.ceil([...(entry?.names || '')].length / 2));
     heights.push({ updateDimensionProperties: { range: { sheetId: sheetIds[page === 0 ? day : `${day}-${page + 1}`], dimension: 'ROWS', startIndex: 13 + i, endIndex: 14 + i }, properties: { pixelSize: Math.max(24, lines * 19 + 6) }, fields: 'pixelSize' } });
   }
+  for (let page = 0; page < pageCount; page++) {
+    const title = page === 0 ? day : `${day}-${page + 1}`;
+    const grid = spreadsheet.sheets.find(sheet => sheet.properties.title === title)?.properties.gridProperties || template.properties.gridProperties || {};
+    heights.push(...mediaSheetRequests(sheetIds[title], page === 0 ? archivedMedia : [], grid.rowCount, grid.columnCount));
+    for (const [field, start, count] of [['handoff', 5, 8], ['visitors', 35, 4]]) for (let i = 0; i < count; i++) {
+      const text = report[field]?.[page * count + i]?.text || '';
+      const lines = Math.max(1, ...text.split('\n').map(line => Math.ceil([...line].length / 44)));
+      heights.push({ updateDimensionProperties: { range: { sheetId: sheetIds[title], dimension: 'ROWS', startIndex: start + i, endIndex: start + i + 1 }, properties: { pixelSize: Math.max(24, lines * 19 + 6) }, fields: 'pixelSize' } });
+    }
+  }
+  for (const title of existingTitles) if (title.startsWith(day + '-') && /^\d+-\d+$/.test(title) && Number(title.split('-')[1]) > pageCount) {
+    const grid = spreadsheet.sheets.find(sheet => sheet.properties.title === title).properties.gridProperties || {};
+    heights.push(...mediaSheetRequests(sheetIds[title], [], grid.rowCount, grid.columnCount));
+  }
   await call(`https://sheets.googleapis.com/v4/spreadsheets/${file.id}:batchUpdate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: heights }) });
   const data = [];
   for (let page = 0; page < pageCount; page++) data.push(...reportValueRanges(report, fields, page === 0 ? day : `${day}-${page + 1}`, page));
   // Clear obsolete overflow task rows after regeneration without deleting handwritten sections.
-  for (const title of existingTitles) if (title.startsWith(day + '-') && /^\d+-\d+$/.test(title) && Number(title.split('-')[1]) > pageCount) data.push(...reportValueRanges({ ...report, entries: [] }, {}, title, 1));
+  for (const title of existingTitles) if (title.startsWith(day + '-') && /^\d+-\d+$/.test(title) && Number(title.split('-')[1]) > pageCount) data.push(...reportValueRanges({ ...report, entries: [], staff: [], handoff: [], visitors: [] }, {}, title, 1));
   await call(`https://sheets.googleapis.com/v4/spreadsheets/${file.id}/values:batchUpdate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ valueInputOption: 'RAW', data }) });
   const first = data.find(item => item.range.endsWith('!N5'));
   const check = await call(`https://sheets.googleapis.com/v4/spreadsheets/${file.id}/values/${encodeURIComponent(first.range)}`);

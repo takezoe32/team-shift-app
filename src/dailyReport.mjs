@@ -1,3 +1,4 @@
+import { getTaskImages } from './taskImages.mjs';
 export const REPORT_FOLDER_ID = '1WeUCx0SPcPLXLEzqyNhaMAod22TBjoBO';
 export function tokyoDate(value) {
   const date = new Date(value);
@@ -10,42 +11,66 @@ export function validateReportDate(date) {
 export function collectDailyReport(source, date) {
   validateReportDate(date);
   const users = source.users || {};
-  const entries = [];
+  const entries = [], visitors = [], handoff = [], media = [];
   let unknownDates = 0;
-  const add = (task, type, ownerUid, key) => {
-    if (!task?.completed || task.visibility === 'private') return;
+  const absentIds = new Set(['off', 'summer', 'paid', 'winter', 'course', 'none']);
+  const types = new Map((source.shiftTypes || []).map(type => [type.id, type]));
+  const order = source.userOrder || [];
+  const staff = Object.entries(source.teamData?.shifts?.[date] || {})
+    .filter(([uid, id]) => users[uid] && !absentIds.has(id) && (id === 'work' || types.has(id)) && !/休|有給|有休|欠勤|講習|未定|^[/／]$/.test(types.get(id)?.label || ''))
+    .sort(([a], [b]) => (order.includes(a) ? order.indexOf(a) : Infinity) - (order.includes(b) ? order.indexOf(b) : Infinity) || a.localeCompare(b))
+    .map(([uid]) => users[uid].name || '氏名不明');
+  const add = (task, type, ownerUid, key, scheduledDate) => {
+    if (!task || task.visibility === 'private') return;
     const completedDate = tokyoDate(task.completedAt);
-    if (!completedDate) { unknownDates++; return; }
-    if (completedDate !== date) return;
+    if (task.completed && !completedDate) { unknownDates++; return; }
+    const finished = task.completed && completedDate === date;
+    // Recreating an older report includes tasks completed after that day's end.
+    const pending = (!task.completed || completedDate > date) && scheduledDate && scheduledDate <= date && (!tokyoDate(task.createdAt) || tokyoDate(task.createdAt) <= date);
+    if (!finished && !pending) return;
     const ids = type === 'partner' ? [task.assigneeUid].filter(Boolean) : (task.assigneeIds?.length ? task.assigneeIds : [ownerUid]);
     const subject = String(task.subject || (type === 'partner' ? task.partnerName : '') || '').trim();
     const body = String(task.text || task.content || '').trim();
-    const notes = (Array.isArray(task.updates) ? task.updates : []).map(update => String(update.text || '').trim());
+    const updates = (Array.isArray(task.updates) ? task.updates : []).filter(update => !tokyoDate(update.createdAt) || tokyoDate(update.createdAt) <= date);
+    const notes = updates.map(update => String(update.text || '').trim());
     const description = [...new Set([subject, body, ...notes, task.productName ? `${task.productName} × ${task.inventoryQuantity || 1}個` : ''].filter(Boolean))].join('／');
-    entries.push({ key, text: (type === 'partner' ? `【パートナー${task.partnerName ? '：' + task.partnerName : ''}】` : '') + (description || '内容なし'), names: [...new Set(ids.map(id => users[id]?.name || '担当者不明'))].join('・') || '未割り当て', completedAt: task.completedAt });
+    const entry = { key, text: (type === 'partner' ? `【パートナー${task.partnerName ? '：' + task.partnerName : ''}】` : '') + (description || '内容なし'), names: [...new Set(ids.map(id => users[id]?.name || '担当者不明'))].join('・') || '未割り当て', completedAt: task.completedAt, scheduledDate };
+    if (finished) (type === 'partner' ? visitors : entries).push(entry);
+    else handoff.push({ ...entry, text: `【${scheduledDate}】${entry.text}（担当：${entry.names}）` });
+    for (const attachment of [...getTaskImages(task), ...updates.flatMap(getTaskImages)]) {
+      if (!media.some(item => item.imageUrl === attachment.imageUrl)) media.push({ ...attachment, task: entry.text, names: entry.names });
+    }
   };
-  for (const [taskDate, day] of Object.entries(source.teamData?.tasks || {})) for (const [uid, tasks] of Object.entries(day || {})) for (const task of tasks || []) add(task, 'member', uid, `member:${taskDate}:${uid}:${task.id}`);
-  for (const task of source.partnerItems || []) add(task, 'partner', task.assigneeUid, `partner:${task.id}`);
-  entries.sort((a, b) => String(a.completedAt).localeCompare(String(b.completedAt)) || a.key.localeCompare(b.key));
-  return { date, entries, unknownDates };
+  for (const [taskDate, day] of Object.entries(source.teamData?.tasks || {})) for (const [uid, tasks] of Object.entries(day || {})) for (const task of tasks || []) add(task, 'member', uid, `member:${taskDate}:${uid}:${task.id}`, taskDate);
+  for (const task of source.partnerItems || []) add(task, 'partner', task.assigneeUid, `partner:${task.id}`, task.date);
+  const completionOrder = (a, b) => String(a.completedAt).localeCompare(String(b.completedAt)) || a.key.localeCompare(b.key);
+  entries.sort(completionOrder); visitors.sort(completionOrder);
+  handoff.sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate) || a.key.localeCompare(b.key));
+  return { date, entries, staff, visitors, handoff, media, unknownDates };
 }
+export function reportPageCount(report) {
+  return Math.max(1, Math.ceil(report.entries.length / 22), Math.ceil((report.handoff || []).length / 8), Math.ceil((report.visitors || []).length / 4));
+}
+
 export function reportValueRanges(report, fields, sheetTitle, page = 0) {
   const [year, month, day] = report.date.split('-');
   const quoted = `'${sheetTitle.replaceAll("'", "''")}'`;
   const cells = { B1: '施 設 業 務 日 誌', N5: year + '年', S5: Number(month) + '月', V5: Number(day) + '日', Y5: '(' + new Intl.DateTimeFormat('ja-JP', { weekday: 'short', timeZone: 'Asia/Tokyo' }).format(new Date(report.date + 'T12:00:00+09:00')) + ')' };
   const rows = report.entries.slice(page * 22, page * 22 + 22);
   for (let i = 0; i < 22; i++) { cells['D' + (14 + i)] = rows[i]?.text || ''; cells['AD' + (14 + i)] = rows[i]?.names || ''; }
-  // Only the first page owns manually entered sections. Omitted fields preserve saved edits.
+  const names = report.staff || [];
+  ['T3', 'W3', 'Z3', 'AC3', 'AF3'].forEach((cell, i) => { cells[cell] = i === 4 ? names.slice(4).join('・') : names[i] || ''; });
+  for (const [field, start, count] of [['handoff', 6, 8], ['visitors', 36, 4]]) {
+    const lines = (report[field] || []).slice(page * count, (page + 1) * count);
+    for (let i = 0; i < count; i++) cells['C' + (start + i)] = lines[i]?.text || '';
+  }
+  // Omitted manual fields preserve saved edits on the first page.
   if (page === 0) {
     if (fields.weather !== undefined) cells.AA5 = '天候：' + fields.weather;
     if (fields.chlorine !== undefined) cells.AF8 = fields.chlorine;
-    if (fields.staff !== undefined) {
-      const names = fields.staff.split(/[\n、,]/).map(x => x.trim()).filter(Boolean);
-      ['T3', 'W3', 'Z3', 'AC3', 'AF3'].forEach((cell, i) => { cells[cell] = i === 4 ? names.slice(4).join('・') : names[i] || ''; });
-    }
-    for (const [field, start, count] of [['handoff', 6, 8], ['visitors', 36, 4], ['remarks', 40, 3]]) if (fields[field] !== undefined) {
-      const lines = fields[field].split(/\r?\n/);
-      for (let i = 0; i < count; i++) cells['C' + (start + i)] = i === count - 1 ? lines.slice(i).join('\n') : lines[i] || '';
+    if (fields.remarks !== undefined) {
+      const lines = fields.remarks.split(/\r?\n/);
+      for (let i = 0; i < 3; i++) cells['C' + (40 + i)] = i === 2 ? lines.slice(i).join('\n') : lines[i] || '';
     }
   }
   return Object.entries(cells).map(([cell, value]) => ({ range: `${quoted}!${cell}`, values: [[value]] }));
