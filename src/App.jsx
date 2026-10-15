@@ -1,3 +1,4 @@
+import DailyReportPanel from './components/DailyReportPanel';
 import { parseInventoryCode, findModelProducts } from './inventoryQr.mjs';
 import { planCompletedTaskDelete } from './completedTaskDelete.mjs';
 import { confirmEditDiscard, confirmDiscardEdits, useEditGuard } from './editGuard';
@@ -16,7 +17,7 @@ import { useState, useEffect, useRef } from 'react';
 import { GoogleOAuthProvider, GoogleLogin, googleLogout } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, onSnapshot, setDoc, updateDoc, deleteField, arrayUnion, runTransaction } from 'firebase/firestore';
+import { getFirestore, doc, onSnapshot, setDoc, updateDoc, deleteField, arrayUnion, runTransaction, getDoc } from 'firebase/firestore';
 
 import { 
   Calendar as CalendarIcon, 
@@ -2858,7 +2859,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
   );
 };
 
-const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUid, isAdmin, deleteCompletedTask }) => {
+const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUid, isAdmin, deleteCompletedTask, getReportSource }) => {
   const deletingRef = useRef(false);
   const [deletingKey, setDeletingKey] = useState(null);
   const handleDelete = async (entry) => {
@@ -2980,6 +2981,7 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
     </div>
 
     <div className="flex-1 overflow-y-auto p-3 space-y-3">
+      <DailyReportPanel getSource={getReportSource}/>
       {!sortedMonthKeys.length ? (
         <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-sm text-gray-400">
           終了したタスクはありません。
@@ -4638,6 +4640,11 @@ export default function App() {
                 currentUserUid={currentUser.id}
                 isAdmin={(roles[currentUser.role]?.level || 0) >= 40}
                 deleteCompletedTask={deleteCompletedTask}
+                getReportSource={async () => {
+                  const snapshot = await getDoc(doc(db, 'app_data', 'shared_state'));
+                  if (!snapshot.exists()) throw new Error('共有データが見つかりません。');
+                  return snapshot.data();
+                }}
               />
             ) : activeTab === 'daily' ? (
               <DailyDetailView 
