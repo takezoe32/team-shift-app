@@ -1,3 +1,4 @@
+import { parseInventoryCode, findModelProducts } from './inventoryQr.mjs';
 import { planCompletedTaskDelete } from './completedTaskDelete.mjs';
 import { confirmEditDiscard, confirmDiscardEdits, useEditGuard } from './editGuard';
 import { sortInventoryItems } from './inventorySort.mjs';
@@ -3095,7 +3096,7 @@ const BarcodeScannerModal = ({ onDetected, onClose }) => {
             onDetected(String(result.getText?.() || result.text || '').trim());
           }
         );
-        if (!cancelled) setStatus('バーコードを枠内に映してください。');
+        if (!cancelled) setStatus('バーコードまたはQRコードを映してください。');
       } catch (error) {
         console.error('バーコードスキャナーを起動できません:', error);
         if (!cancelled) setStatus('カメラを起動できませんでした。カメラの許可とHTTPS接続を確認するか、番号を手入力してください。');
@@ -3110,9 +3111,9 @@ const BarcodeScannerModal = ({ onDetected, onClose }) => {
     setBusy(true);
     onDetected(code);
   };
-  return <div className="fixed inset-0 z-[100] bg-black/70 flex items-center justify-center p-3" role="dialog" aria-modal="true" aria-label="バーコード読み取り">
+  return <div className="fixed inset-0 z-[100] bg-black/70 flex items-center justify-center p-3" role="dialog" aria-modal="true" aria-label="バーコード・QRコード読み取り">
     <div className="w-full max-w-md rounded-2xl bg-white p-4 space-y-3 shadow-xl">
-      <div className="flex items-center justify-between"><h3 className="font-black text-gray-800">バーコード読取</h3><button type="button" onClick={onClose} className="p-2 rounded-lg border border-gray-200" aria-label="閉じる">×</button></div>
+      <div className="flex items-center justify-between"><h3 className="font-black text-gray-800">バーコード・QRコード読取</h3><button type="button" onClick={onClose} className="p-2 rounded-lg border border-gray-200" aria-label="閉じる">×</button></div>
       <video ref={videoRef} muted playsInline className="w-full aspect-[4/3] bg-black rounded-xl object-cover" />
       <p className="text-xs text-gray-600">{status}</p>
       <div className="border-t pt-3 space-y-2"><label className="block text-xs font-bold text-gray-600">カメラで読めない場合は番号を入力<input value={manualCode} onChange={e=>setManualCode(e.target.value)} inputMode="numeric" autoComplete="off" placeholder="バーコード番号" className="mt-1 w-full min-h-11 rounded-xl border border-gray-300 px-3 text-base"/></label><button type="button" disabled={!manualCode.trim()||busy} onClick={submitManual} className="w-full min-h-11 rounded-xl bg-blue-600 text-white font-bold disabled:opacity-50">番号を使用</button></div>
@@ -3156,6 +3157,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
   const [scanQuantity, setScanQuantity] = useState('1');
   const [scanDirection, setScanDirection] = useState('in');
   const stockSaveRef = useRef(false);
+  const [qrModelCandidates, setQrModelCandidates] = useState([]);
   const [scannedStockItemId, setScannedStockItemId] = useState('');
   const [barcodeLookupMessage, setBarcodeLookupMessage] = useState('');
   const [productLookupCandidates, setProductLookupCandidates] = useState([]);
@@ -3164,6 +3166,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
   const lookupRequestRef = useRef(0);
 
   const changeBarcode = (code) => {
+    setQrModelCandidates([]);
     ++lookupRequestRef.current;
     const barcode = normalizeInventoryName(code);
     if (registrationSaveRef.current) return;
@@ -3289,8 +3292,9 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
   };
 
   const startEdit = (item) => {
-    if (isSaving || uploadingImageId) return;
-    if (editingId && editingId !== item.id && !confirmEditDiscard(true)) return;
+    if (isSaving || uploadingImageId) return false;
+    if (editingId === item.id) return true;
+    if (editingId && !confirmEditDiscard(true)) return false;
     selectEditingPhoto(null);
     setEditingOcrOpen(false);
     setEditingId(item.id);
@@ -3305,6 +3309,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
     setEditingUsageLocation(normalizeInventoryName(item.usageLocation));
     setEditingBarcode(normalizeInventoryName(item.barcode));
     setEditingMinStock(String(Math.max(0, Number(item.minStock) || 0)));
+    return true;
   };
 
   const handleEdit = async (item) => {
@@ -3417,19 +3422,31 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
     }
   };
 
-  const handleBarcodeDetected = (code) => {
-    const barcode = normalizeInventoryName(code);
+  const handleBarcodeDetected = (value) => {
+    if (isSaving || editingSaveRef.current || registrationSaveRef.current) return;
     setScannerOpen(false);
-    if (!barcode) return;
-    changeBarcode(barcode);
-    const existing = inventoryItems.find(item => normalizeInventoryName(item.barcode) === barcode);
-    if (existing) {
-      setScannedStockItemId(existing.id);
-      setBarcodeLookupMessage('登録済み商品：' + inventoryProductLabel(existing) + '。入庫または出庫の数量を入力できます。');
+    const code = parseInventoryCode(value);
+    if (code.type === 'unsupported') {
+      setQrModelCandidates([]);
+      setScannedStockItemId('');
+      setBarcodeLookupMessage('このQRコードからは型番を取得できません。商品ラベルの文字読み取り、または手入力を利用してください。');
       return;
     }
-    setScannedStockItemId('');
-    // Unregistered products can use Google, OCR or manual entry immediately.
+    if (code.type === 'barcode') { changeBarcode(code.barcode); return; }
+    changeBarcode('');
+    setNewModelNumber(code.modelNumber);
+    setNewManufacturer(code.manufacturer);
+    const matches = findModelProducts(inventoryItems, code);
+    setRegistrationOpen(matches.length === 0);
+    if (matches.length === 1) {
+      setScannedStockItemId(matches[0].id);
+      setBarcodeLookupMessage('QRから型番 ' + code.modelNumber + ' を取得しました。登録済み商品の入出庫・編集ができます。');
+    } else if (matches.length > 1) {
+      setQrModelCandidates(matches.map(item => item.id));
+      setBarcodeLookupMessage('型番 ' + code.modelNumber + ' に一致する商品が複数あります。対象の商品を選んでください。');
+    } else {
+      setBarcodeLookupMessage('QRからメーカー ' + code.manufacturer + '・型番 ' + code.modelNumber + ' を取得しました。未登録のため商品追加欄に反映しました。');
+    }
   };
 
   const handleScannedStockAdd = async () => {
@@ -3509,6 +3526,13 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
     setReplenishmentOpen(true); setRegisteredOpen(true); setUnbarcodedOpen(true);
     requestAnimationFrame(()=>document.getElementById('inventory-product-' + id)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
   };
+  const editScannedProduct = () => {
+    const item = inventoryItems.find(product => product.id === scannedStockItemId);
+    if (!item || !startEdit(item)) return;
+    if (needsReplenishment(item)) setReplenishmentOpen(true);
+    else setRegisteredOpen(true);
+    requestAnimationFrame(() => document.getElementById('inventory-product-' + item.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  };
   const renderReplacementInfo = item => {
     if (!item) return null;
     const replacement = inventoryItems.find(other=>other.id===item.replacementProductId);
@@ -3587,9 +3611,12 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
     <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-4">
       <div className="flex items-center gap-3"><div className="w-11 h-11 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center"><Package size={24}/></div><div><h2 className="text-xl font-black text-gray-800">在庫管理</h2><p className="text-xs text-gray-500">日別タスクで商品を選ぶと在庫が1個減ります。</p></div></div>
       <section className="rounded-2xl border border-gray-200 bg-white p-4 space-y-3">
-        <div className="flex items-center justify-between gap-2"><h3 className="text-sm font-black text-gray-700">バーコードで商品を確認</h3><button type="button" disabled={isSaving} onClick={()=>setScannerOpen(true)} className="shrink-0 inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-indigo-600 px-3 text-xs font-bold text-white"><Camera size={16}/>カメラで読取</button></div>
+        <div className="flex items-center justify-between gap-2"><h3 className="text-sm font-black text-gray-700">バーコード・QRコードで商品を確認</h3><button type="button" disabled={isSaving} onClick={()=>setScannerOpen(true)} className="shrink-0 inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-indigo-600 px-3 text-xs font-bold text-white"><Camera size={16}/>カメラで読取</button></div>
         <label className="block text-xs font-bold text-gray-600">バーコード番号（任意）<input value={newBarcode} onChange={e=>changeBarcode(e.target.value)} inputMode="numeric" placeholder="バーコードを読み取るか入力" className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base" maxLength={80}/></label>
         {scannedStockItemId && <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-2"><div className="text-sm font-bold text-emerald-800">登録済み商品の入出庫：{inventoryProductLabel(inventoryItems.find(item=>item.id===scannedStockItemId))}</div>{renderReplacementInfo(inventoryItems.find(item=>item.id===scannedStockItemId))}<div className="flex gap-2"><select aria-label="入出庫区分" value={scanDirection} onChange={e=>setScanDirection(e.target.value)} className="rounded-lg border border-emerald-300"><option value="in">入庫</option><option value="out">出庫</option></select><input type="number" min="1" step="1" value={scanQuantity} onChange={e=>setScanQuantity(e.target.value)} aria-label="入出庫数量" className="min-h-11 w-24 rounded-lg border border-emerald-300 px-2 text-center text-base"/><button type="button" onClick={()=>void handleScannedStockAdd()} disabled={isSaving} className="flex-1 min-h-11 rounded-lg bg-emerald-600 px-3 text-sm font-bold text-white disabled:opacity-50">この数量の入出庫を保存</button></div></div>}
+        {scannedStockItemId && <button type="button" onClick={editScannedProduct} disabled={isSaving || !!uploadingImageId || !inventoryItems.some(item => item.id === scannedStockItemId)} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-blue-300 bg-blue-50 px-3 text-sm font-bold text-blue-800 disabled:opacity-50"><Edit2 size={16}/>この商品の情報を編集</button>}
+        {qrModelCandidates.length > 0 && <div className="space-y-2">{qrModelCandidates.map(id => inventoryItems.find(item => item.id === id)).filter(Boolean).map(item => <button type="button" key={item.id} disabled={isSaving} onClick={() => { setScannedStockItemId(item.id); setQrModelCandidates([]); setBarcodeLookupMessage('登録済み商品：' + inventoryProductLabel(item) + '。入出庫・編集ができます。'); }} className="min-h-11 w-full rounded-lg border border-blue-300 p-2 text-left text-sm font-bold text-blue-800">{inventoryProductLabel(item)} ・ 棚番号：{item.shelfNumber || '未設定'}</button>)}</div>}
+        {!scannedStockItemId && barcodeLookupMessage && <p className="text-xs text-blue-800">{barcodeLookupMessage}</p>}
         {scannedStockItemId && barcodeLookupMessage && <p className="text-xs text-emerald-800">{barcodeLookupMessage}</p>}
       </section>
       <button type="button" aria-expanded={registrationOpen} aria-controls="inventory-registration" disabled={isSaving || !!scannedStockItemId} onClick={()=>setRegistrationOpen(open=>!open)} className="w-full min-h-11 rounded-xl border border-blue-200 bg-white px-3 text-left text-sm font-bold text-blue-800">商品を追加・バーコード登録 {registrationOpen ? '▲ 閉じる' : '▼ 開く'}</button>
