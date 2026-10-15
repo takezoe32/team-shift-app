@@ -127,7 +127,7 @@ test('visitor overflow creates continuation sheets and the original video is arc
   const batches = calls.filter(call => call.url.endsWith(':batchUpdate')).map(call => JSON.parse(call.options.body));
   assert.equal(batches[0].requests[0].duplicateSheet.newSheetName, '14-2');
   const tables = batches[1].requests.filter(item => item.updateCells).map(item => item.updateCells);
-  assert.ok(tables.find(item => item.range.sheetId === 2 && item.range.startColumnIndex === 38).rows[2].values[3].userEnteredValue.formulaValue.includes('archived-video'));
+  assert.ok(tables.find(item => item.range.sheetId === 2 && item.range.startColumnIndex === 32).rows[2].values[2].userEnteredValue.formulaValue.includes('archived-video'));
   assert.equal(tables.find(item => item.range.sheetId === 3).rows.length, 2);
   const values = JSON.parse(calls.find(call => call.url.endsWith('/values:batchUpdate')).options.body).data;
   assert.equal(values.find(item => item.range === "'14-2'!C36").values[0][0], '業者4');
@@ -154,4 +154,19 @@ test('work and handoff show only titles, with first-line fallback for legacy tas
   assert.deepEqual(report.entries.map(item => item.text), ['交換']);
   assert.deepEqual(new Set(report.handoff.map(item => item.text)), new Set(['修理', '旧タスクの題名', '点検']));
   assert.equal(report.media[0].task, '交換');
+});
+
+
+test('every registered co-assignee is included by surname, with attachment task identity preserved', () => {
+  const report = collectDailyReport({ users: { a: { name: '竹添三剛' }, b: { name: '平川千尋' }, c: { name: '井上珠生' } }, teamData: { tasks: { '2026-10-15': { a: [{ id: 'multi', completed: true, completedAt: '2026-10-15T01:00:00Z', subject: '修理', assigneeIds: ['a', 'b', 'c', 'a'], images: [{ imageUrl: 'https://res.cloudinary.com/demo/a.jpg' }] }] } } } }, '2026-10-15');
+  assert.equal(report.entries[0].names, '竹添・平川・井上');
+  assert.equal(report.media[0].names, '竹添・平川・井上');
+  assert.equal(report.media[0].taskKey, report.entries[0].key);
+});
+
+test('date tabs sort numerically with continuations after their day', async () => {
+  const { reportSheetOrderRequests } = await import('../src/dailyReportDrive.mjs');
+  const requests = reportSheetOrderRequests({ '15-2': 4, '15': 3, '_様式': 9, '2': 2, '1': 1, '14': 5, '14-2': 6 });
+  assert.deepEqual(requests.map(r => r.updateSheetProperties.properties.sheetId), [1, 2, 5, 6, 3, 4]);
+  assert.deepEqual(requests.map(r => r.updateSheetProperties.properties.index), [0, 1, 2, 3, 4, 5]);
 });

@@ -1,4 +1,4 @@
-import { archiveReportMedia, mediaSheetRequests } from './dailyReportMedia.mjs';
+import { archiveReportMedia, mediaSheetRequests, taskAttachmentRequests } from './dailyReportMedia.mjs';
 import { REPORT_FOLDER_ID, reportValueRanges, reportPageCount } from './dailyReport.mjs';
 
 export async function saveDailyReportToDrive(token, report, fields = {}, fetcher = fetch) {
@@ -50,14 +50,18 @@ export async function saveDailyReportToDrive(token, report, fields = {}, fetcher
       requests.push({ updateSheetProperties: { properties: { sheetId: id, hidden: false }, fields: 'hidden' } });
     }
   }
+  requests.push(...reportSheetOrderRequests(sheetIds));
   if (!template.properties.hidden) requests.push({ updateSheetProperties: { properties: { sheetId: template.properties.sheetId, hidden: true }, fields: 'hidden' } });
   if (requests.length) await call(`https://sheets.googleapis.com/v4/spreadsheets/${file.id}:batchUpdate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requests }) });
   const archivedMedia = await archiveReportMedia(report, call, fetcher);
   const heights = [];
   for (let page = 0; page < pageCount; page++) for (let i = 0; i < 22; i++) {
     const entry = report.entries[page * 22 + i];
-    const lines = Math.max(1, ...(entry?.text || '').split('\n').map(line => Math.ceil([...line].length / 42)), Math.ceil([...(entry?.names || '')].length / 2));
-    heights.push({ updateDimensionProperties: { range: { sheetId: sheetIds[page === 0 ? day : `${day}-${page + 1}`], dimension: 'ROWS', startIndex: 13 + i, endIndex: 14 + i }, properties: { pixelSize: Math.max(24, lines * 19 + 6) }, fields: 'pixelSize' } });
+    const lines = Math.max(1, ...(entry?.text || '').split('\n').map(line => Math.ceil([...line].length / 42)));
+    const nameLines = Math.max(1, Math.ceil([...(entry?.names || '')].length / 2));
+    const fontSize = Math.max(5, Math.min(10, Math.floor((lines * 19 + 2) / nameLines)));
+    heights.push({ repeatCell: { range: { sheetId: sheetIds[page === 0 ? day : `${day}-${page + 1}`], startRowIndex: 13 + i, endRowIndex: 14 + i, startColumnIndex: 29, endColumnIndex: 31 }, cell: { userEnteredFormat: { textFormat: { fontSize }, wrapStrategy: 'WRAP' } }, fields: 'userEnteredFormat.textFormat.fontSize,userEnteredFormat.wrapStrategy' } });
+    heights.push({ updateDimensionProperties: { range: { sheetId: sheetIds[page === 0 ? day : `${day}-${page + 1}`], dimension: 'ROWS', startIndex: 13 + i, endIndex: 14 + i }, properties: { pixelSize: Math.max(24, lines * 19 + 6, nameLines * fontSize * 1.4 + 6) }, fields: 'pixelSize' } });
   }
   for (let page = 0; page < pageCount; page++) {
     const title = page === 0 ? day : `${day}-${page + 1}`;
@@ -79,8 +83,24 @@ export async function saveDailyReportToDrive(token, report, fields = {}, fetcher
   // Clear obsolete overflow task rows after regeneration without deleting handwritten sections.
   for (const title of existingTitles) if (title.startsWith(day + '-') && /^\d+-\d+$/.test(title) && Number(title.split('-')[1]) > pageCount) data.push(...reportValueRanges({ ...report, entries: [], staff: [], handoff: [], visitors: [] }, {}, title, 1));
   await call(`https://sheets.googleapis.com/v4/spreadsheets/${file.id}/values:batchUpdate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ valueInputOption: 'RAW', data }) });
+  const links = [];
+  for (const title of [...new Set([...existingTitles.filter(title => title.startsWith(day + '-') && /^\d+-\d+$/.test(title)), ...Array.from({ length: pageCount }, (_, page) => page === 0 ? day : `${day}-${page + 1}`)])]) {
+    const page = title === day ? 0 : Number(title.split('-')[1]) - 1;
+    links.push(...taskAttachmentRequests(sheetIds[title], report, archivedMedia, page));
+  }
+  await call(`https://sheets.googleapis.com/v4/spreadsheets/${file.id}:batchUpdate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: links }) });
   const first = data.find(item => item.range.endsWith('!N5'));
   const check = await call(`https://sheets.googleapis.com/v4/spreadsheets/${file.id}/values/${encodeURIComponent(first.range)}`);
   if (String(check.values?.[0]?.[0]) !== String(first.values[0][0])) throw new Error('日報の保存結果を確認できませんでした。もう一度実行してください。');
   return { id: file.id, url: spreadsheet.spreadsheetUrl, count: report.entries.length, name: file.name };
+}
+
+// Place each day's continuation immediately after that day, in calendar order.
+export function reportSheetOrderRequests(sheetIds) {
+  const titles = Object.keys(sheetIds).filter(title => /^\d+(?:-\d+)?$/.test(title)).sort((a, b) => {
+    const [dayA, pageA = 1] = a.split('-').map(Number);
+    const [dayB, pageB = 1] = b.split('-').map(Number);
+    return dayA - dayB || pageA - pageB;
+  });
+  return titles.map((title, index) => ({ updateSheetProperties: { properties: { sheetId: sheetIds[title], index }, fields: 'index' } }));
 }

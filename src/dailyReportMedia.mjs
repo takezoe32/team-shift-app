@@ -50,18 +50,31 @@ const literal = value => ({ userEnteredValue: { stringValue: String(value || '')
 const formula = value => ({ userEnteredValue: { formulaValue: value } });
 const quote = value => '"' + value.replaceAll('"', '""') + '"';
 export function mediaSheetRequests(sheetId, media, rowCount = 1000, columnCount = 32) {
-  const images = media.filter(item => item.mediaType !== 'video');
-  const videos = media.filter(item => item.mediaType === 'video');
-  const requiredRows = Math.max(43, images.length + 2, videos.length + 2);
-  const requests = [{ updateSheetProperties: { properties: { sheetId, gridProperties: { columnCount: Math.max(42, columnCount), rowCount: Math.max(rowCount, requiredRows) } }, fields: 'gridProperties.columnCount,gridProperties.rowCount' } }];
-  for (const [items, start, title] of [[images, 32, '画像'], [videos, 38, '動画']]) {
-    const rows = [{ values: [literal(title)] }, { values: ['タスク', 'ファイル名', '担当者', '保存ファイル', ...(title === '画像' ? ['プレビュー'] : [])].map(literal) }];
-    for (const item of items) rows.push({ values: [literal(item.task), literal(item.imageName || title), literal(item.names), formula(`=HYPERLINK(${quote(item.savedUrl)},${quote(title + 'を開く')})`), ...(title === '画像' ? [formula(`=IMAGE(${quote(item.imageUrl)})`)] : [])] });
-    // The full range also clears stale attachment rows when a report is regenerated.
-    requests.push({ updateCells: { range: { sheetId, startRowIndex: 0, endRowIndex: Math.max(rowCount, requiredRows), startColumnIndex: start, endColumnIndex: start + (title === '画像' ? 5 : 4) }, rows, fields: 'userEnteredValue' } });
-    requests.push({ repeatCell: { range: { sheetId, startRowIndex: 0, endRowIndex: 2, startColumnIndex: start, endColumnIndex: start + (title === '画像' ? 5 : 4) }, cell: { userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.9, green: 0.95, blue: 1 } } }, fields: 'userEnteredFormat.textFormat.bold,userEnteredFormat.backgroundColor' } });
-    requests.push({ updateDimensionProperties: { range: { sheetId, dimension: 'COLUMNS', startIndex: start, endIndex: start + (title === '画像' ? 5 : 4) }, properties: { pixelSize: 160 }, fields: 'pixelSize' } });
-    requests.push({ repeatCell: { range: { sheetId, startRowIndex: 0, endRowIndex: requiredRows, startColumnIndex: start, endColumnIndex: start + (title === '画像' ? 5 : 4) }, cell: { userEnteredFormat: { wrapStrategy: 'WRAP', verticalAlignment: 'TOP' } }, fields: 'userEnteredFormat.wrapStrategy,userEnteredFormat.verticalAlignment' } });
+  const requiredRows = Math.max(43, media.length + 2);
+  const rows = [{ values: [literal('画像・動画')] }, { values: ['タスク', '担当者（苗字）', '保存ファイル'].map(literal) }];
+  for (const item of media) rows.push({ values: [literal(item.task), literal(item.names), formula(`=HYPERLINK(${quote(item.savedUrl)},${quote(item.imageName || (item.mediaType === 'video' ? '動画を開く' : '画像を開く'))})`)] });
+  return [
+    { updateSheetProperties: { properties: { sheetId, gridProperties: { columnCount: Math.max(35, columnCount), rowCount: Math.max(rowCount, requiredRows) } }, fields: 'gridProperties.columnCount,gridProperties.rowCount' } },
+    // Clear the old separate image/video tables as well as stale rows.
+    { updateCells: { range: { sheetId, startRowIndex: 0, endRowIndex: Math.max(rowCount, requiredRows), startColumnIndex: 32, endColumnIndex: Math.max(35, columnCount) }, rows, fields: 'userEnteredValue,userEnteredFormat' } },
+    { repeatCell: { range: { sheetId, startRowIndex: 0, endRowIndex: 2, startColumnIndex: 32, endColumnIndex: 35 }, cell: { userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.9, green: 0.95, blue: 1 } } }, fields: 'userEnteredFormat.textFormat.bold,userEnteredFormat.backgroundColor' } },
+    { updateDimensionProperties: { range: { sheetId, dimension: 'COLUMNS', startIndex: 32, endIndex: 35 }, properties: { pixelSize: 180 }, fields: 'pixelSize' } },
+    { repeatCell: { range: { sheetId, startRowIndex: 0, endRowIndex: requiredRows, startColumnIndex: 32, endColumnIndex: 35 }, cell: { userEnteredFormat: { wrapStrategy: 'WRAP', verticalAlignment: 'TOP', textFormat: { fontSize: 10 } } }, fields: 'userEnteredFormat.wrapStrategy,userEnteredFormat.verticalAlignment,userEnteredFormat.textFormat.fontSize' } }
+  ];
+}
+
+export function taskAttachmentRequests(sheetId, report, media, page = 0) {
+  const requests = [];
+  for (const [items, start, count, column] of [[report.entries, 13, 22, 3], [report.handoff || [], 5, 8, 2]]) {
+    for (let i = 0; i < count; i++) {
+      const entry = items[page * count + i];
+      const attachment = entry && media.find(item => item.taskKey === entry.key);
+      requests.push({ repeatCell: {
+        range: { sheetId, startRowIndex: start + i, endRowIndex: start + i + 1, startColumnIndex: column, endColumnIndex: column + 1 },
+        cell: { userEnteredFormat: { textFormat: { link: attachment ? { uri: attachment.savedUrl } : {} } } },
+        fields: 'userEnteredFormat.textFormat.link'
+      } });
+    }
   }
   return requests;
 }
