@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="TeamShift App（管理課App）の個人情報とGoogleユーザーデータの取り扱いについて。">
+<title>プライバシーポリシー | TeamShift App</title>
+<style>
+:root{color-scheme:light}body{margin:0;background:#f5f7fa;color:#243247;font:16px/1.9 system-ui,-apple-system,"Segoe UI",sans-serif}main{max-width:760px;margin:40px auto;padding:32px;background:white;border:1px solid #e1e7ef;border-radius:16px}h1{font-size:28px;line-height:1.5}h2{margin-top:32px;font-size:20px}a{color:#1759ad;overflow-wrap:anywhere}.meta{color:#58677a;font-size:14px}li{margin:8px 0}footer{border-top:1px solid #e1e7ef;margin-top:32px;padding-top:20px}@media(max-width:600px){main{margin:0;padding:24px 20px;border:0;border-radius:0}h1{font-size:24px}}
+</style>
+</head>
+<body><main>
+<a href="/">TeamShift Appへ戻る</a>
+<h1>プライバシーポリシー</h1>
+<p class="meta">TeamShift App（管理課App）<br>制定日：2026年10月15日</p>
+<p>TeamShift App（以下「本アプリ」）は、業務に関わるメンバーのシフト、タスク、引き継ぎ、在庫、日報の管理を支援します。本ポリシーは、本アプリで取り扱う情報とその利用目的を説明します。</p>
+<h2>1. 取り扱う情報</h2>
+<ul>
+<li>Googleログインに伴うアカウント識別子、氏名、メールアドレス、プロフィール画像。</li>
+<li>利用者が登録するシフト、業務タスク、担当者、引き継ぎ、来館業者、在庫、メモ、画像・動画、日報の入力内容。</li>
+<li>操作日時、利用者識別情報、利用画面、ブラウザ情報、エラーや操作に関するログ。</li>
+<li>Google Drive連携時の認証情報、保存先フォルダや日報ファイルの識別子・名称・権限情報、日報スプレッドシートの内容。</li>
+</ul>
+<h2>2. 利用目的</h2>
+<p>ログインと利用者の識別、業務情報の保存・共有、シフト・タスク・在庫の管理、日報と添付資料の作成・更新、操作状況の確認、不具合対応および不正利用の防止に利用します。</p>
+<h2>3. Google Drive・Google Sheetsとの連携</h2>
+<p>日報保存の際、Googleの同意画面で許可された権限を使用し、指定された保存先フォルダと日報ファイルを確認し、日報スプレッドシートや添付画像・動画を作成・更新します。生成された日報には担当者名などの業務情報が含まれ、保存先の共有設定に従って他のメンバーが閲覧できる場合があります。</p>
+<p>現在の連携実装は、Google Drive全体へのアクセスを許可するスコープ（https://www.googleapis.com/auth/drive）を要求します。実際の利用目的は、本アプリの日報・添付資料の保存と関連ファイルの確認・更新です。</p>
+<p>サーバーでの継続認証を有効にした場合、管理者が許可した更新用トークンを暗号化してFirestoreの専用領域に保存し、日報保存時の認証更新に使用します。ログアウトだけでは、この共有のDrive連携は解除されません。</p>
+<h2>4. 保存先と外部サービス</h2>
+<ul>
+<li>Google / Firebase：ログイン、業務情報のFirestore保存、日報・添付資料のGoogle Drive / Google Sheets保存、連携情報の保存に使用します。</li>
+<li>Cloudinary：アップロードした画像・動画の保存・配信に使用します。メディアのURLを知る人が閲覧できる場合があるため、機密情報を含む画像・動画の登録には注意してください。</li>
+<li>Vercel：本アプリの配信およびサーバー処理に使用します。リクエストの処理に伴い、通信情報がサービス側で処理される場合があります。</li>
+</ul>
+<p>これらのサービスは、提供に必要な範囲で情報を処理します。各サービスでの取り扱いは、それぞれのプライバシーポリシーにも従います。業務上の共有相手は、アプリへの登録状況や保存先の共有設定によって異なります。</p>
+<h2>5. Cookieと端末内の保存</h2>
+<p>本アプリは、ログイン状態の復元や表示設定の保持にブラウザのlocalStorageを使用します。日報のサーバー認証を有効にした場合は、セッションや不正送信対策のためCookieも使用します。共有端末では利用後にログアウトし、必要に応じてブラウザのサイトデータを削除してください。</p>
+<h2>6. Googleユーザーデータの利用制限</h2>
+<p>本アプリによるGoogle APIから受領した情報の使用および他のアプリへの転送は、Limited Useの要件を含む<a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>に従います。Googleユーザーデータを販売せず、広告配信、信用評価、汎用AIモデルの学習には利用しません。</p>
+<h2>7. 保存期間と削除の依頼</h2>
+<p>業務データおよび生成された日報・添付資料は、業務上の記録として保存されます。本アプリでのログアウトやGoogle連携のアクセス取り消しだけでは、既存の業務データ、Drive上のファイル、Cloudinaryのメディアは削除されません。</p>
+<p>自身の情報の確認・訂正・削除や、サーバーに保存されたGoogle連携情報の削除を希望する場合は、下記窓口へ連絡してください。本人確認と対象情報の確認のうえ、業務上・法令上の保存の必要性や共有記録への影響を確認して対応します。</p>
+<h2>8. Google連携のアクセス取り消し</h2>
+<p><a href="https://myaccount.google.com/connections">Googleアカウントの接続管理</a>で本アプリへのアクセスを取り消せます。取り消し後は、再連携するまでDriveを利用する日報保存ができなくなる場合があります。保存済みの連携情報自体の削除については、窓口へご依頼ください。</p>
+<h2>9. お問い合わせ・運用窓口</h2>
+<p>TeamShift App 管理担当<br>メール：<a href="mailto:mitsutake.takezoe@plandosee.co.jp">mitsutake.takezoe@plandosee.co.jp</a></p>
+<h2>10. 本ポリシーの変更</h2>
+<p>機能や情報の取り扱いを変更する場合は、本ページを更新し、必要に応じてアプリ内等でお知らせします。Googleユーザーデータを新たな目的で利用する場合は、必要な同意を取得します。</p>
+<footer><a href="/">アプリのホームへ</a></footer>
+</main></body></html>
