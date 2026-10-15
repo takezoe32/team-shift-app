@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { MEDIA_FOLDER_ID } from '../src/dailyReport.mjs';
-import { archiveReportMedia, mediaSheetRequests, taskAttachmentRequests } from '../src/dailyReportMedia.mjs';
+import { archiveReportMedia, mediaSheetRequests, taskAttachmentRequests, handoffListRequests } from '../src/dailyReportMedia.mjs';
 
 test('archives original binary in the specified Drive folder without forwarding the Google token to Cloudinary', async () => {
   const calls = [];
@@ -67,6 +67,20 @@ test('task titles link to their own saved attachment; regenerated rows clear old
   const links = taskAttachmentRequests(7, report, [{ taskKey: 'a', savedUrl: 'https://drive.google.com/file/d/a/view' }, { taskKey: 'c', savedUrl: 'https://drive.google.com/file/d/c/view' }]);
   assert.equal(links[0].repeatCell.cell.userEnteredFormat.textFormat.link.uri, 'https://drive.google.com/file/d/a/view');
   assert.deepEqual(links[1].repeatCell.cell.userEnteredFormat.textFormat.link, undefined);
-  assert.equal(links[22].repeatCell.cell.userEnteredFormat.textFormat.link.uri, 'https://drive.google.com/file/d/c/view');
+  assert.equal(links[22].repeatCell.cell.userEnteredFormat.textFormat.link, undefined);
   assert.ok(taskAttachmentRequests(7, report, [], 1).every(r => !r.repeatCell.cell.userEnteredFormat.textFormat.link?.uri));
+});
+
+
+test('count opens the full same-sheet title list, with attachment links and a return link', () => {
+  const handoff = Array.from({ length: 11 }, (_, i) => ({ key: String(i), text: '題名' + i }));
+  const requests = handoffListRequests(7, handoff, [{ taskKey: '10', savedUrl: 'https://drive.google.com/file/d/a/view' }], 43);
+  const cells = requests.filter(r => r.updateCells).map(r => r.updateCells);
+  const count = cells.find(r => r.start?.rowIndex === 5).rows[0].values[0].userEnteredValue.formulaValue;
+  assert.ok(count.includes('#gid=7&range=D44'));
+  assert.ok(count.includes('終了していないタスク（11件）'));
+  assert.equal(cells.find(r => r.start?.rowIndex === 54).rows[0].values[0].userEnteredValue.stringValue, '題名10');
+  assert.equal(cells.find(r => r.start?.rowIndex === 54).rows[0].values[0].userEnteredFormat.textFormat.link.uri, 'https://drive.google.com/file/d/a/view');
+  assert.ok(cells.find(r => r.start?.rowIndex === 55).rows[0].values[0].userEnteredValue.formulaValue.includes('range=C6'));
+  assert.ok(requests[0].updateSheetProperties.properties.gridProperties.rowCount >= 56);
 });
