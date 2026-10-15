@@ -56,7 +56,7 @@ export async function saveDailyReportToDrive(token, report, fields = {}, fetcher
   const archivedMedia = await archiveReportMedia(report, call, fetcher);
   const heights = [];
   if (fields.weather !== undefined) {
-    heights.push({ repeatCell: { range: { sheetId: sheetIds[day], startRowIndex: 4, endRowIndex: 5, startColumnIndex: 26, endColumnIndex: 31 }, cell: { userEnteredFormat: { textFormat: { fontSize: 9 }, wrapStrategy: 'WRAP', verticalAlignment: 'CENTER' } }, fields: 'userEnteredFormat.textFormat.fontSize,userEnteredFormat.wrapStrategy,userEnteredFormat.verticalAlignment' } });
+    heights.push({ repeatCell: { range: { sheetId: sheetIds[day], startRowIndex: 4, endRowIndex: 5, startColumnIndex: 26, endColumnIndex: 31 }, cell: { userEnteredFormat: { textFormat: { fontSize: 9 }, wrapStrategy: 'WRAP', verticalAlignment: 'MIDDLE' } }, fields: 'userEnteredFormat.textFormat.fontSize,userEnteredFormat.wrapStrategy,userEnteredFormat.verticalAlignment' } });
     heights.push({ updateDimensionProperties: { range: { sheetId: sheetIds[day], dimension: 'ROWS', startIndex: 4, endIndex: 5 }, properties: { pixelSize: Math.max(26, Math.ceil([...('天候：' + fields.weather)].length / 10) * 16 + 4) }, fields: 'pixelSize' } });
   }
   for (let page = 0; page < pageCount; page++) for (let i = 0; i < 22; i++) {
