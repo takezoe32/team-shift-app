@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { MEDIA_FOLDER_ID } from '../src/dailyReport.mjs';
-import { archiveReportMedia, mediaSheetRequests } from '../src/dailyReportMedia.mjs';
+import { archiveReportMedia, mediaSheetRequests, taskAttachmentRequests } from '../src/dailyReportMedia.mjs';
 
 test('archives original binary in the specified Drive folder without forwarding the Google token to Cloudinary', async () => {
   const calls = [];
@@ -28,13 +28,13 @@ test('repeat report reuses its archived file and invalid sources cannot trigger 
 test('right-hand same-sheet sections use literal text, explicit media formulas, grow grids and clear stale rows', () => {
   const media = [{ imageUrl: 'https://res.cloudinary.com/demo/image/upload/a.jpg', savedUrl: 'https://drive.google.com/file/d/a/view', task: '=dangerous', names: '担当', imageName: '画像.jpg' }, { imageUrl: 'https://res.cloudinary.com/demo/video/upload/a.mp4', savedUrl: 'https://drive.google.com/file/d/b/view', mediaType: 'video' }];
   const requests = mediaSheetRequests(7, media, 43, 32);
-  assert.equal(requests[0].updateSheetProperties.properties.gridProperties.columnCount, 42);
+  assert.equal(requests[0].updateSheetProperties.properties.gridProperties.columnCount, 35);
   const tables = requests.filter(item => item.updateCells).map(item => item.updateCells);
   assert.ok(tables.every(item => item.range.sheetId === 7));
-  assert.deepEqual(tables.map(item => item.range.startColumnIndex), [32, 38]);
+  assert.deepEqual(tables.map(item => item.range.startColumnIndex), [32]);
   assert.equal(tables[0].rows[2].values[0].userEnteredValue.stringValue, '=dangerous');
-  assert.ok(tables[0].rows[2].values[4].userEnteredValue.formulaValue.startsWith('=IMAGE('));
-  assert.ok(tables[1].rows[2].values[3].userEnteredValue.formulaValue.includes('HYPERLINK'));
+  assert.equal(tables[0].rows[2].values.length, 3);
+  assert.ok(tables[0].rows[3].values[2].userEnteredValue.formulaValue.includes('HYPERLINK'));
   assert.equal(mediaSheetRequests(7, [], 100, 42).find(item => item.updateCells).updateCells.range.endRowIndex, 100);
 });
 
@@ -59,4 +59,14 @@ test('a media folder without write access stops before creating any monthly fold
   let calls = 0;
   await assert.rejects(() => archiveReportMedia({ date: '2026-10-14', media: [{}] }, async () => { calls++; return { mimeType: 'application/vnd.google-apps.folder', capabilities: { canAddChildren: false } }; }, () => assert.fail()), /権限/);
   assert.equal(calls, 1);
+});
+
+
+test('task titles link to their own saved attachment; regenerated rows clear old links', () => {
+  const report = { entries: [{ key: 'a' }, { key: 'b' }], handoff: [{ key: 'c' }] };
+  const links = taskAttachmentRequests(7, report, [{ taskKey: 'a', savedUrl: 'https://drive.google.com/file/d/a/view' }, { taskKey: 'c', savedUrl: 'https://drive.google.com/file/d/c/view' }]);
+  assert.equal(links[0].repeatCell.cell.userEnteredFormat.textFormat.link.uri, 'https://drive.google.com/file/d/a/view');
+  assert.deepEqual(links[1].repeatCell.cell.userEnteredFormat.textFormat.link, {});
+  assert.equal(links[22].repeatCell.cell.userEnteredFormat.textFormat.link.uri, 'https://drive.google.com/file/d/c/view');
+  assert.ok(taskAttachmentRequests(7, report, [], 1).every(r => !r.repeatCell.cell.userEnteredFormat.textFormat.link.uri));
 });
