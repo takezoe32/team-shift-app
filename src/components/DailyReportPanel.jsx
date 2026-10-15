@@ -91,7 +91,7 @@ export default function DailyReportPanel() {
       <p className="text-xs text-gray-600">{weatherMessage?.date === date ? weatherMessage.text : '天気予報を取得中…'} <a href={WEATHER_SOURCE_URL} target="_blank" rel="noopener noreferrer" className="text-blue-800 underline">出典：気象庁</a></p>
       <button type="button" disabled={busy || !connection?.connected || !connection?.authenticated || weatherMessage?.date !== date} onClick={create} className="min-h-11 w-full rounded-lg bg-blue-600 px-3 text-sm font-bold text-white disabled:opacity-50">{busy ? '日報を作成中…' : '日報作成・Google Driveへ保存'}</button>
       <a href={`https://drive.google.com/drive/folders/${REPORT_FOLDER_ID}`} target="_blank" rel="noopener noreferrer" className="block text-xs text-blue-800 underline">指定の保存先フォルダを開く</a>
-      <p className="text-xs text-gray-600">テスト中はボタンで実行します。0時の自動作成はまだ有効にしていません。</p>
+      <p className="text-xs text-gray-600">初回連携と自動保存の設定後は、毎日午前0時台（日本時間）に前日分だけを自動保存します。必要な場合は上のボタンで手動再作成できます。</p>
     </>}
     {message && <p role="status" className="text-xs text-gray-700 whitespace-pre-wrap">{message}</p>}
     {result?.url && <a href={result.url} target="_blank" rel="noopener noreferrer" className="block min-h-10 text-sm font-bold text-blue-800 underline">保存した日報を開く</a>}

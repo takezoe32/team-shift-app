@@ -96,6 +96,16 @@ export function privateStore(config, fetcher = fetch) {
   };
   const path = '_server_integrations/daily_report_drive';
   return {
+    async automaticRun(date) {
+      const doc = await request('_server_integrations/report_auto_' + date);
+      return doc?.fields?.status?.stringValue === 'saved';
+    },
+    async completeAutomaticRun(date, fileId, savedAt) {
+      await request('_server_integrations/report_auto_' + date, { method: 'PATCH', body: JSON.stringify({ fields: {
+        status: { stringValue: 'saved' }, date: { stringValue: date },
+        fileId: { stringValue: fileId }, savedAt: { stringValue: savedAt }
+      } }) });
+    },
     async get() { const doc = await request(path); return doc?.fields?.encrypted?.stringValue ? unseal(doc.fields.encrypted.stringValue, config.secret) : null; },
     async put(value) {
       const publicRead = await fetcher(root + path, { signal: AbortSignal.timeout(10000) });

@@ -1,6 +1,6 @@
-import { readFile } from 'node:fs/promises';
+import { runDailyReport } from './_lib/save-daily-report.js';
 import { configuration, fault, oauth, privateStore, verifyIdentity, sessionFrom, issueSession, csrfToken, verifyRequest, clearSession } from './_lib/report-auth.js';
-import { collectDailyReport, validateReportDate } from '../src/dailyReport.mjs';
+import { validateReportDate } from '../src/dailyReport.mjs';
 import { saveDailyReportToDrive } from '../src/dailyReportDrive.mjs';
 
 export function createReportHandler({ configure = configuration, makeClient = oauth, makeStore = privateStore, verifyUser = verifyIdentity, saveReport = saveDailyReportToDrive, fetcher = fetch } = {}) {
@@ -58,29 +58,9 @@ export function createReportHandler({ configure = configuration, makeClient = oa
         if (typeof body.fields[key] !== 'string' || body.fields[key].length > (key === 'remarks' ? 10000 : 500)) throw fault(400, '入力内容を確認してください。');
         fields[key] = body.fields[key];
       }
-      const connection = await store.get();
-      if (!connection?.refreshToken || connection.needsReconnect) throw fault(409, '管理者がGoogle Driveを初回連携してください。', 'RECONNECT_REQUIRED');
-      client.setCredentials({ refresh_token: connection.refreshToken });
-      let access;
-      try { access = (await client.getAccessToken()).token; }
-      catch (error) {
-        if (error.response?.data?.error === 'invalid_grant') {
-          await store.put({ ...connection, needsReconnect: true });
-          throw fault(409, 'Google連携の有効期限が切れました。管理者が再連携してください。', 'RECONNECT_REQUIRED');
-        }
-        throw fault(503, 'Google認証を更新できませんでした。時間をおいて再実行してください。');
-      }
-      if (!access) throw fault(503, 'Google認証を更新できませんでした。');
-      const release = await store.lock(body.date.slice(0, 7));
-      try {
-        const report = collectDailyReport(await store.source(), body.date);
-        const reportFetch = async (url, options) => url === '/templates/daily-report.xlsx'
-          ? new Response(await readFile(new URL('../public/templates/daily-report.xlsx', import.meta.url)))
-          : fetcher(url, { ...options, signal: AbortSignal.timeout(30000) });
-        const saved = await saveReport(access, report, fields, reportFetch);
-        issueSession(res, session.email, config);
-        return res.status(200).json({ ...saved, date: body.date, visitors: report.visitors.length, handoff: report.handoff.length, media: report.media.length, unknownDates: report.unknownDates });
-      } finally { await release().catch(() => {}); }
+      const saved = await runDailyReport({ store, client, date: body.date, fields, saveReport, fetcher });
+      issueSession(res, session.email, config);
+      return res.status(200).json(saved);
     } catch (error) {
       // Do not return upstream OAuth errors, credential values, or request bodies.
       return res.status(error.status || 500).json({ error: error.status ? error.message : '日報処理に失敗しました。サーバー設定を確認し、再実行してください。', code: error.code || '' });
