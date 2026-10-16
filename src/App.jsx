@@ -233,15 +233,18 @@ const createPartnerUpdate = (text, user, image = null, kind = 'handoff') => ({
 
 const PartnerUpdateHistory = ({ item, onOpen }) => {
   const updates = newestPartnerUpdates(getPartnerUpdates(item));
+  const historyRef = useRef(null);
+  useEffect(() => { if (historyRef.current) historyRef.current.scrollTop = 0; }, [item?.id, updates[0]?.id]);
   if (!updates.length) return null;
   const renderUpdate = (update, latest = false) => <div key={update.id} className={`rounded-xl border p-3 ${latest ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-200'}`}>
     <div className="text-sm font-bold text-gray-600">（{update.authorName || '不明なユーザー'}）{update.createdAt ? ' ・ ' + new Date(update.createdAt).toLocaleString('ja-JP') : ''}</div>
     <div className="text-base text-gray-800 whitespace-pre-wrap break-words mt-2">{update.text}</div><ImageGallery item={update} onOpen={onOpen}/>
   </div>;
   return <section className="space-y-2" aria-label="申し送り履歴">
-    <h3 className="text-base font-bold text-blue-800">最新の申し送り</h3>
-    {renderUpdate(updates[0], true)}
-    {updates.length > 1 && <details className="rounded-xl border border-gray-200 bg-gray-50 p-3"><summary className="min-h-10 cursor-pointer font-bold text-sm">過去の申し送り（{updates.length - 1}件）</summary><div className="space-y-2 mt-2">{updates.slice(1).map(update => renderUpdate(update))}</div></details>}
+    <h3 className="text-base font-bold text-blue-800">申し送り（新しい順）</h3>
+    <div ref={historyRef} className="max-h-64 overflow-y-auto space-y-2 pr-1" tabIndex={0} aria-label="申し送りをスクロール">
+      {updates.map((update, index) => <div key={update.id}>{index === 0 && <p className="text-sm font-bold text-blue-700 mb-1">最新の申し送り</p>}{renderUpdate(update, index === 0)}</div>)}
+    </div>
   </section>;
 };
 
