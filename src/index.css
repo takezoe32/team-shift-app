@@ -1,1 +1,13 @@
 @import "tailwindcss";
+
+/* Shared visual language: readable text, quiet surfaces and clear touch targets. */
+.app-shell { color: #243349; background: #f4f7fb; }
+.app-shell button, .app-shell input, .app-shell select, .app-shell textarea { -webkit-tap-highlight-color: transparent; }
+.app-shell input:not([type="checkbox"]):not([type="radio"]), .app-shell select, .app-shell textarea { font-size: 16px; }
+.app-shell [class~="text-[9px]"], .app-shell [class~="text-[10px]"] { font-size: 12px; line-height: 1.5; }
+.app-shell [class~="text-[11px]"] { font-size: 13px; line-height: 1.5; }
+.app-shell button:focus-visible, .app-shell input:focus-visible, .app-shell select:focus-visible, .app-shell textarea:focus-visible { outline: 3px solid #2563eb; outline-offset: 3px; }
+.app-shell button:disabled { opacity: 0.55; }
+.app-shell input[type="checkbox"] { width: 20px; height: 20px; accent-color: #2563eb; }
+.app-shell .shadow-sm { box-shadow: 0 2px 8px rgb(31 48 77 / 5%); }
+

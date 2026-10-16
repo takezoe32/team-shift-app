@@ -1,3 +1,4 @@
+import { canCompleteTask } from './taskCompletionPermission.mjs';
 import QuarterHourTime from './components/QuarterHourTime';
 import { newTaskAssignees } from './newTaskAssignees.mjs';
 import QuickEntry from './components/QuickEntry';
@@ -410,6 +411,7 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partne
   const partnerPanRef = useRef(null);
   const isAdmin = currentUser?.role === 'admin' || (roles?.[currentUser?.role]?.level || 0) >= 40;
   const canEditTask = detailTask && (isAdmin || detailTask.ownerUid === currentUserUid);
+  const canFinishTask = canCompleteTask(detailTask, detailTask?.ownerUid, currentUserUid, isAdmin);
   const todayStr = formatDate(new Date());
   const [selectedCalendarTaskDate, setSelectedCalendarTaskDate] = useState(todayStr);
   const year = currentDate.getFullYear(), month = currentDate.getMonth();
@@ -517,7 +519,7 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partne
       setIsSaving(false);
     }
   };
-  const finishTask=async()=>{if(!detailTask||!canEditTask)return;await toggleTask(detailTask.taskDate,detailTask.ownerUid,detailTask.id);setDetailTask(null);};
+  const finishTask=async()=>{if(!detailTask||!canFinishTask)return;await toggleTask(detailTask.taskDate,detailTask.ownerUid,detailTask.id);setDetailTask(null);};
 
   return <div className="flex-1 flex flex-col bg-gray-50 pb-[68px] overflow-hidden">
     <div className="bg-white px-4 py-3 flex items-center justify-between shadow-sm z-10 shrink-0 md:border-b md:border-gray-200"><button onClick={()=>changeMonth(-1)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full"><ChevronLeft className="w-5 h-5"/></button><h2 className="text-base font-bold text-gray-800">{year}年 {month+1}月</h2><button onClick={()=>changeMonth(1)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full"><ChevronRight className="w-5 h-5"/></button></div>
@@ -559,7 +561,7 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partne
         />
       </div>
     </div>}
-    {detailTask&&<div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={closeTaskDetail}><div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden" onClick={e=>e.stopPropagation()}><div className="px-4 py-3 border-b flex items-center justify-between"><div><div className="text-sm font-bold text-gray-800">タスク詳細</div><div className="text-[10px] text-gray-400">登録者: {detailTask.member.name}</div>{!canEditTask&&<div className="text-[9px] text-gray-400">他のメンバーのタスクは操作できません</div>}</div><button onClick={closeTaskDetail} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-full"><X size={18}/></button></div><div className="p-4 space-y-3">{isEditingTask?<><ImageGallery item={detailTask}/><ImagePicker files={calendarTaskImages} onChange={setCalendarTaskImages} disabled={isSaving}/><TaskSaveProgress progress={calendarUploadProgress}/><textarea value={editingTaskText} onChange={e=>setEditingTaskText(e.target.value)} rows={5} className="w-full border rounded-xl px-3 py-2.5 text-sm resize-y"/><div className="flex gap-2"><button type="button" onClick={()=>{if(confirmEditDiscard(true,isSaving))setIsEditingTask(false);}} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-xs font-bold">キャンセル</button><button type="button" disabled={isSaving} onClick={saveTaskEdit} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold"><span>{isSaving?'保存中…':'変更を保存'}</span></button></div></>:<><div className="text-base font-bold text-gray-800 whitespace-pre-wrap break-words">{detailTask.subject||detailTask.text||'📷 画像タスク'}</div>{detailTask.subject&&detailTask.text&&<div className="text-sm text-gray-700 whitespace-pre-wrap break-words">{detailTask.text}</div>}<div className="text-xs text-orange-600 font-bold">終了予定: {detailTask.endTime||'未設定'}</div><ImageGallery item={detailTask}/><div className="grid grid-cols-2 gap-2 text-[10px] text-gray-500"><div className="bg-gray-50 rounded-lg p-2">開始<br/><span className="font-bold text-gray-700">{detailTask.createdAt?new Date(detailTask.createdAt).toLocaleString('ja-JP'):'--'}</span></div><div className="bg-gray-50 rounded-lg p-2">終了<br/><span className="font-bold text-gray-700">{detailTask.completedAt?new Date(detailTask.completedAt).toLocaleString('ja-JP'):'--'}</span></div></div><div><div className="text-xs font-bold text-gray-600 mb-2">担当者（複数選択可）</div><div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">{(sortedUsers||[]).map(member=>{const checked=selectedAssigneeIds.includes(member.id);return <label key={member.id} className={`flex items-center gap-2 p-2 rounded-lg border ${canEditTask?'cursor-pointer':'cursor-not-allowed opacity-70'} ${checked?'border-purple-400 bg-purple-50':'border-gray-200'}`}><input type="checkbox" disabled={!canEditTask} checked={checked} onChange={()=>setSelectedAssigneeIds(p=>checked?p.filter(id=>id!==member.id):[...p,member.id])}/><span className="text-xs font-bold text-gray-700 truncate">{member.name.split(' ')[0]}</span></label>})}</div></div>{canEditTask&&<><button type="button" disabled={!selectedAssigneeIds.length||isUpdatingAssignees} onClick={async()=>{setIsUpdatingAssignees(true);setAssigneeUpdateMessage('');try{await updateTaskAssignees(detailTask.ownerUid,detailTask.taskDate,detailTask.id,selectedAssigneeIds);setDetailTask(p=>p?{...p,assigneeIds:[...selectedAssigneeIds]}:p);setAssigneeUpdateMessage('担当者を更新しました');}catch{setAssigneeUpdateMessage('担当者の更新に失敗しました。')}finally{setIsUpdatingAssignees(false);}}} className="w-full py-2.5 rounded-xl bg-purple-600 text-white text-xs font-bold disabled:opacity-40"><span>{isUpdatingAssignees?'更新中…':'担当者を更新'}</span></button><div className="flex gap-2"><button type="button" onClick={()=>{setEditingTaskText(detailTask.text||'');setCalendarTaskImages([]);setIsEditingTask(true);}} className="flex-1 py-2 rounded-xl bg-blue-50 text-blue-700 text-xs font-bold"><span>編集</span></button><button type="button" onClick={finishTask} className="flex-1 py-2 rounded-xl bg-green-50 text-green-700 text-xs font-bold"><span>終了にする</span></button><button type="button" disabled={isSaving} aria-label="タスクを削除" onClick={removeTask} className="p-2 rounded-xl bg-red-50 text-red-600"><Trash2 size={16}/></button></div></>}{assigneeUpdateMessage&&<div className="text-[10px] text-green-600 font-bold">{assigneeUpdateMessage}</div>}</>}</div></div></div>}
+    {detailTask&&<div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={closeTaskDetail}><div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden" onClick={e=>e.stopPropagation()}><div className="px-4 py-3 border-b flex items-center justify-between"><div><div className="text-sm font-bold text-gray-800">タスク詳細</div><div className="text-[10px] text-gray-400">登録者: {detailTask.member.name}</div>{!canEditTask&&<div className="text-[9px] text-gray-400">他のメンバーのタスクは操作できません</div>}</div><button onClick={closeTaskDetail} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-full"><X size={18}/></button></div><div className="p-4 space-y-3">{isEditingTask?<><ImageGallery item={detailTask}/><ImagePicker files={calendarTaskImages} onChange={setCalendarTaskImages} disabled={isSaving}/><TaskSaveProgress progress={calendarUploadProgress}/><textarea value={editingTaskText} onChange={e=>setEditingTaskText(e.target.value)} rows={5} className="w-full border rounded-xl px-3 py-2.5 text-sm resize-y"/><div className="flex gap-2"><button type="button" onClick={()=>{if(confirmEditDiscard(true,isSaving))setIsEditingTask(false);}} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-xs font-bold">キャンセル</button><button type="button" disabled={isSaving} onClick={saveTaskEdit} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold"><span>{isSaving?'保存中…':'変更を保存'}</span></button></div></>:<><div className="text-base font-bold text-gray-800 whitespace-pre-wrap break-words">{detailTask.subject||detailTask.text||'📷 画像タスク'}</div>{detailTask.subject&&detailTask.text&&<div className="text-sm text-gray-700 whitespace-pre-wrap break-words">{detailTask.text}</div>}<div className="text-xs text-orange-600 font-bold">終了予定: {detailTask.endTime||'未設定'}</div><ImageGallery item={detailTask}/><div className="grid grid-cols-2 gap-2 text-[10px] text-gray-500"><div className="bg-gray-50 rounded-lg p-2">開始<br/><span className="font-bold text-gray-700">{detailTask.createdAt?new Date(detailTask.createdAt).toLocaleString('ja-JP'):'--'}</span></div><div className="bg-gray-50 rounded-lg p-2">終了<br/><span className="font-bold text-gray-700">{detailTask.completedAt?new Date(detailTask.completedAt).toLocaleString('ja-JP'):'--'}</span></div></div><div><div className="text-xs font-bold text-gray-600 mb-2">担当者（複数選択可）</div><div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">{(sortedUsers||[]).map(member=>{const checked=selectedAssigneeIds.includes(member.id);return <label key={member.id} className={`flex items-center gap-2 p-2 rounded-lg border ${canEditTask?'cursor-pointer':'cursor-not-allowed opacity-70'} ${checked?'border-purple-400 bg-purple-50':'border-gray-200'}`}><input type="checkbox" disabled={!canEditTask} checked={checked} onChange={()=>setSelectedAssigneeIds(p=>checked?p.filter(id=>id!==member.id):[...p,member.id])}/><span className="text-xs font-bold text-gray-700 truncate">{member.name.split(' ')[0]}</span></label>})}</div></div>{canEditTask&&<><button type="button" disabled={!selectedAssigneeIds.length||isUpdatingAssignees} onClick={async()=>{setIsUpdatingAssignees(true);setAssigneeUpdateMessage('');try{await updateTaskAssignees(detailTask.ownerUid,detailTask.taskDate,detailTask.id,selectedAssigneeIds);setDetailTask(p=>p?{...p,assigneeIds:[...selectedAssigneeIds]}:p);setAssigneeUpdateMessage('担当者を更新しました');}catch{setAssigneeUpdateMessage('担当者の更新に失敗しました。')}finally{setIsUpdatingAssignees(false);}}} className="w-full py-2.5 rounded-xl bg-purple-600 text-white text-xs font-bold disabled:opacity-40"><span>{isUpdatingAssignees?'更新中…':'担当者を更新'}</span></button><div className="flex gap-2"><button type="button" onClick={()=>{setEditingTaskText(detailTask.text||'');setCalendarTaskImages([]);setIsEditingTask(true);}} className="flex-1 py-2 rounded-xl bg-blue-50 text-blue-700 text-xs font-bold"><span>編集</span></button><button type="button" onClick={finishTask} className="flex-1 py-2 rounded-xl bg-green-50 text-green-700 text-xs font-bold"><span>終了にする</span></button><button type="button" disabled={isSaving} aria-label="タスクを削除" onClick={removeTask} className="p-2 rounded-xl bg-red-50 text-red-600"><Trash2 size={16}/></button></div></>}{!canEditTask && canFinishTask && <button type="button" disabled={isSaving} onClick={finishTask} className="w-full min-h-12 rounded-xl bg-green-600 text-white text-base font-bold">終了にする</button>}{assigneeUpdateMessage&&<div className="text-[10px] text-green-600 font-bold">{assigneeUpdateMessage}</div>}</>}</div></div></div>}
     </div>
   </div>;
 };
@@ -935,6 +937,8 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
 
 // A stable component keeps edit state when another task or the shared snapshot changes.
 const DailyTaskItem = ({ task, selectedDate, selectedUserUid, currentUserUid, currentUser, isAdmin, selectedTaskId, setSelectedTaskId, setPastFinishConfirmTaskKey, updateTaskAssignees, updateTaskText, toggleTask, sortedUsers, inventoryItems, users, pastFinishConfirmTaskKey, deletingTaskId, handleDeleteDailyTask }) => {
+    const completionRef = useRef(false);
+    const [completing, setCompleting] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [editVal, setEditVal] = useState(task.text || '');
     const [editSubject, setEditSubject] = useState(task.subject || task.text || '');
@@ -951,6 +955,7 @@ const DailyTaskItem = ({ task, selectedDate, selectedUserUid, currentUserUid, cu
     const [assigneeUpdateMessage, setAssigneeUpdateMessage] = useState('');
     const isSelected = selectedTaskId === task.id;
     const canEditTask = isAdmin || task.ownerUid === currentUserUid;
+    const canFinishTask = canCompleteTask(task, task.ownerUid || selectedUserUid, currentUserUid, isAdmin);
     const taskDate = task.taskDate || selectedDate;
     const isPastTask = taskDate < formatDate(new Date());
 
@@ -1037,16 +1042,20 @@ const DailyTaskItem = ({ task, selectedDate, selectedUserUid, currentUserUid, cu
       >
         <button
           type="button"
+          disabled={completing}
           aria-label={task.completed ? 'タスクを未完了に戻す' : 'タスクを完了にする'}
-          title={canEditTask ? (task.completed ? '未完了に戻す' : '完了にする') : '他のメンバーが登録したタスクは操作できません'}
+          title={canFinishTask ? (task.completed ? '未完了に戻す' : '完了にする') : '担当者または登録者が終了できます'}
           onClick={async (e) => {
             e.preventDefault();
             e.stopPropagation();
+            if (completionRef.current) return;
+            completionRef.current = true; setCompleting(true);
+            try {
             const taskDate = task.taskDate || selectedDate;
             const ownerUid = task.ownerUid || selectedUserUid;
 
-            if (!canEditTask) {
-              alert('他のメンバーが登録したタスクは操作できません。');
+            if (!canFinishTask) {
+              alert('担当者または登録者が終了できます。');
               void writeDebugLog({
                 level: 'WARN',
                 event: 'daily.task.checkbox.denied',
@@ -1103,16 +1112,17 @@ const DailyTaskItem = ({ task, selectedDate, selectedUserUid, currentUserUid, cu
               });
               console.error('タスクチェック処理に失敗しました:', error);
             }
+            } finally { completionRef.current = false; setCompleting(false); }
           }}
-          className={`relative z-20 shrink-0 mt-0.5 w-7 h-7 rounded-full border-2 flex items-center justify-center cursor-pointer touch-manipulation transition-colors ${
+          className={`relative z-20 shrink-0 mt-0.5 min-w-16 min-h-12 px-3 rounded-xl border-2 flex items-center justify-center cursor-pointer touch-manipulation transition-colors ${
             task.completed
               ? 'bg-green-500 border-green-500 text-white'
-              : canEditTask
-                ? 'bg-white border-gray-300 hover:border-blue-400'
+              : canFinishTask
+                ? 'bg-green-600 border-green-600 text-white hover:bg-green-700'
                 : 'bg-gray-100 border-gray-300 text-gray-400'
           }`}
         >
-          {task.completed && <span className="text-white text-sm font-black leading-none">✓</span>}
+          <span className="text-sm font-bold">{task.completed ? '✓ 終了済' : '終了'}</span>
         </button>
         <div className="flex-1 min-w-0">
           {task.completed && <span className="inline-flex items-center gap-1 rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-[9px] font-black mb-1"><CheckSquare size={11}/>終了済み</span>}
@@ -1129,7 +1139,7 @@ const DailyTaskItem = ({ task, selectedDate, selectedUserUid, currentUserUid, cu
           {task.productName && <div className={`mt-1 text-xs font-bold ${Number(inventoryItems.find(item=>item.id===task.productId)?.stock ?? 0)<=2 ? 'text-red-600' : 'text-emerald-700'}`}>使用商品: {task.productName}</div>}
           <div className="mt-1 text-[9px] text-purple-600">担当: {selectedAssigneeIds.map(id => users[id]?.name?.split(' ')[0] || '').filter(Boolean).join('・') || '未設定'}</div>
 
-          {pastFinishConfirmTaskKey === `${taskDate}-${task.ownerUid || selectedUserUid}-${task.id}` && isPastTask && !task.completed && canEditTask && (
+          {pastFinishConfirmTaskKey === `${taskDate}-${task.ownerUid || selectedUserUid}-${task.id}` && isPastTask && !task.completed && canFinishTask && (
             <label
               className="mt-2 flex items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-bold text-orange-700 cursor-pointer"
               onClick={(e) => e.stopPropagation()}
@@ -1475,7 +1485,7 @@ const DailyDetailView = ({
         <div className="bg-white border-b border-gray-200 p-3 shrink-0 shadow-sm">
           <div className="max-w-3xl mx-auto">
 <button type="button" disabled={isUploading} onClick={() => setQuickTaskOpen(true)} className="w-full min-h-14 mb-4 rounded-xl bg-blue-50 border-2 border-blue-500 text-blue-700 text-lg font-bold">かんたん入力（タスク）</button>
-{quickTaskOpen && <QuickEntry title="タスクのかんたん入力" onClose={() => setQuickTaskOpen(false)} onSave={handleAddTask}
+{quickTaskOpen && <QuickEntry hasDraft={!!(newTaskSubject.trim() || newTaskText.trim() || newTaskEndTime || newTaskProductId || newTaskImages.length)} tasksContent={<div className="space-y-3">{[...unfinishedPastTasks, ...selectedDateActiveTasks].length ? [...unfinishedPastTasks, ...selectedDateActiveTasks].map(task => <DailyTaskItem key={`${task.taskDate}-${task.ownerUid}-${task.id}`} {...taskItemProps} task={task}/>) : <p className="rounded-xl bg-white border p-5">この担当者の未終了タスクはありません。</p>}</div>} tasksDescription={`${selectedDate} ／ ${users[selectedUserUid]?.name || ''} のタスクと過去の未終了タスクです。終わった作業の「終了」を押してください。`} title="タスクのかんたん入力" onClose={() => setQuickTaskOpen(false)} onSave={handleAddTask}
 steps={[
 {title:'何をしますか？何をしましたか？', content:<>
 <p>登録日：{selectedDate}</p>
@@ -2465,7 +2475,7 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
   );
 };
 
-const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartnerItem, togglePartnerItem, deletePartnerItem, addPartnerName, updatePartnerName, deletePartnerName, currentUser, debugLog, sortedUsers }) => {
+const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartnerItem, togglePartnerItem, completePartnerItem, deletePartnerItem, addPartnerName, updatePartnerName, deletePartnerName, currentUser, debugLog, sortedUsers }) => {
   const [quickPartnerOpen, setQuickPartnerOpen] = useState(true);
   const [date, setDate] = useState(formatDate(new Date()));
   const [timeHour, setTimeHour] = useState('');
@@ -2603,6 +2613,15 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
     }
   };
 
+  const partnerActionRef = useRef(false);
+  const [changingPartnerId, setChangingPartnerId] = useState(null);
+  const finishPartner = async item => {
+    if (partnerActionRef.current) return;
+    partnerActionRef.current = true; setChangingPartnerId(item.id);
+    try { if (item.completed) await togglePartnerItem(item.id); else await completePartnerItem(item.id); }
+    catch (error) { alert('終了状態を保存できませんでした。' + (error.message || 'もう一度お試しください。')); }
+    finally { partnerActionRef.current = false; setChangingPartnerId(null); }
+  };
   const [showCompletedPartnerItems, setShowCompletedPartnerItems] = useState(false);
   const sortedItems = [...(partnerItems || [])].sort((a, b) => {
     const aKey = `${a.date || ''}T${a.time || '00:00'}`;
@@ -2613,10 +2632,10 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
   const completedPartnerItems = sortedItems.filter(item => item.completed).sort((a, b) => String(b.completedAt || '').localeCompare(String(a.completedAt || '')));
   const renderPartnerItem = (item) => (
               <div key={item.id} className={`bg-white rounded-xl border ${item.completed ? 'border-green-200' : 'border-gray-200'} px-3 py-2 flex items-start gap-2`}>
-                <button type="button" onClick={() => togglePartnerItem(item.id)}
-                  className={`shrink-0 mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center ${item.completed ? 'border-green-500 bg-green-500 text-white' : 'border-gray-300 hover:border-blue-400'}`}
+                <button type="button" disabled={changingPartnerId !== null} onClick={() => finishPartner(item)}
+                  className={`shrink-0 mt-0.5 min-w-16 min-h-12 px-3 rounded-xl border-2 flex items-center justify-center ${item.completed ? 'border-green-500 bg-green-500 text-white' : 'border-green-600 bg-green-600 text-white hover:bg-green-700'}`}
                   title={item.completed ? '未完了に戻す' : '終了にする'}>
-                  {item.completed && <CheckSquare className="stroke-[3]" size={12}/>}
+                  <span className="text-sm font-bold">{item.completed ? '✓ 終了済' : '終了'}</span>
                 </button>
                 <div className="shrink-0 text-center min-w-[68px]">
                   <div className={`text-[10px] font-bold ${item.completed ? 'text-gray-400 line-through' : 'text-blue-600'}`}>{item.date?.replace(/-/g, '/')}</div>
@@ -2663,7 +2682,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
       <div className="p-4 max-w-2xl mx-auto space-y-4">
         <div ref={partnerFormRef} tabIndex={-1} role="region" aria-label={editingItemId ? "パートナータスク編集フォーム" : "パートナータスク登録フォーム"} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 space-y-3 scroll-mt-4">
 {!editingItemId && <button type="button" disabled={isSaving} onClick={() => setQuickPartnerOpen(true)} className="w-full min-h-14 mb-4 rounded-xl bg-blue-50 border-2 border-blue-500 text-blue-700 text-lg font-bold">かんたん入力（パートナータスク）</button>}
-{quickPartnerOpen && <QuickEntry title="パートナータスクのかんたん入力" onClose={() => setQuickPartnerOpen(false)} onSave={handleSave}
+{quickPartnerOpen && <QuickEntry hasDraft={!!(partnerName || subject.trim() || content.trim() || timeHour || assigneeUid || newPartnerImages.length)} tasksContent={<div className="space-y-3">{activePartnerItems.length ? activePartnerItems.map(renderPartnerItem) : <p className="rounded-xl bg-white border p-5">未終了のパートナータスクはありません。</p>}</div>} tasksDescription="終わった作業の「終了」を押してください。" title="パートナータスクのかんたん入力" onClose={() => setQuickPartnerOpen(false)} onSave={handleSave}
 steps={[
 {title:'どの会社に、何をお願いしますか？', content:<>
 <label className="block font-bold">パートナー名（必須）<input list="quick-partner-names" value={partnerName} onChange={e => setPartnerName(e.target.value)} placeholder="例：〇〇設備" className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base"/><datalist id="quick-partner-names">{(partnerNames || []).map(name => <option key={name} value={name}/>)}</datalist></label>
@@ -4322,7 +4341,7 @@ export default function App() {
       {!currentUser ? (
         <LoginScreen onGoogleLoginSuccess={handleGoogleLoginSuccess} authError={authError} />
       ) : (
-        <div className="min-h-screen bg-gray-100 flex flex-col w-full">
+        <div className="app-shell min-h-screen bg-gray-100 flex flex-col w-full">
           <div className="w-full flex-1 flex flex-col bg-white min-h-screen relative overflow-hidden font-sans">
             
             <div className="bg-white border-b border-gray-100 pt-safe px-6 py-3 flex justify-between items-center z-20 shrink-0 shadow-sm">
@@ -4381,6 +4400,7 @@ export default function App() {
                   });
                   setPartnerItems(updatedItems);
                 }}
+                completePartnerItem={(itemId) => changeCalendarPartnerTask(itemId, 'complete')}
                 togglePartnerItem={async (itemId) => {
                   const now = new Date().toISOString();
                   const updatedItems = partnerItems.map(item => item.id === itemId
@@ -4835,8 +4855,8 @@ export default function App() {
 
                   const targetUserRole = roles[currentUser.role];
                   const isAdmin = !!targetUserRole && (targetUserRole.level || 0) >= 40;
-                  if (!isAdmin && targetUid !== currentUser.id) {
-                    alert('他のメンバーが担当するタスクは操作できません。');
+                  if (!canCompleteTask(targetTask, targetUid, currentUser.id, isAdmin)) {
+                    alert('担当者または登録者が終了できます。');
                     return;
                   }
 
@@ -4946,5 +4966,6 @@ export default function App() {
     </GoogleOAuthProvider>
   );
 }
+
 
 
