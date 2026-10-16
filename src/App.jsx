@@ -4602,7 +4602,7 @@ export default function App() {
                             ownerUid: targetUid,
                             assigneeIds: selectedAssignees,
                             visibility: visibility === 'private' ? 'private' : 'public',
-                            ...(product ? { productId: product.id, productName: inventoryProductLabel(product), inventoryQuantity: quantity, inventoryDeducted: true } : {}),
+                            ...(product ? { productId: product.id, productName: inventoryProductLabel(product), productModelNumber: String(product.modelNumber || '').trim(), inventoryQuantity: quantity, inventoryDeducted: true } : {}),
                             completedAt: null,
                             ...(imageUrl ? {
                               imageUrl,
@@ -4781,11 +4781,3 @@ export default function App() {
     </GoogleOAuthProvider>
   );
 }
-
-
-
-
-
-
-
-

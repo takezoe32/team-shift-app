@@ -9,7 +9,8 @@ export function reportCompletionTime(value) {
 }
 export function reportWorkText(entry) {
   if (!entry) return '';
-  return [String(entry.text || '').trim(), String(entry.names || '').trim()].filter(Boolean).join('　');
+  const model = String(entry.productModelNumber || '').trim();
+  return [String(entry.text || '').trim(), model ? `（${model}）` : '', String(entry.names || '').trim()].filter(Boolean).join('　');
 }
 export function reportWorkHeight(entry) {
   return Math.max(24, Math.max(1, ...reportWorkText(entry).split('\n').map(line => Math.ceil([...line].length / 42))) * 19 + 6);

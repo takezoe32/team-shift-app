@@ -45,7 +45,8 @@ export function collectDailyReport(source, date) {
     const notes = updates.map(update => String(update.text || '').trim());
     const description = [...new Set([subject, body, ...notes, task.productName ? `${task.productName} × ${task.inventoryQuantity || 1}個` : ''].filter(Boolean))].join('／');
     const title = String(task.subject || '').trim() || body.split(/\r?\n/)[0] || (type === 'partner' ? String(task.partnerName || '').trim() : '') || '題名なし';
-    const entry = { key, text: (type === 'partner' ? `【パートナー${task.partnerName ? '：' + task.partnerName : ''}】` : '') + (description || '内容なし'), names: [...new Set(ids.map(id => users[id] ? reportSurname(users[id]) : '担当者不明'))].join('・') || '未割り当て', completedAt: task.completedAt, scheduledDate };
+    const productModelNumber = String(task.productModelNumber || (source.inventoryItems || []).find(item => item.id === task.productId)?.modelNumber || '').trim();
+    const entry = { key, productModelNumber, text: (type === 'partner' ? `【パートナー${task.partnerName ? '：' + task.partnerName : ''}】` : '') + (description || '内容なし'), names: [...new Set(ids.map(id => users[id] ? reportSurname(users[id]) : '担当者不明'))].join('・') || '未割り当て', completedAt: task.completedAt, scheduledDate };
     if (finished) (type === 'partner' ? visitors : entries).push(type === 'partner'
       ? { ...entry, text: `【${String(task.partnerName || '').trim() || 'パートナー未設定'}】${String(task.subject || '').trim() || '件名未設定'}（${entry.names}）` }
       : { ...entry, text: title });
@@ -89,5 +90,3 @@ export function reportValueRanges(report, fields, sheetTitle, page = 0) {
   }
   return Object.entries(cells).map(([cell, value]) => ({ range: `${quoted}!${cell}`, values: [[value]] }));
 }
-
-
