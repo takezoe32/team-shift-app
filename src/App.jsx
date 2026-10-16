@@ -234,7 +234,8 @@ const createPartnerUpdate = (text, user, image = null, kind = 'handoff') => ({
 const PartnerUpdateHistory = ({ item, onOpen }) => {
   const updates = newestPartnerUpdates(getPartnerUpdates(item));
   const historyRef = useRef(null);
-  useEffect(() => { if (historyRef.current) historyRef.current.scrollTop = 0; }, [item?.id, updates[0]?.id]);
+  const latestUpdateId = updates[0]?.id;
+  useEffect(() => { if (historyRef.current) historyRef.current.scrollTop = 0; }, [item?.id, latestUpdateId]);
   if (!updates.length) return null;
   const renderUpdate = (update, latest = false) => <div key={update.id} className={`rounded-xl border p-3 ${latest ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-200'}`}>
     <div className="text-sm font-bold text-gray-600">（{update.authorName || '不明なユーザー'}）{update.createdAt ? ' ・ ' + new Date(update.createdAt).toLocaleString('ja-JP') : ''}</div>
