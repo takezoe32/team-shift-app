@@ -2932,7 +2932,7 @@ summary={[[ 'パートナー名', partnerName ], ['どこ？で何を？', subje
   );
 };
 
-const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUid, isAdmin, deleteCompletedTask }) => {
+const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUid, currentUserEmail, isAdmin, deleteCompletedTask }) => {
   const deletingRef = useRef(false);
   const [deletingKey, setDeletingKey] = useState(null);
   const handleDelete = async (entry) => {
@@ -3054,7 +3054,7 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
     </div>
 
     <div className="flex-1 overflow-y-auto p-3 space-y-3">
-      <DailyReportPanel/>
+      {String(currentUserEmail || '').trim().toLowerCase() === 'mitsutake.takezoe@plandosee.co.jp' && <DailyReportPanel/>}
       {!sortedMonthKeys.length ? (
         <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-sm text-gray-400">
           終了したタスクはありません。
@@ -4723,6 +4723,7 @@ export default function App() {
               />
             ) : activeTab === 'completed' ? (
               <CompletedTasksView
+                currentUserEmail={currentUser?.email}
                 teamData={teamData}
                 partnerItems={partnerItems}
                 sortedUsers={sortedUsers}
