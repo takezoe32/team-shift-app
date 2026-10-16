@@ -1,3 +1,5 @@
+import AssigneePicker from './components/AssigneePicker';
+import { partnerAssigneeIds } from './partnerAssignees.mjs';
 import { newestPartnerUpdates } from './partnerUpdateOrder.mjs';
 import { isPartnerOverdue } from './partnerOverdue.mjs';
 import PartnerScheduleEditor from './components/PartnerScheduleEditor';
@@ -405,7 +407,7 @@ const getJapaneseHolidayMap = (year) => {
   return holidays;
 };
 
-const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partnerNames, currentUserUid, shiftTypes, sortedUsers, roles, currentUser, updateTaskAssignees, updateTaskText, deleteTask, toggleTask, updatePartnerItem, completePartnerItem, deletePartnerItem }) => {
+const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partnerNames, currentUserUid, shiftTypes, sortedUsers, roles, currentUser, updateTaskAssignees, updateTaskText, deleteTask, toggleTask, updatePartnerItem, completePartnerItem, reschedulePartnerItem, deletePartnerItem }) => {
   const partnerDetailBodyRef = useRef(null);
   const [detailTask, setDetailTask] = useState(null);
   const [detailPartner, setDetailPartner] = useState(null);
@@ -421,7 +423,8 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partne
   useEffect(() => { partnerDetailBodyRef.current?.scrollTo({ top: 0 }); }, [detailPartner?.id, isEditingPartner]);
   const [partnerEditName, setPartnerEditName] = useState('');
   const [partnerEditSubject, setPartnerEditSubject] = useState('');
-  const [partnerEditAssigneeUid, setPartnerEditAssigneeUid] = useState('');
+  const [partnerEditAssigneeIds, setPartnerEditAssigneeIds] = useState([]);
+  const partnerEditAssigneeUid = partnerEditAssigneeIds[0] || '';
   const [partnerEditDate, setPartnerEditDate] = useState('');
   const [partnerEditHour, setPartnerEditHour] = useState('');
   const [partnerEditMinute, setPartnerEditMinute] = useState('');
@@ -463,7 +466,7 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partne
   const activePartnerItems=(partnerItems||[]).filter(i=>!i.completed).sort((a,b)=>`${a.date||''}T${a.time||'00:00'}`.localeCompare(`${b.date||''}T${b.time||'00:00'}`));
   const datesToShow=Array.from(new Set([...Object.keys(teamData.tasks||{}).filter(d=>d<todayStr),selectedCalendarTaskDate])).sort();
   const selectedTasks=datesToShow.flatMap(taskDate=>(sortedUsers||[]).flatMap(member=>(teamData.tasks[taskDate]?.[member.id]||[]).filter(t=>t.visibility!=='private'&&!t.completed).map(task=>({...task,ownerUid:member.id,member,taskDate,assigneeIds:Array.isArray(task.assigneeIds)&&task.assigneeIds.length?task.assigneeIds:[member.id]}))));
-  const startPartnerEdit=()=>{const [h='',m='']=String(detailPartner?.time||'').split(':');setPartnerEditName(detailPartner?.partnerName||'');setPartnerEditSubject(detailPartner?.subject||'');setPartnerEditAssigneeUid(detailPartner?.assigneeUid||'');setPartnerEditDate(detailPartner?.date||'');setPartnerEditHour(h);setPartnerEditMinute(m);setPartnerEditEndTime(detailPartner?.endTime||'');setPartnerEditNote('');setPartnerEditImages([]);setCalendarUploadProgress(null);setIsEditingPartner(true);};
+  const startPartnerEdit=()=>{const [h='',m='']=String(detailPartner?.time||'').split(':');setPartnerEditName(detailPartner?.partnerName||'');setPartnerEditSubject(detailPartner?.subject||'');setPartnerEditAssigneeIds(partnerAssigneeIds(detailPartner));setPartnerEditDate(detailPartner?.date||'');setPartnerEditHour(h);setPartnerEditMinute(m);setPartnerEditEndTime(detailPartner?.endTime||'');setPartnerEditNote('');setPartnerEditImages([]);setCalendarUploadProgress(null);setIsEditingPartner(true);};
   useEditGuard(isEditingTask || isEditingPartner, isSaving);
   const closeTaskDetail = () => { if (confirmEditDiscard(isEditingTask, isSaving)) { setDetailTask(null); setIsEditingTask(false); } };
   const closePartnerDetail = () => { if (confirmEditDiscard(isEditingPartner, isSaving)) { setDetailPartner(null); setIsEditingPartner(false); } };
@@ -521,7 +524,7 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partne
     setPartnerImagePosition({x:partnerPanRef.current.startPosition.x+dx,y:partnerPanRef.current.startPosition.y+dy});
   };
   const handlePartnerImageMouseUp=()=>{partnerPanRef.current=null;};
-  const savePartnerEdit=async()=>{if(!detailPartner||!updatePartnerItem||calendarSavingRef.current)return;if(!partnerEditName||!partnerEditSubject.trim()||!partnerEditAssigneeUid||!partnerEditDate||!partnerEditHour||!partnerEditMinute){alert('パートナー名・件名・主担当者・日付・時間を入力してください。');return;}const noteText=partnerEditNote.trim();calendarSavingRef.current=true;setCalendarUploadProgress({stage:'checking'});setIsSaving(true);try{const changes={partnerName:partnerEditName,subject:partnerEditSubject.trim(),assigneeUid:partnerEditAssigneeUid,date:partnerEditDate,time:`${partnerEditHour}:${partnerEditMinute}`,endTime:partnerEditEndTime};const imageData=await uploadTaskImages(partnerEditImages, setCalendarUploadProgress);if(noteText||imageData.length){const updates=[...getPartnerUpdates(detailPartner),createPartnerUpdate(noteText,currentUser,imageData)];changes.updates=updates;changes.content=noteText||detailPartner.content||'';}await updatePartnerItem(detailPartner.id,changes);setDetailPartner(p=>p?{...p,...changes}:p);setCalendarUploadProgress({stage:'done'});setIsEditingPartner(false);setPartnerEditNote('');clearPartnerEditImage();}catch(e){setCalendarUploadProgress({stage:'error',message:e.message});console.error('パートナー申し送り画像の保存に失敗しました:',e);alert(`パートナータスクの更新に失敗しました。\n${e?.message||'画像のアップロードに失敗しました。'}`);}finally{calendarSavingRef.current=false;setIsSaving(false);}};
+  const savePartnerEdit=async()=>{if(!detailPartner||!updatePartnerItem||calendarSavingRef.current)return;if(!partnerEditName||!partnerEditSubject.trim()||!partnerEditAssigneeUid||!partnerEditDate||!partnerEditHour||!partnerEditMinute){alert('パートナー名・件名・担当者・日付・時間を入力してください。');return;}const noteText=partnerEditNote.trim();calendarSavingRef.current=true;setCalendarUploadProgress({stage:'checking'});setIsSaving(true);try{const changes={partnerName:partnerEditName,subject:partnerEditSubject.trim(),assigneeUid:partnerEditAssigneeUid,assigneeIds:partnerEditAssigneeIds,date:partnerEditDate,time:`${partnerEditHour}:${partnerEditMinute}`,endTime:partnerEditEndTime};const imageData=await uploadTaskImages(partnerEditImages, setCalendarUploadProgress);if(noteText||imageData.length){const updates=[...getPartnerUpdates(detailPartner),createPartnerUpdate(noteText,currentUser,imageData)];changes.updates=updates;changes.content=noteText||detailPartner.content||'';}await updatePartnerItem(detailPartner.id,changes);setDetailPartner(p=>p?{...p,...changes}:p);setCalendarUploadProgress({stage:'done'});setIsEditingPartner(false);setPartnerEditNote('');clearPartnerEditImage();}catch(e){setCalendarUploadProgress({stage:'error',message:e.message});console.error('パートナー申し送り画像の保存に失敗しました:',e);alert(`パートナータスクの更新に失敗しました。\n${e?.message||'画像のアップロードに失敗しました。'}`);}finally{calendarSavingRef.current=false;setIsSaving(false);}};
   const saveTaskEdit=async()=>{if(!detailTask||!canEditTask||calendarSavingRef.current)return;calendarSavingRef.current=true;setCalendarUploadProgress({stage:'checking'});setIsSaving(true);try{const text=editingTaskText.trim();const newImages=await uploadTaskImages(calendarTaskImages, setCalendarUploadProgress);await updateTaskText(detailTask.taskDate,detailTask.ownerUid,detailTask.id,{text,newImages});setDetailTask(p=>p?{...p,text,images:mergeTaskImages(p,newImages)}:p);setCalendarTaskImages([]);setCalendarUploadProgress({stage:'done'});setIsEditingTask(false);}catch{setCalendarUploadProgress({stage:'error'});alert('タスクの更新に失敗しました。');}finally{calendarSavingRef.current=false;setIsSaving(false);}};
   const removeTask=async()=>{if(!detailTask||!canEditTask||calendarSavingRef.current)return;if(!window.confirm('このタスクを削除してもよろしいですか？\n使用済みの商品がある場合は在庫へ戻します。'))return;calendarSavingRef.current=true;setIsSaving(true);try{await deleteTask(detailTask.taskDate,detailTask.ownerUid,detailTask.id);setDetailTask(null);}catch(error){alert(`タスクを削除できませんでした。\n${error.message||'もう一度お試しください。'}`);}finally{calendarSavingRef.current=false;setIsSaving(false);}};
   const runPartnerAction = async (action) => {
@@ -551,15 +554,15 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partne
     <div className="flex-1 overflow-y-auto bg-white"><div className="md:grid md:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.85fr)] md:items-start md:gap-3 md:p-3">
       <div className="min-w-0 md:border md:border-gray-200 md:rounded-xl md:overflow-hidden"><div className="grid grid-cols-7 border-b border-gray-200 sticky top-0 bg-white z-10 shadow-sm">{DAYS_OF_WEEK.map((d,i)=><div key={d} className={`py-2 text-center text-[10px] font-bold ${i===0?'text-red-500':i===6?'text-blue-500':'text-gray-500'}`}>{d}</div>)}</div><div className="grid grid-cols-7 border-l border-gray-100">{days}</div></div>
       <div className="min-w-0 md:space-y-3">
-        <div className="border-t border-gray-200 bg-blue-50/40 px-3 py-2"><div className="flex items-center justify-between mb-1.5"><h3 className="text-[11px] font-bold text-gray-600">パートナータスク</h3><span className="text-[9px] text-gray-400">{activePartnerItems.length}件</span></div>{activePartnerItems.length===0?<p className="text-[10px] text-gray-400 py-1">登録されている未終了のパートナータスクはありません</p>:<div className="space-y-1.5">{[...activePartnerItems.filter(item => item.date === todayStr), ...activePartnerItems.filter(item => item.date !== todayStr)].map(item=><button type="button" key={item.id} onClick={async ()=>{setDetailPartner(item);setIsEditingPartner(false);const handoffs=getPartnerHandoffUpdates(item);const latest=handoffs[handoffs.length-1];if(latest?.id&&item?.handoffReadBy?.[currentUserUid]!==latest.id){try{await updatePartnerItem(item.id,{handoffReadBy:{...(item.handoffReadBy||{}),[currentUserUid]:latest.id}});}catch(e){console.error("申し送り確認状態の保存に失敗しました:",e);}}}} className={`w-full text-left min-w-0 transition-colors ${item.date === todayStr ? 'bg-white min-h-[132px] border-2 border-blue-500 rounded-2xl p-3 shadow-sm hover:bg-blue-50' : 'bg-white min-h-11 border border-blue-100 rounded-md px-2 py-1.5 flex items-center gap-2 hover:border-blue-300 active:bg-blue-50'}`}>{item.date === todayStr ? <div className="space-y-2">
-  <div className="flex flex-wrap items-center justify-between gap-2"><span className="inline-flex rounded-full bg-blue-600 text-white px-2 py-1 text-xs font-bold">今日</span><span className="text-sm font-bold text-blue-700">{item.date.replace(/-/g, '/')}</span><span className="text-lg font-bold text-gray-900">{item.time || '--:--'}{item.endTime && <span className="ml-1 text-sm text-gray-600">〜 {item.endTime}</span>}</span></div>
-  <div><div className="text-sm font-bold text-purple-700 break-words">{item.partnerName || 'パートナー未設定'}</div><div className="text-lg font-bold text-gray-900 whitespace-pre-wrap break-words">{item.subject || (item.content || '').split(/\r?\n/)[0] || '件名未設定'}</div></div>
-  <div className="flex flex-wrap justify-between gap-2 text-sm text-gray-600"><span>主担当：{(sortedUsers || []).find(user => user.id === item.assigneeUid)?.name || '未設定'}</span><span className="font-bold text-blue-700">詳細を開く ›</span>{hasUnreadPartnerHandoff(item,currentUserUid) && <span className="font-bold text-orange-800">申し送りあり</span>}</div>
+        <div className="border-t border-gray-200 bg-blue-50/40 px-3 py-2"><div className="flex items-center justify-between mb-1.5"><h3 className="text-[11px] font-bold text-gray-600">パートナータスク</h3><span className="text-[9px] text-gray-400">{activePartnerItems.length}件</span></div>{activePartnerItems.length===0?<p className="text-[10px] text-gray-400 py-1">登録されている未終了のパートナータスクはありません</p>:<div className="space-y-1.5">{[...activePartnerItems.filter(item => item.date === todayStr), ...activePartnerItems.filter(item => item.date !== todayStr)].map(item=><button type="button" key={item.id} onClick={async ()=>{setDetailPartner(item);setIsEditingPartner(false);const handoffs=getPartnerHandoffUpdates(item);const latest=handoffs[handoffs.length-1];if(latest?.id&&item?.handoffReadBy?.[currentUserUid]!==latest.id){try{await updatePartnerItem(item.id,{handoffReadBy:{...(item.handoffReadBy||{}),[currentUserUid]:latest.id}});}catch(e){console.error("申し送り確認状態の保存に失敗しました:",e);}}}} className={`w-full text-left min-w-0 transition-colors ${item.date === todayStr ? 'bg-white min-h-[88px] border-2 border-blue-500 rounded-2xl p-2 shadow-sm hover:bg-blue-50' : 'bg-white min-h-11 border border-blue-100 rounded-md px-2 py-1.5 flex items-center gap-2 hover:border-blue-300 active:bg-blue-50'}`}>{item.date === todayStr ? <div className="space-y-1">
+  <div className="flex flex-wrap items-center justify-between gap-1"><span className="rounded-full bg-blue-600 text-white px-2 py-0.5 text-xs font-bold">今日</span><span className="text-xs font-bold text-blue-700">{item.date.replace(/-/g, '/')}</span><span className="text-lg font-bold text-gray-900">{item.time || '--:--'}{item.endTime && <span className="ml-1 text-sm text-gray-600">〜 {item.endTime}</span>}</span></div>
+  <div className="text-base font-bold text-gray-900 whitespace-pre-wrap break-words"><span className="text-sm text-purple-700">{item.partnerName || 'パートナー未設定'} ／ </span>{item.subject || (item.content || '').split(/\r?\n/)[0] || '件名未設定'}</div>
+  <div className="flex flex-wrap justify-between gap-1 text-xs text-gray-600"><span>担当：{partnerAssigneeIds(item).map(id => (sortedUsers || []).find(user => user.id === id)?.name).filter(Boolean).join('・') || '未設定'}</span><span className="font-bold text-blue-700">詳細を開く ›</span>{hasUnreadPartnerHandoff(item,currentUserUid) && <span className="font-bold text-orange-800">申し送りあり</span>}</div>
 </div> : <>{item.date&&item.date<todayStr?<span className="shrink-0 text-[8px] font-bold text-red-500 whitespace-nowrap">未終了 {item.date.replace(/-/g,'/')}</span>:<span className="shrink-0 text-[8px] font-bold text-blue-600 whitespace-nowrap">{item.date?item.date.replace(/-/g,'/'):'日付なし'}</span>}<span className="shrink-0 text-[8px] text-gray-500">{item.time||'--:--'}</span>{item.endTime&&<span className="shrink-0 text-[8px] text-orange-600">終了 {item.endTime}</span>}<span className="shrink-0 max-w-24 text-[9px] font-bold text-purple-600 truncate">{item.partnerName||'パートナー未設定'}</span><span className="min-w-0 flex-1 text-[10px] font-bold text-gray-800 truncate">{item.subject||(item.content||'').split(/\r?\n/)[0]||'件名未設定'}</span>{hasUnreadPartnerHandoff(item,currentUserUid)&&<span className="shrink-0 w-1.5 h-1.5 bg-blue-500 rounded-full shrink-0 mt-1" title="申し送りあり" aria-label="申し送りあり"></span>}</>}</button>)}</div>}</div>
         <div className="border-t border-gray-200 bg-gray-50 px-3 py-2"><div className="flex items-center justify-between mb-1.5"><h3 className="text-[11px] font-bold text-gray-600">本日のタスク（全員）</h3><span className="text-[9px] text-gray-400">{selectedCalendarTaskDate.replace(/-/g,'/')}・{selectedTasks.length}件</span></div>{selectedTasks.length===0?<p className="text-[10px] text-gray-400 py-1">本日までに終了していないタスクはありません</p>:<div className="space-y-1.5">{selectedTasks.map(task=><button type="button" key={`${task.taskDate}-${task.ownerUid}-${task.id}`} onClick={()=>{setDetailTask(task);setSelectedAssigneeIds(task.assigneeIds);setAssigneeUpdateMessage('');setIsEditingTask(false);}} className="w-full text-left bg-white border rounded-md px-2 py-1.5 flex items-center gap-2 min-w-0 hover:border-purple-300 active:bg-purple-50">{task.taskDate<todayStr&&<span className="shrink-0 text-[8px] font-bold text-red-500 whitespace-nowrap">対象日 {task.taskDate.replace(/-/g,'/')}</span>}<span className="min-w-0 flex-1 text-[10px] truncate text-gray-700"><span className="font-bold">{task.subject||task.text||'📷 画像タスク'}</span>{task.subject&&task.text&&<span className="ml-1 text-gray-500">{task.text}</span>}</span><span className="shrink-0 text-[8px] text-orange-600">終了予定 {task.endTime||'未設定'}</span><span className="shrink-0 max-w-32 text-[8px] text-purple-600 truncate">担当: {task.assigneeIds.map(id=>sortedUsers.find(u=>u.id===id)?.name?.split(' ')[0]||'').filter(Boolean).join('・')}</span><span className="shrink-0 text-[8px] text-gray-400">開始 {task.createdAt?new Date(task.createdAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}):'--:--'}</span></button>)}</div>}</div>
       </div>
     </div>
-    {detailPartner&&<div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-2 sm:p-4" onClick={closePartnerDetail}><div className="w-full max-w-md max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col" onClick={e=>e.stopPropagation()}><div className="px-4 py-3 border-b flex items-center justify-between shrink-0"><div><div className="text-sm font-bold text-gray-800">パートナータスク詳細</div><div className="text-[10px] text-gray-400">{detailPartner.date?.replace(/-/g,'/')} {detailPartner.time||'--:--'} ・ 終了予定 {detailPartner.endTime||'未設定'}</div></div><button onClick={closePartnerDetail} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-full"><X size={18}/></button></div><div ref={partnerDetailBodyRef} className="p-4 space-y-3 overflow-y-auto min-h-0 flex-1">{isEditingPartner?<><select value={partnerEditName} onChange={e=>setPartnerEditName(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm"><option value="">パートナーを選択</option>{(partnerNames||[]).map(n=><option key={n} value={n}>{n}</option>)}</select><input type="text" value={partnerEditSubject} onChange={e=>setPartnerEditSubject(e.target.value)} placeholder="件名" className="w-full border rounded-lg px-3 py-2 text-sm"/><select value={partnerEditAssigneeUid} onChange={e=>setPartnerEditAssigneeUid(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm"><option value="">主担当者を選択</option>{(sortedUsers||[]).map(user=><option key={user.id} value={user.id}>{user.name}</option>)}</select><div className="grid grid-cols-2 gap-2"><input type="date" value={partnerEditDate} onChange={e=>setPartnerEditDate(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm"/><div className="flex gap-1"><select value={partnerEditHour} onChange={e=>setPartnerEditHour(e.target.value)} className="w-1/2 border rounded-lg px-1 py-2 text-sm"><option value="">時</option>{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(v=><option key={v} value={v}>{v}</option>)}</select><select value={partnerEditMinute} onChange={e=>setPartnerEditMinute(e.target.value)} className="w-1/2 border rounded-lg px-1 py-2 text-sm"><option value="">分</option>{['00','15','30','45'].map(v=><option key={v} value={v}>{v}</option>)}</select></div><label className="block"><span className="text-[10px] font-bold text-gray-500">終了予定時刻</span><div className="flex items-center gap-1"><select aria-label="終了予定時刻の時" value={partnerEditEndTime ? partnerEditEndTime.split(':')[0] : ''} onChange={e=>setPartnerEditEndTime(e.target.value ? e.target.value+':'+((partnerEditEndTime||'').split(':')[1]||'00') : '')} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" ><option value="">時</option>{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(v=><option key={v} value={v}>{v}</option>)}</select><span>:</span><select aria-label="終了予定時刻の分" value={partnerEditEndTime ? partnerEditEndTime.split(':')[1] : ''} onChange={e=>setPartnerEditEndTime(((partnerEditEndTime||'').split(':')[0]||'00')+':'+e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" ><option value="">分</option>{['00','15','30','45'].map(v=><option key={v} value={v}>{v}</option>)}</select></div></label></div><div className="space-y-2"><PartnerUpdateHistory item={detailPartner} onOpen={openPartnerImage}/><div><div className="text-[10px] font-bold text-gray-500 mb-1">今回の申し送り・追記</div><textarea value={partnerEditNote} onChange={e=>setPartnerEditNote(e.target.value)} rows={5} placeholder="今回追加する申し送りを入力" className="w-full border rounded-lg px-3 py-2 text-sm resize-y"/><ImagePicker files={partnerEditImages} onChange={setPartnerEditImages} disabled={isSaving}/><TaskSaveProgress progress={calendarUploadProgress}/><p className="text-[9px] text-gray-400 mt-1">画像は各10MB以下。動画は30秒以内。20MBを超える動画は自動圧縮します。添付だけでも保存できます。</p></div></div><div className="flex gap-2 sticky bottom-0 bg-white pt-2 pb-1 border-t border-gray-100"><button type="button" onClick={()=>{if(confirmEditDiscard(true,isSaving))setIsEditingPartner(false);}} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-xs font-bold">キャンセル</button><button type="button" disabled={isSaving} onClick={savePartnerEdit} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold"><span>{isSaving?'保存中…':'変更を保存'}</span></button></div></>:<><div className="text-xs font-bold text-purple-600">{detailPartner.partnerName||'パートナー未設定'}</div><div className="text-base font-bold text-gray-800">{detailPartner.subject||(detailPartner.content||'').split(/\r?\n/)[0]||'件名未設定'}</div>{((detailPartner.updates||[]).some(u=>u?.kind==='handoff')||(detailPartner.updates||[]).length>1)&&<div className="inline-flex px-2 py-1 rounded-full bg-orange-50 text-orange-700 text-[10px] font-bold">申し送りあり</div>}<div className="text-xs font-bold text-blue-600">主担当: {(sortedUsers||[]).find(user=>user.id===detailPartner.assigneeUid)?.name||'未設定'}</div><PartnerUpdateHistory item={detailPartner} onOpen={openPartnerImage}/><ImageGallery item={detailPartner} onOpen={openPartnerImage}/><div className="sticky bottom-0 bg-white pt-3 border-t border-gray-100 space-y-2">
+    {detailPartner&&<div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-2 sm:p-4" onClick={closePartnerDetail}><div className="w-full max-w-md max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col" onClick={e=>e.stopPropagation()}><div className="px-4 py-3 border-b flex items-center justify-between shrink-0"><div><div className="text-sm font-bold text-gray-800">パートナータスク詳細</div><div className="text-[10px] text-gray-400">{detailPartner.date?.replace(/-/g,'/')} {detailPartner.time||'--:--'} ・ 終了予定 {detailPartner.endTime||'未設定'}</div></div><button onClick={closePartnerDetail} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-full"><X size={18}/></button></div><div ref={partnerDetailBodyRef} className="p-4 space-y-3 overflow-y-auto min-h-0 flex-1">{isEditingPartner?<><select value={partnerEditName} onChange={e=>setPartnerEditName(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm"><option value="">パートナーを選択</option>{(partnerNames||[]).map(n=><option key={n} value={n}>{n}</option>)}</select><input type="text" value={partnerEditSubject} onChange={e=>setPartnerEditSubject(e.target.value)} placeholder="件名" className="w-full border rounded-lg px-3 py-2 text-sm"/><AssigneePicker users={sortedUsers} value={partnerEditAssigneeIds} onChange={setPartnerEditAssigneeIds} disabled={isSaving}/><div className="grid grid-cols-2 gap-2"><input type="date" value={partnerEditDate} onChange={e=>setPartnerEditDate(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm"/><div className="flex gap-1"><select value={partnerEditHour} onChange={e=>setPartnerEditHour(e.target.value)} className="w-1/2 border rounded-lg px-1 py-2 text-sm"><option value="">時</option>{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(v=><option key={v} value={v}>{v}</option>)}</select><select value={partnerEditMinute} onChange={e=>setPartnerEditMinute(e.target.value)} className="w-1/2 border rounded-lg px-1 py-2 text-sm"><option value="">分</option>{['00','15','30','45'].map(v=><option key={v} value={v}>{v}</option>)}</select></div><label className="block"><span className="text-[10px] font-bold text-gray-500">終了予定時刻</span><div className="flex items-center gap-1"><select aria-label="終了予定時刻の時" value={partnerEditEndTime ? partnerEditEndTime.split(':')[0] : ''} onChange={e=>setPartnerEditEndTime(e.target.value ? e.target.value+':'+((partnerEditEndTime||'').split(':')[1]||'00') : '')} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" ><option value="">時</option>{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(v=><option key={v} value={v}>{v}</option>)}</select><span>:</span><select aria-label="終了予定時刻の分" value={partnerEditEndTime ? partnerEditEndTime.split(':')[1] : ''} onChange={e=>setPartnerEditEndTime(((partnerEditEndTime||'').split(':')[0]||'00')+':'+e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" ><option value="">分</option>{['00','15','30','45'].map(v=><option key={v} value={v}>{v}</option>)}</select></div></label></div><div className="space-y-2"><PartnerUpdateHistory item={detailPartner} onOpen={openPartnerImage}/><div><div className="text-[10px] font-bold text-gray-500 mb-1">今回の申し送り・追記</div><textarea value={partnerEditNote} onChange={e=>setPartnerEditNote(e.target.value)} rows={5} placeholder="今回追加する申し送りを入力" className="w-full border rounded-lg px-3 py-2 text-sm resize-y"/><ImagePicker files={partnerEditImages} onChange={setPartnerEditImages} disabled={isSaving}/><TaskSaveProgress progress={calendarUploadProgress}/><p className="text-[9px] text-gray-400 mt-1">画像は各10MB以下。動画は30秒以内。20MBを超える動画は自動圧縮します。添付だけでも保存できます。</p></div></div><div className="flex gap-2 sticky bottom-0 bg-white pt-2 pb-1 border-t border-gray-100"><button type="button" onClick={()=>{if(confirmEditDiscard(true,isSaving))setIsEditingPartner(false);}} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-xs font-bold">キャンセル</button><button type="button" disabled={isSaving} onClick={savePartnerEdit} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold"><span>{isSaving?'保存中…':'変更を保存'}</span></button></div></>:<><div className="text-xs font-bold text-purple-600">{detailPartner.partnerName||'パートナー未設定'}</div><div className="text-base font-bold text-gray-800">{detailPartner.subject||(detailPartner.content||'').split(/\r?\n/)[0]||'件名未設定'}</div>{((detailPartner.updates||[]).some(u=>u?.kind==='handoff')||(detailPartner.updates||[]).length>1)&&<div className="inline-flex px-2 py-1 rounded-full bg-orange-50 text-orange-700 text-[10px] font-bold">申し送りあり</div>}<div className="text-xs font-bold text-blue-600">担当: {partnerAssigneeIds(detailPartner).map(id => (sortedUsers || []).find(user => user.id === id)?.name).filter(Boolean).join('・') || '未設定'}</div><PartnerScheduleEditor item={detailPartner} disabled={isSaving} onSave={async (id, schedule) => { await reschedulePartnerItem(id, schedule); setDetailPartner(item => item?.id === id ? { ...item, ...schedule } : item); }}/><PartnerUpdateHistory item={detailPartner} onOpen={openPartnerImage}/><ImageGallery item={detailPartner} onOpen={openPartnerImage}/><div className="sticky bottom-0 bg-white pt-3 border-t border-gray-100 space-y-2">
 <button type="button" disabled={isSaving} onClick={startPartnerEdit} className="w-full min-h-11 py-2.5 rounded-xl bg-blue-50 text-blue-700 text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50"><Edit2 size={14}/><span>編集</span></button>
 <div className="grid grid-cols-2 gap-2">
 <button type="button" disabled={isSaving} onClick={() => runPartnerAction('complete')} className="min-h-11 py-2.5 rounded-xl bg-green-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50"><CheckSquare size={14}/><span>終了</span></button>
@@ -1825,7 +1828,7 @@ const HelpView = () => {
             <div className="space-y-2">
               <div className="rounded-xl border-2 border-gray-200 p-3">
                 <div className="text-sm font-black">パートナーA</div>
-                <div className="text-xs text-blue-600 font-bold mt-1">主担当：竹添</div>
+                <div className="text-xs text-blue-600 font-bold mt-1">担当：竹添</div>
               </div>
               <div className="rounded-xl border border-gray-200 p-3 text-xs">
                 <div className="font-black text-gray-500 mb-1">これまでの申し送り</div>
@@ -1895,7 +1898,7 @@ const HelpView = () => {
           <p className="text-base sm:text-lg leading-relaxed text-gray-700">パートナーの予定と申し送りを確認・追加します。</p>
           <GuideMockup title="パートナー" active="パートナー" steps={['下の「パートナー」を押します。','追加・編集したいパートナーを押します。','「今回の申し送り・追記」に文章を書きます。','「保存」を押します。']}>
             <div className="space-y-2">
-              <div className="border-2 border-gray-200 rounded-xl p-3 font-bold">パートナーA <span className="text-blue-600">主担当：竹添</span></div>
+              <div className="border-2 border-gray-200 rounded-xl p-3 font-bold">パートナーA <span className="text-blue-600">担当：竹添</span></div>
               <div className="border-4 border-red-500 rounded-xl p-3 relative"><div className="text-xs font-black text-gray-500 mb-2">これまでの申し送り</div><div className="text-sm">（竹添）パートナーが来ました。</div><div className="text-sm">（平川）作業終了して帰りました。</div><div className="mt-3 border-2 border-blue-300 rounded-lg p-3 bg-blue-50"><div className="text-xs font-black text-blue-700">今回の申し送り・追記</div><div className="text-xs text-gray-400 mt-2">ここに今回の内容を書きます</div></div><span className="absolute -right-2 -top-7 bg-red-500 text-white rounded px-2 py-1 text-[9px] font-black">←ここに書く</span></div>
               <div className="text-right"><span className="inline-block bg-blue-600 text-white rounded-lg px-5 py-2 font-black">保存</span></div>
             </div>
@@ -2521,7 +2524,8 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
   const [endTime, setEndTime] = useState('');
   const [partnerName, setPartnerName] = useState('');
   const [subject, setSubject] = useState('');
-  const [assigneeUid, setAssigneeUid] = useState('');
+  const [partnerAssignees, setPartnerAssignees] = useState([]);
+  const assigneeUid = partnerAssignees[0] || '';
   const [content, setContent] = useState('');
   const [newPartnerName, setNewPartnerName] = useState('');
   const [newPartnerImages, setNewPartnerImages] = useState([]);
@@ -2594,7 +2598,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
 
   const handleSave = async () => {
     if (!partnerName || !subject.trim() || !assigneeUid || !date || !time) {
-      alert('パートナー名・件名・主担当者・日付・開始時間を入力してください。');
+      alert('パートナー名・件名・担当者・日付・開始時間を入力してください。');
       return;
     }
 
@@ -2611,7 +2615,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
       const hasNewUpdate = !!(content.trim() || addedImages.length);
       const newUpdate = hasNewUpdate ? createPartnerUpdate(content.trim(), currentUser, addedImages, editingItemId ? 'handoff' : 'initial') : null;
       const updates = editingItemId ? [...getPartnerUpdates(currentItem), ...(newUpdate ? [newUpdate] : [])] : (newUpdate ? [newUpdate] : []);
-      const itemData = { images, partnerName, subject: subject.trim(), assigneeUid, date, time, endTime, content: content.trim() || currentItem?.content || '', updates, createdByUid: editingItemId ? (currentItem?.createdByUid || '') : (currentUser?.id || ''), createdByName: editingItemId ? (currentItem?.createdByName || '') : (currentUser?.name || ''), ...(imageUrl ? { imageUrl, imageName, imagePublicId, imageBytes, imageUploadedAt: new Date().toISOString() } : {}) };
+      const itemData = { images, partnerName, subject: subject.trim(), assigneeUid, assigneeIds: partnerAssignees, date, time, endTime, content: content.trim() || currentItem?.content || '', updates, createdByUid: editingItemId ? (currentItem?.createdByUid || '') : (currentUser?.id || ''), createdByName: editingItemId ? (currentItem?.createdByName || '') : (currentUser?.name || ''), ...(imageUrl ? { imageUrl, imageName, imagePublicId, imageBytes, imageUploadedAt: new Date().toISOString() } : {}) };
       if (editingItemId) {
         const savedItemId = editingItemId;
         await debugLog?.('INFO', action + '.firestore.update.start', { itemId: savedItemId, itemData });
@@ -2635,7 +2639,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
       setSubject('');
       setTimeHour(''); setTimeMinute(''); setEndTime('');
       setPartnerName('');
-      setAssigneeUid('');
+      setPartnerAssignees([]);
       setNewPartnerImages([]);
       return true;
 
@@ -2681,7 +2685,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
                 <div className="flex-1 min-w-0">
                   {(item.completed || isPartnerOverdue(item, scheduleNow)) && <span className={`inline-flex rounded-full px-3 py-1 mb-2 text-sm font-bold ${item.completed ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}`}>{item.completed ? '終了済み' : '未終了'}</span>}
                   <div className={`text-[10px] font-bold mb-0.5 ${item.completed ? 'text-gray-400 line-through' : 'text-purple-600'}`}>{item.partnerName || 'パートナー未設定'}</div>
-                  <div className="text-xs text-blue-600 font-bold mb-1">主担当: {(sortedUsers || []).find(user => user.id === item.assigneeUid)?.name || '未設定'}</div>
+                  <div className="text-xs text-blue-600 font-bold mb-1">担当: {partnerAssigneeIds(item).map(id => (sortedUsers || []).find(user => user.id === id)?.name).filter(Boolean).join('・') || '未設定'}</div>
                   <div className="text-sm font-bold text-gray-800 mb-1">{item.subject || (item.content || '').split(/\r?\n/)[0] || '件名未設定'}</div>
                   <div className="space-y-1.5">{newestPartnerUpdates(getPartnerUpdates(item)).slice(0, 3).map(update => <div key={update.id} className="text-xs text-gray-700 whitespace-pre-wrap break-words"><span className="text-[9px] font-bold text-gray-500">（{update.authorName || '不明なユーザー'}）</span> {update.text}<ImageGallery item={update}/></div>)}</div>
                   <ImageGallery item={item}/>
@@ -2693,7 +2697,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
                     setEditingItemId(item.id);
                     setPartnerName(item.partnerName || '');
                     setSubject(item.subject || (item.content || '').split(/\r?\n/)[0] || '');
-                    setAssigneeUid(item.assigneeUid || '');
+                    setPartnerAssignees(partnerAssigneeIds(item));
                     setDate(item.date || formatDate(new Date()));
                     const [editHour, editMinute] = (item.time || '').split(':');
                     setTimeHour(editHour || '');
@@ -2730,19 +2734,19 @@ steps={[
 {title:'いつ、誰が担当しますか？', content:<>
 <label className="block font-bold">日付（必須）<input type="date" value={date} onChange={e => setDate(e.target.value)} placeholder="" className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label>
 <fieldset><legend className="font-bold">開始時間（必須・15分刻み）</legend><div className="flex items-center gap-2 mt-2"><select aria-label="開始時間の時" value={timeHour} onChange={e => setTimeHour(e.target.value)} className="flex-1 min-h-14 border border-gray-300 rounded-xl p-3 text-base bg-white"><option value="">時を選択</option>{Array.from({length:24}, (_, h) => String(h).padStart(2, '0')).map(h => <option key={h} value={h}>{h}時</option>)}</select><select aria-label="開始時間の分" value={timeMinute} onChange={e => setTimeMinute(e.target.value)} className="flex-1 min-h-14 border border-gray-300 rounded-xl p-3 text-base bg-white"><option value="">分を選択</option>{['00', '15', '30', '45'].map(m => <option key={m} value={m}>{m}分</option>)}</select></div></fieldset>
-<label className="block font-bold">主担当者（必須）<select value={assigneeUid} onChange={e => setAssigneeUid(e.target.value)} className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base bg-white"><option value="">名前を選んでください</option>{(sortedUsers || []).map(user => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label>
+<AssigneePicker users={sortedUsers} value={partnerAssignees} onChange={setPartnerAssignees} disabled={isSaving}/>
 <QuarterHourTime label="終了予定時間" value={endTime} onChange={setEndTime}/>
-</>,validate:() => !date || !time || !assigneeUid ? '日付・開始時間・主担当者を選んでください。' : ''},
+</>,validate:() => !date || !time || !assigneeUid ? '日付・開始時間・担当者を選んでください。' : ''},
 {title:'お願いする内容を教えてください', content:<><label className="block font-bold">詳しい内容（任意）<textarea rows={4} value={content} onChange={e => setContent(e.target.value)} placeholder="例：1階ロビーの電球を交換する" className="w-full mt-2 border border-gray-300 rounded-xl p-3 text-base"/></label><ImagePicker files={newPartnerImages} onChange={setNewPartnerImages} disabled={isSaving}/></>}
 ]}
-summary={[[ 'パートナー名', partnerName ], ['どこ？で何を？', subject], ['日付', date], ['開始時間', time], ['終了予定', endTime], ['主担当者', (sortedUsers || []).find(user => user.id === assigneeUid)?.name], ['内容', content], ['写真・動画', newPartnerImages.length + '件']]}
+summary={[[ 'パートナー名', partnerName ], ['どこ？で何を？', subject], ['日付', date], ['開始時間', time], ['終了予定', endTime], ['担当者', partnerAssignees.map(id => (sortedUsers || []).find(user => user.id === id)?.name).filter(Boolean).join('・')], ['内容', content], ['写真・動画', newPartnerImages.length + '件']]}
 />}
           {editingItemId && (
             <div className="flex items-center justify-between bg-blue-50 border border-blue-100 rounded-xl px-3 py-2">
               <span className="text-[10px] font-bold text-blue-700">パートナー予定を編集中</span>
               <button type="button" onClick={() => {
                 if (!confirmEditDiscard(true, isSaving)) return;
-                setEditingItemId(null); setPartnerName(''); setSubject(''); setAssigneeUid(''); setDate(formatDate(new Date())); setTimeHour(''); setTimeMinute(''); setEndTime(''); setContent(''); setNewPartnerImages([]);
+                setEditingItemId(null); setPartnerName(''); setSubject(''); setPartnerAssignees([]); setDate(formatDate(new Date())); setTimeHour(''); setTimeMinute(''); setEndTime(''); setContent(''); setNewPartnerImages([]);
               }} className="text-[10px] font-bold text-gray-500 hover:text-gray-800">キャンセル</button>
             </div>
           )}
@@ -2890,7 +2894,7 @@ summary={[[ 'パートナー名', partnerName ], ['どこ？で何を？', subje
             </div>
           </div>
 
-          <label className="block"><span className="text-[10px] font-bold text-gray-500">主担当者</span><select value={assigneeUid} onChange={(e) => setAssigneeUid(e.target.value)} className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-400"><option value="">主担当者を選択</option>{(sortedUsers || []).map(user => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label>
+          <AssigneePicker users={sortedUsers} value={partnerAssignees} onChange={setPartnerAssignees} disabled={isSaving}/>
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <span className="text-[10px] font-bold text-gray-500">日付</span>
@@ -3032,15 +3036,17 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
   });
 
   (partnerItems || []).filter(item => item?.completed).forEach(item => {
-    const assigneeUid = item.assigneeUid || '';
+    const assigneeIds = partnerAssigneeIds(item);
+    const assigneeUid = assigneeIds[0] || '';
     completedEntries.push({
       type: 'partner',
       id: item.id,
       date: item.date || String(item.completedAt || '').slice(0, 10),
       completedAt: item.completedAt || null,
       ownerUid: assigneeUid,
-      ownerName: memberMap[assigneeUid]?.name || '未割り当て',
-      assigneeNames: assigneeUid && memberMap[assigneeUid]?.name ? [memberMap[assigneeUid].name] : [],
+      ownerName: assigneeIds.map(id => memberMap[id]?.name).filter(Boolean).join('・') || '未割り当て',
+      assigneeIds,
+      assigneeNames: assigneeIds.map(id => memberMap[id]?.name).filter(Boolean),
       title: item.subject || item.partnerName || 'パートナータスク',
       content: item.content || '',
       partnerName: item.partnerName || '',
@@ -3050,7 +3056,7 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
 
   const filteredEntries = memberFilter === 'all'
     ? completedEntries
-    : completedEntries.filter(entry => entry.ownerUid === memberFilter);
+    : completedEntries.filter(entry => entry.ownerUid === memberFilter || entry.assigneeIds?.includes(memberFilter));
 
   const monthGroups = filteredEntries.reduce((groups, entry) => {
     const monthKey = String(entry.date || entry.completedAt || '').slice(0, 7) || '日付未設定';
@@ -3142,8 +3148,7 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
               </div>
               <div className="mt-1 text-[10px] text-gray-500">
                 {entry.type === 'partner' && entry.partnerName ? entry.partnerName + ' ・ ' : ''}
-                担当: {entry.ownerName}
-                {entry.assigneeNames.length > 1 ? '（' + entry.assigneeNames.join('・') + '）' : ''}
+                担当: {entry.assigneeNames.length ? entry.assigneeNames.join('・') : entry.ownerName}
               </div>
               <div className="text-[10px] text-gray-400">
                 終了日時: {formatCompletedAt(entry.completedAt)}
@@ -4362,6 +4367,18 @@ export default function App() {
     if (updatedItems) setPartnerItems(updatedItems);
   };
 
+  const reschedulePartnerTask = async (itemId, schedule) => {
+    const next = await runTransaction(db, async transaction => {
+      const ref = doc(db, 'app_data', 'shared_state');
+      const snapshot = await transaction.get(ref);
+      if (!snapshot.exists()) throw new Error('共有データが見つかりません。');
+      const items = planPartnerSchedule(snapshot.data().partnerItems || [], itemId, schedule);
+      transaction.update(ref, { partnerItems: items });
+      return items;
+    });
+    setPartnerItems(next);
+  };
+
   const deleteCompletedTask = async (entry) => {
     if (entry.type === 'member' && entry.ownerUid !== currentUser.id && (roles[currentUser.role]?.level || 0) < 40) throw new Error('この終了履歴を削除する権限がありません。');
     const ref = doc(db, 'app_data', 'shared_state');
@@ -4441,17 +4458,7 @@ export default function App() {
                   setPartnerItems(updatedItems);
                 }}
                 completePartnerItem={(itemId) => changeCalendarPartnerTask(itemId, 'complete')}
-                reschedulePartnerItem={async (itemId, schedule) => {
-                  const next = await runTransaction(db, async transaction => {
-                    const ref = doc(db, 'app_data', 'shared_state');
-                    const snapshot = await transaction.get(ref);
-                    if (!snapshot.exists()) throw new Error('共有データが見つかりません。');
-                    const nextItems = planPartnerSchedule(snapshot.data().partnerItems || [], itemId, schedule);
-                    transaction.update(ref, { partnerItems: nextItems });
-                    return nextItems;
-                  });
-                  setPartnerItems(next);
-                }}
+                reschedulePartnerItem={reschedulePartnerTask}
                 togglePartnerItem={async (itemId) => {
                   const now = new Date().toISOString();
                   const updatedItems = partnerItems.map(item => item.id === itemId
@@ -4591,6 +4598,7 @@ export default function App() {
             ) : activeTab === 'calendar' ? (
               <CalendarView
                 completePartnerItem={(itemId) => changeCalendarPartnerTask(itemId, 'complete')}
+                reschedulePartnerItem={reschedulePartnerTask}
                 deletePartnerItem={(itemId) => changeCalendarPartnerTask(itemId, 'delete')}
                 changeMonth={(offset) => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + offset, 1))} 
                 currentDate={currentDate} 
@@ -5017,6 +5025,7 @@ export default function App() {
     </GoogleOAuthProvider>
   );
 }
+
 
 
 

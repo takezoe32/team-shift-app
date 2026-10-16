@@ -1,3 +1,4 @@
+import { partnerAssigneeIds } from './partnerAssignees.mjs';
 import { getTaskImages } from './taskImages.mjs';
 export const MEDIA_FOLDER_ID = '1ZH9lLBsZE0wtXvA_Cdq48Hl7PY3Ld-gw';
 export function reportSurname(user) {
@@ -36,7 +37,7 @@ export function collectDailyReport(source, date) {
     // Recreating an older report includes tasks completed after that day's end.
     const pending = (!task.completed || completedDate > date) && scheduledDate && scheduledDate <= date && (!tokyoDate(task.createdAt) || tokyoDate(task.createdAt) <= date);
     if (!finished && !pending) return;
-    const ids = type === 'partner' ? [task.assigneeUid].filter(Boolean) : (task.assigneeIds?.length ? task.assigneeIds : [ownerUid]);
+    const ids = type === 'partner' ? partnerAssigneeIds(task) : (task.assigneeIds?.length ? task.assigneeIds : [ownerUid]);
     const subject = String(task.subject || (type === 'partner' ? task.partnerName : '') || '').trim();
     const body = String(task.text || task.content || '').trim();
     const updates = (Array.isArray(task.updates) ? task.updates : []).filter(update => !tokyoDate(update.createdAt) || tokyoDate(update.createdAt) <= date);
@@ -87,3 +88,4 @@ export function reportValueRanges(report, fields, sheetTitle, page = 0) {
   }
   return Object.entries(cells).map(([cell, value]) => ({ range: `${quoted}!${cell}`, values: [[value]] }));
 }
+
