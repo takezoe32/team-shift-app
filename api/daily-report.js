@@ -1,6 +1,6 @@
 import { runDailyReport } from './_lib/save-daily-report.js';
 import { configuration, fault, oauth, privateStore, verifyIdentity, sessionFrom, issueSession, csrfToken, verifyRequest, clearSession } from './_lib/report-auth.js';
-import { validateReportDate } from '../src/dailyReport.mjs';
+import { collectDailyReport, validateReportDate } from '../src/dailyReport.mjs';
 import { saveDailyReportToDrive } from '../src/dailyReportDrive.mjs';
 
 export function createReportHandler({ configure = configuration, makeClient = oauth, makeStore = privateStore, verifyUser = verifyIdentity, saveReport = saveDailyReportToDrive, fetcher = fetch } = {}) {
@@ -51,12 +51,16 @@ export function createReportHandler({ configure = configuration, makeClient = oa
         await store.put({ refreshToken, email, connectedAt: new Date().toISOString() });
         return res.status(200).json({ connected: true });
       }
-      if (body.action !== 'save') throw fault(400, '操作を確認してください。');
+      if (!['save', 'preview'].includes(body.action)) throw fault(400, '操作を確認してください。');
       try { validateReportDate(body.date); } catch { throw fault(400, '有効な日付を選んでください。'); }
       const fields = {};
       for (const key of ['weather', 'chlorine', 'remarks']) if (body.fields?.[key] !== undefined) {
         if (typeof body.fields[key] !== 'string' || body.fields[key].length > (key === 'remarks' ? 10000 : 500)) throw fault(400, '入力内容を確認してください。');
         fields[key] = body.fields[key];
+      }
+      if (body.action === 'preview') {
+        const report = collectDailyReport(await store.source(), body.date);
+        return res.status(200).json({ report, fields });
       }
       const saved = await runDailyReport({ store, client, date: body.date, fields, saveReport, fetcher });
       issueSession(res, session.email, config);
@@ -68,3 +72,4 @@ export function createReportHandler({ configure = configuration, makeClient = oa
   };
 }
 export default createReportHandler();
+

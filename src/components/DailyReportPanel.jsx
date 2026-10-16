@@ -1,3 +1,4 @@
+import DailyReportPreview from './DailyReportPreview';
 import { useEffect, useRef, useState } from 'react';
 import { GoogleLogin, useGoogleLogin } from '@react-oauth/google';
 import { tokyoDate, REPORT_FOLDER_ID } from '../dailyReport.mjs';
@@ -12,6 +13,7 @@ export default function DailyReportPanel() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [result, setResult] = useState(null);
+  const [preview, setPreview] = useState(null);
   const [forecast, setForecast] = useState(null);
   const [weatherMessage, setWeatherMessage] = useState(null);
   useEffect(() => {
@@ -33,7 +35,7 @@ export default function DailyReportPanel() {
     return () => { controller.abort(); window.removeEventListener('teamshift-report-session', refresh); };
   }, [open]);
   const locked = useRef(false);
-  useEditGuard(Object.keys(fields).length > 0, busy);
+  useEditGuard(preview !== null || Object.keys(fields).length > 0 || busy, busy);
   const clearBusy = () => { locked.current = false; setBusy(false); };
   const refreshConnection = async () => setConnection(await reportConnection());
   const handleFailure = error => {
@@ -67,13 +69,23 @@ export default function DailyReportPanel() {
     catch (error) { handleFailure(error); }
     finally { clearBusy(); }
   };
+  const previewReport = async () => {
+    if (locked.current) return;
+    if (!date) { setMessage('日報の日付を選んでください。'); return; }
+    locked.current = true; setBusy(true); setPreview(null); setResult(null); setMessage('最新データからプレビューを作成しています…');
+    try {
+      setPreview(await reportAction('preview', { date, fields: { ...(forecast?.date === date ? { weather: forecastWeatherText(forecast) } : {}), ...fields } }, connection.csrf));
+      setMessage('');
+    } catch (error) { handleFailure(error); }
+    finally { clearBusy(); }
+  };
   const create = async () => {
     if (locked.current) return;
     if (!date) { setMessage('日報の日付を選んでください。'); return; }
     locked.current = true; setBusy(true); setResult(null); setMessage('最新のシフト・タスクを読み込み、日報を保存しています…');
     try {
       const saved = await reportAction('save', { date, fields: { ...(forecast?.date === date ? { weather: forecastWeatherText(forecast) } : {}), ...fields } }, connection.csrf);
-      setResult(saved); setFields({});
+      setResult(saved); setFields({}); setPreview(null);
       setMessage(`${saved.date}の業務${saved.count}件・来館業者${saved.visitors}件・引き継ぎ${saved.handoff}件・添付${saved.media}件を保存しました。${saved.unknownDates ? `終了日時不明の${saved.unknownDates}件は集計に含めていません。` : ''}`);
     } catch (error) { handleFailure(error); }
     finally { clearBusy(); }
@@ -89,11 +101,13 @@ export default function DailyReportPanel() {
       <p className="text-xs text-gray-600">月ごとのファイルに、日別シートで保存します。出勤者は当日のシフトから苗字、来館業者は当日に終了したパートナータスクのパートナー名・件名・主担当者の苗字、連絡引継事項は「終了していないタスク（件数）」を表示し、クリックすると同じシート下部に題名一覧を開きます。営繕作業・業務も題名のみを記載し、題名未設定の旧タスクは本文の先頭1行を使います。画像・動画は専用の月別フォルダにまとめ、同じシートの右側から開けるようにします。再作成時も自動入力欄を更新します。天候は気象庁の福岡地方の予報を自動入力し、手入力で修正できます。予報がない日や取得できない場合は保存済みの天候を残します。塩素投入数・備考は入力した項目だけ更新します。個人メモは含めません。</p>
       <div className="grid gap-2 sm:grid-cols-2">{field('weather', '天候')}{field('chlorine', '塩素投入数')}{field('remarks', '備考', true)}</div>
       <p className="text-xs text-gray-600">{weatherMessage?.date === date ? weatherMessage.text : '天気予報を取得中…'} <a href={WEATHER_SOURCE_URL} target="_blank" rel="noopener noreferrer" className="text-blue-800 underline">出典：気象庁</a></p>
-      <button type="button" disabled={busy || !connection?.connected || !connection?.authenticated || weatherMessage?.date !== date} onClick={create} className="min-h-11 w-full rounded-lg bg-blue-600 px-3 text-sm font-bold text-white disabled:opacity-50">{busy ? '日報を作成中…' : '日報作成・Google Driveへ保存'}</button>
+      <button type="button" disabled={busy || !connection?.connected || !connection?.authenticated || weatherMessage?.date !== date} onClick={previewReport} className="min-h-11 w-full rounded-lg bg-blue-600 px-3 text-sm font-bold text-white disabled:opacity-50">{busy ? '日報を作成中…' : '日報作成・プレビューを表示'}</button>
       <a href={`https://drive.google.com/drive/folders/${REPORT_FOLDER_ID}`} target="_blank" rel="noopener noreferrer" className="block text-xs text-blue-800 underline">指定の保存先フォルダを開く</a>
       <p className="text-xs text-gray-600">初回連携と自動保存の設定後は、毎日午前0時台（日本時間）に前日分だけを自動保存します。必要な場合は上のボタンで手動再作成できます。</p>
     </>}
+    {preview && <DailyReportPreview report={preview.report} fields={preview.fields} busy={busy} message={message} onBack={() => setPreview(null)} onSave={create}/>}
     {message && <p role="status" className="text-xs text-gray-700 whitespace-pre-wrap">{message}</p>}
     {result?.url && <a href={result.url} target="_blank" rel="noopener noreferrer" className="block min-h-10 text-sm font-bold text-blue-800 underline">保存した日報を開く</a>}
   </section>;
 }
+
