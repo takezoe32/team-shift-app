@@ -1,3 +1,4 @@
+import { isPartnerOverdue } from './partnerOverdue.mjs';
 import PartnerScheduleEditor from './components/PartnerScheduleEditor';
 import { planPartnerSchedule } from './partnerSchedule.mjs';
 import { canCompleteTask } from './taskCompletionPermission.mjs';
@@ -2478,6 +2479,14 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
 };
 
 const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartnerItem, togglePartnerItem, completePartnerItem, reschedulePartnerItem, deletePartnerItem, addPartnerName, updatePartnerName, deletePartnerName, currentUser, debugLog, sortedUsers }) => {
+  const [scheduleNow, setScheduleNow] = useState(Date.now);
+  useEffect(() => {
+    const refresh = () => setScheduleNow(Date.now());
+    const timer = window.setInterval(refresh, 60000);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh); };
+  }, []);
   const [quickPartnerOpen, setQuickPartnerOpen] = useState(true);
   const [date, setDate] = useState(formatDate(new Date()));
   const [timeHour, setTimeHour] = useState('');
@@ -2644,7 +2653,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
                   <div className={`text-[11px] font-bold mt-0.5 ${item.completed ? 'text-gray-400 line-through' : 'text-gray-700'}`}>{item.time || '--:--'}</div>{item.endTime&&<div className="text-[9px] text-orange-600 mt-0.5">終了予定 {item.endTime}</div>}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <span className={`inline-flex rounded-full px-3 py-1 mb-2 text-sm font-bold ${item.completed ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}`}>{item.completed ? '終了済み' : '未終了'}</span>
+                  {(item.completed || isPartnerOverdue(item, scheduleNow)) && <span className={`inline-flex rounded-full px-3 py-1 mb-2 text-sm font-bold ${item.completed ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}`}>{item.completed ? '終了済み' : '未終了'}</span>}
                   <div className={`text-[10px] font-bold mb-0.5 ${item.completed ? 'text-gray-400 line-through' : 'text-purple-600'}`}>{item.partnerName || 'パートナー未設定'}</div>
                   <div className="text-xs text-blue-600 font-bold mb-1">主担当: {(sortedUsers || []).find(user => user.id === item.assigneeUid)?.name || '未設定'}</div>
                   <div className="text-sm font-bold text-gray-800 mb-1">{item.subject || (item.content || '').split(/\r?\n/)[0] || '件名未設定'}</div>
@@ -2945,7 +2954,7 @@ summary={[[ 'パートナー名', partnerName ], ['どこ？で何を？', subje
                 {showCompletedPartnerItems && <div className="border-t border-green-200 p-2 space-y-2">{completedPartnerItems.map(renderPartnerItem)}</div>}
               </div>
             )}
-{activePartnerItems.length > 0 && <div className="space-y-2"><div className="text-xs font-bold text-gray-500 px-1">未終了のタスク（{activePartnerItems.length}件）</div>{activePartnerItems.map(renderPartnerItem)}</div>}
+{activePartnerItems.length > 0 && <div className="space-y-2"><div className="text-xs font-bold text-gray-500 px-1">対応中・予定（{activePartnerItems.length}件）</div>{activePartnerItems.map(renderPartnerItem)}</div>}
 
             </>
           )}
@@ -4981,6 +4990,7 @@ export default function App() {
     </GoogleOAuthProvider>
   );
 }
+
 
 
 
