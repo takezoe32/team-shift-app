@@ -1,3 +1,5 @@
+import { newTaskAssignees } from './newTaskAssignees.mjs';
+import QuickEntry from './components/QuickEntry';
 import { establishReportSession, endReportSession } from './dailyReportApi.mjs';
 import { planPartnerTaskAction } from './partnerTaskActions.mjs';
 import DailyReportPanel from './components/DailyReportPanel';
@@ -1223,6 +1225,8 @@ const DailyDetailView = ({
   selectedDate, changeDay, teamData, currentUserUid, shiftTypes, inventoryItems = [],
   addTask, toggleTask, deleteTask, updateTaskText, updateTaskAssignees, users, roles, sortedUsers
 }) => {
+  const [newAssigneeIds, setNewAssigneeIds] = useState(null);
+  const [quickTaskOpen, setQuickTaskOpen] = useState(false);
   const [newTaskSubject, setNewTaskSubject] = useState('');
   const [newTaskText, setNewTaskText] = useState('');
   const [newTaskEndTime, setNewTaskEndTime] = useState('');
@@ -1232,6 +1236,7 @@ const DailyDetailView = ({
   const [productScanMessage, setProductScanMessage] = useState('');
   const [newTaskVisibility, setNewTaskVisibility] = useState('public');
   const [selectedUserUid, setSelectedUserUid] = useState(currentUserUid);
+  const taskAssigneeIds = newAssigneeIds || [selectedUserUid];
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [pastFinishConfirmTaskKey, setPastFinishConfirmTaskKey] = useState(null);
   const [newTaskImages, setNewTaskImages] = useState([]);
@@ -1391,6 +1396,7 @@ const DailyDetailView = ({
     addTaskSavingRef.current = true;
     setIsUploading(true);
     try {
+      const assignees = newTaskAssignees(taskAssigneeIds, selectedUserUid, newTaskVisibility, sortedUsers.map(user => user.id));
       const images = await uploadTaskImages(newTaskImages, setTaskUploadProgress);
       const { imageUrl = '', imageName = '', imagePublicId = '', imageBytes = 0 } = images.find(media=>media.mediaType !== 'video') || {};
       if (newTaskVisibility === 'private' && selectedUserUid !== currentUserUid) {
@@ -1399,8 +1405,9 @@ const DailyDetailView = ({
       }
       const productQuantity = Number(newTaskProductQuantity);
       if (newTaskProductId && (!Number.isInteger(productQuantity) || productQuantity < 1)) { alert('使用数量は1以上の整数を入力してください。'); return; }
-      await addTask(selectedDate, selectedUserUid, newTaskText.trim(), imageUrl, imageName, imagePublicId, imageBytes, newTaskVisibility, newTaskVisibility === 'private' ? '' : newTaskSubject.trim(), newTaskVisibility === 'private' ? '' : newTaskEndTime, newTaskVisibility === 'private' ? '' : newTaskProductId, newTaskProductId ? productQuantity : 1, images);
+      await addTask(selectedDate, selectedUserUid, newTaskText.trim(), imageUrl, imageName, imagePublicId, imageBytes, newTaskVisibility, newTaskVisibility === 'private' ? '' : newTaskSubject.trim(), newTaskVisibility === 'private' ? '' : newTaskEndTime, newTaskVisibility === 'private' ? '' : newTaskProductId, newTaskProductId ? productQuantity : 1, images, assignees);
       setTaskUploadProgress({stage:'done'});
+      setNewAssigneeIds(null);
       setNewTaskVisibility('public');
       setNewTaskSubject('');
       setNewTaskText('');
@@ -1409,6 +1416,7 @@ const DailyDetailView = ({
       setNewTaskProductQuantity('1');
       setProductScanMessage('');
       clearNewTaskImage();
+      return true;
     } catch (error) {
       setTaskUploadProgress({stage:'error',message:error.message});
       console.error('画像のアップロードに失敗しました:', error);
@@ -1465,12 +1473,26 @@ const DailyDetailView = ({
         {/* スマホで使いやすいよう、タスク入力欄を一覧の上へ移動 */}
         <div className="bg-white border-b border-gray-200 p-3 shrink-0 shadow-sm">
           <div className="max-w-3xl mx-auto">
+<button type="button" disabled={isUploading} onClick={() => setQuickTaskOpen(true)} className="w-full min-h-14 mb-4 rounded-xl bg-blue-50 border-2 border-blue-500 text-blue-700 text-lg font-bold">かんたん入力（タスク）</button>
+{quickTaskOpen && <QuickEntry title="タスクのかんたん入力" onClose={() => setQuickTaskOpen(false)} onSave={handleAddTask}
+steps={[
+{title:'何をするタスクですか？', content:<>
+<p>登録日：{selectedDate}</p>{newTaskVisibility !== 'private' && <fieldset className="my-4"><legend className="font-bold text-base">担当者（複数選べます）</legend><p className="text-sm text-gray-500 my-2">担当する人の名前をすべて選んでください。</p><div className="flex flex-wrap gap-2">{sortedUsers.map(user => <label key={user.id} className={`flex items-center gap-2 min-h-12 px-3 border-2 rounded-xl text-base ${taskAssigneeIds.includes(user.id) ? 'bg-blue-50 border-blue-500' : 'border-gray-200'}`}><input type="checkbox" checked={taskAssigneeIds.includes(user.id)} onChange={e => setNewAssigneeIds(e.target.checked ? [...taskAssigneeIds, user.id] : taskAssigneeIds.filter(id => id !== user.id))}/>{user.name}</label>)}</div></fieldset>}
+<p>{newTaskVisibility === 'private' ? '自分だけの個人メモ' : 'みんなに公開するタスク'}</p>
+{newTaskVisibility !== 'private' && <label className="block font-bold">件名（必須）<input type="text" value={newTaskSubject} onChange={e => setNewTaskSubject(e.target.value)} placeholder="例：電球の交換" className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label>}
+<label className="block font-bold">詳しい内容（必須・写真だけでも可）<textarea rows={4} value={newTaskText} onChange={e => setNewTaskText(e.target.value)} placeholder="例：1階ロビーの電球を交換する" className="w-full mt-2 border border-gray-300 rounded-xl p-3 text-base"/></label>
+<ImagePicker files={newTaskImages} onChange={setNewTaskImages} disabled={isUploading}/>
+</>, validate:() => newTaskVisibility !== 'private' && !taskAssigneeIds.length ? '担当者を1人以上選んでください。' : newTaskVisibility !== 'private' && !newTaskSubject.trim() ? '件名を入力してください。' : !newTaskText.trim() && !newTaskImage ? '詳しい内容か写真を追加してください。' : ''}
+]}
+summary={[[ '登録日', selectedDate ], ['担当', newTaskVisibility === 'private' ? users[selectedUserUid]?.name : taskAssigneeIds.map(id => users[id]?.name).filter(Boolean).join('・')], ['公開範囲', newTaskVisibility === 'private' ? '自分だけの個人メモ' : 'みんなに公開'], ['件名', newTaskSubject], ['内容', newTaskText], ['終了予定', newTaskEndTime], ['使用する商品', newTaskProductId ? inventoryProductLabel(inventoryItems.find(item => item.id === newTaskProductId) || {}) + ' × ' + newTaskProductQuantity : 'なし'], ['写真・動画', newTaskImages.length + '件']]}
+/>}
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <span className="text-xs font-black text-gray-600">このタスクを</span>
               <button type="button" onClick={() => setNewTaskVisibility('public')} className={`px-3 py-1.5 rounded-full text-xs font-black border transition-all ${newTaskVisibility === 'public' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-500 border-gray-200'}`}>👥 みんなに公開</button>
               <button type="button" onClick={() => { setNewTaskVisibility('private'); setNewTaskSubject(''); setNewTaskEndTime(''); }} disabled={selectedUserUid !== currentUserUid} className={`px-3 py-1.5 rounded-full text-xs font-black border transition-all ${newTaskVisibility === 'private' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-500 border-gray-200'} ${selectedUserUid !== currentUserUid ? 'opacity-40 cursor-not-allowed' : ''}`}>🔒 個人メモ</button>
               {newTaskVisibility === 'private' && <span className="text-[10px] font-bold text-purple-600">自分だけに表示されます</span>}
             </div>
+{newTaskVisibility !== 'private' && <fieldset className="my-4"><legend className="font-bold text-base">担当者（複数選べます）</legend><p className="text-sm text-gray-500 my-2">担当する人の名前をすべて選んでください。</p><div className="flex flex-wrap gap-2">{sortedUsers.map(user => <label key={user.id} className={`flex items-center gap-2 min-h-12 px-3 border-2 rounded-xl text-base ${taskAssigneeIds.includes(user.id) ? 'bg-blue-50 border-blue-500' : 'border-gray-200'}`}><input type="checkbox" checked={taskAssigneeIds.includes(user.id)} onChange={e => setNewAssigneeIds(e.target.checked ? [...taskAssigneeIds, user.id] : taskAssigneeIds.filter(id => id !== user.id))}/>{user.name}</label>)}</div></fieldset>}
             <div className="space-y-2 mb-2">
               {newTaskVisibility !== 'private' && <input type="text" value={newTaskSubject} onChange={e=>setNewTaskSubject(e.target.value)} placeholder="件名（例：備品の補充）" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm" disabled={isUploading}/>}
               {newTaskVisibility !== 'private' && <label className="flex items-center gap-2 text-xs text-gray-600"><span className="font-bold">終了予定時刻</span><div className="flex items-center gap-1"><select aria-label="終了予定時刻の時" value={newTaskEndTime ? newTaskEndTime.split(':')[0] : ''} onChange={e=>setNewTaskEndTime(e.target.value ? e.target.value+':'+((newTaskEndTime||'').split(':')[1]||'00') : '')} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" disabled={isUploading}><option value="">時</option>{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(v=><option key={v} value={v}>{v}</option>)}</select><span>:</span><select aria-label="終了予定時刻の分" value={newTaskEndTime ? newTaskEndTime.split(':')[1] : ''} onChange={e=>setNewTaskEndTime(((newTaskEndTime||'').split(':')[0]||'00')+':'+e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" disabled={isUploading}><option value="">分</option>{['00','15','30','45'].map(v=><option key={v} value={v}>{v}</option>)}</select></div></label>}
@@ -2440,6 +2462,7 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
 };
 
 const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartnerItem, togglePartnerItem, deletePartnerItem, addPartnerName, updatePartnerName, deletePartnerName, currentUser, debugLog, sortedUsers }) => {
+  const [quickPartnerOpen, setQuickPartnerOpen] = useState(false);
   const [date, setDate] = useState(formatDate(new Date()));
   const [timeHour, setTimeHour] = useState('');
   const [timeMinute, setTimeMinute] = useState('');
@@ -2563,6 +2586,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
       setPartnerName('');
       setAssigneeUid('');
       setNewPartnerImages([]);
+      return true;
 
     } catch (error) {
       setPartnerUploadProgress({stage:'error',message:error.message});
@@ -2634,6 +2658,23 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
 
       <div className="p-4 max-w-2xl mx-auto space-y-4">
         <div ref={partnerFormRef} tabIndex={-1} role="region" aria-label={editingItemId ? "パートナータスク編集フォーム" : "パートナータスク登録フォーム"} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 space-y-3 scroll-mt-4">
+{!editingItemId && <button type="button" disabled={isSaving} onClick={() => setQuickPartnerOpen(true)} className="w-full min-h-14 mb-4 rounded-xl bg-blue-50 border-2 border-blue-500 text-blue-700 text-lg font-bold">かんたん入力（パートナータスク）</button>}
+{quickPartnerOpen && <QuickEntry title="パートナータスクのかんたん入力" onClose={() => setQuickPartnerOpen(false)} onSave={handleSave}
+steps={[
+{title:'どの会社に、何をお願いしますか？', content:<>
+<label className="block font-bold">パートナー名（必須）<input list="quick-partner-names" value={partnerName} onChange={e => setPartnerName(e.target.value)} placeholder="例：〇〇設備" className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base"/><datalist id="quick-partner-names">{(partnerNames || []).map(name => <option key={name} value={name}/>)}</datalist></label>
+<label className="block font-bold">件名（必須）<input type="text" value={subject} onChange={e => setSubject(e.target.value)} placeholder="例：エアコン点検" className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label>
+</>, validate:() => !partnerName.trim() || !subject.trim() ? 'パートナー名と件名を入力してください。' : ''},
+{title:'いつ、誰が担当しますか？', content:<>
+<label className="block font-bold">日付（必須）<input type="date" value={date} onChange={e => setDate(e.target.value)} placeholder="" className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label>
+<label className="block font-bold">開始時間（必須）<input type="time" value={time} onChange={e => { const [h = '', m = ''] = e.target.value.split(':'); setTimeHour(h); setTimeMinute(m); }} className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base"/></label>
+<label className="block font-bold">主担当者（必須）<select value={assigneeUid} onChange={e => setAssigneeUid(e.target.value)} className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base bg-white"><option value="">名前を選んでください</option>{(sortedUsers || []).map(user => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label>
+<label className="block font-bold">終了予定時間（空欄でも可）<input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} placeholder="" className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label>
+</>,validate:() => !date || !time || !assigneeUid ? '日付・開始時間・主担当者を選んでください。' : ''},
+{title:'お願いする内容を教えてください', content:<><label className="block font-bold">詳しい内容（必須・写真だけでも可）<textarea rows={4} value={content} onChange={e => setContent(e.target.value)} placeholder="例：1階ロビーの電球を交換する" className="w-full mt-2 border border-gray-300 rounded-xl p-3 text-base"/></label><ImagePicker files={newPartnerImages} onChange={setNewPartnerImages} disabled={isSaving}/></>, validate:() => !content.trim() && !newPartnerImage ? '詳しい内容か写真を追加してください。' : ''}
+]}
+summary={[[ 'パートナー名', partnerName ], ['件名', subject], ['日付', date], ['開始時間', time], ['終了予定', endTime], ['主担当者', (sortedUsers || []).find(user => user.id === assigneeUid)?.name], ['内容', content], ['写真・動画', newPartnerImages.length + '件']]}
+/>}
           {editingItemId && (
             <div className="flex items-center justify-between bg-blue-50 border border-blue-100 rounded-xl px-3 py-2">
               <span className="text-[10px] font-bold text-blue-700">パートナー予定を編集中</span>
@@ -4688,7 +4729,8 @@ export default function App() {
             ) : activeTab === 'daily' ? (
               <DailyDetailView 
                 inventoryItems={inventoryItems}
-                addTask={async (dateStr, targetUid, text, imageUrl = '', imageName = '', imagePublicId = '', imageBytes = 0, visibility = 'public', subject = '', endTime = '', productId = '', productQuantity = 1, images = []) => {
+                addTask={async (dateStr, targetUid, text, imageUrl = '', imageName = '', imagePublicId = '', imageBytes = 0, visibility = 'public', subject = '', endTime = '', productId = '', productQuantity = 1, images = [], assigneeIds = [targetUid]) => {
+                  const selectedAssignees = newTaskAssignees(assigneeIds, targetUid, visibility, sortedUsers.map(user => user.id));
                   const product = productId ? inventoryItems.find(item => item.id === productId) : null;
                   const quantity = Math.max(1, Number(productQuantity) || 1);
                   if (productId && (!product || Number(product.stock || 0) < quantity)) {
@@ -4717,7 +4759,7 @@ export default function App() {
                             completed: false,
                             createdAt: new Date().toISOString(),
                             ownerUid: targetUid,
-                            assigneeIds: [targetUid],
+                            assigneeIds: selectedAssignees,
                             visibility: visibility === 'private' ? 'private' : 'public',
                             ...(product ? { productId: product.id, productName: inventoryProductLabel(product), inventoryQuantity: quantity, inventoryDeducted: true } : {}),
                             completedAt: null,
@@ -4898,3 +4940,4 @@ export default function App() {
     </GoogleOAuthProvider>
   );
 }
+
