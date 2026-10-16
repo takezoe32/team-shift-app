@@ -19,7 +19,7 @@ export default function QuickEntry({ title, steps, summary, onSave, onClose }) {
     } catch { setError('登録できませんでした。入力内容は残っています。もう一度お試しください。'); }
     finally { lock.current = false; setSaving(false); }
   };
-  return <div className="fixed inset-0 z-[100] bg-white overflow-y-auto" role="dialog" aria-modal="true" aria-label={title} onKeyDown={event => { if (event.key === 'Escape' && !saving) onClose(); }}>
+  return <div className="fixed inset-x-0 top-0 bottom-[68px] z-[100] bg-white overflow-y-auto" role="region" aria-label={title} onKeyDown={event => { if (event.key === 'Escape' && !saving) onClose(); }}>
     <div className="max-w-xl mx-auto p-5 pb-12 text-base">
       <button autoFocus type="button" disabled={saving} onClick={onClose} className="min-h-12 px-4 rounded-xl border border-gray-300 mb-5">通常の入力に戻る</button>
       <p className="text-blue-700 font-bold">{title} ・ {page + 1} / {steps.length + 1}</p>
