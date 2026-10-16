@@ -2544,8 +2544,8 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
   };
 
   const handleSave = async () => {
-    if (!partnerName || !subject.trim() || !assigneeUid || !date || !time || (!editingItemId && !content.trim() && !newPartnerImage)) {
-      alert('パートナー名・件名・主担当者・日付・開始時間・内容を入力してください。');
+    if (!partnerName || !subject.trim() || !assigneeUid || !date || !time) {
+      alert('パートナー名・件名・主担当者・日付・開始時間を入力してください。');
       return;
     }
 
@@ -2561,7 +2561,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
       const { imageUrl = '', imageName = '', imagePublicId = '', imageBytes = 0 } = images.find(media=>media.mediaType !== 'video') || {};
       const hasNewUpdate = !!(content.trim() || addedImages.length);
       const newUpdate = hasNewUpdate ? createPartnerUpdate(content.trim(), currentUser, addedImages, editingItemId ? 'handoff' : 'initial') : null;
-      const updates = editingItemId ? [...getPartnerUpdates(currentItem), ...(newUpdate ? [newUpdate] : [])] : [newUpdate];
+      const updates = editingItemId ? [...getPartnerUpdates(currentItem), ...(newUpdate ? [newUpdate] : [])] : (newUpdate ? [newUpdate] : []);
       const itemData = { images, partnerName, subject: subject.trim(), assigneeUid, date, time, endTime, content: content.trim() || currentItem?.content || '', updates, createdByUid: editingItemId ? (currentItem?.createdByUid || '') : (currentUser?.id || ''), createdByName: editingItemId ? (currentItem?.createdByName || '') : (currentUser?.name || ''), ...(imageUrl ? { imageUrl, imageName, imagePublicId, imageBytes, imageUploadedAt: new Date().toISOString() } : {}) };
       if (editingItemId) {
         const savedItemId = editingItemId;
@@ -2669,11 +2669,11 @@ steps={[
 </>, validate:() => !partnerName.trim() || !subject.trim() ? 'パートナー名と件名を入力してください。' : ''},
 {title:'いつ、誰が担当しますか？', content:<>
 <label className="block font-bold">日付（必須）<input type="date" value={date} onChange={e => setDate(e.target.value)} placeholder="" className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label>
-<label className="block font-bold">開始時間（必須）<input type="time" value={time} onChange={e => { const [h = '', m = ''] = e.target.value.split(':'); setTimeHour(h); setTimeMinute(m); }} className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base"/></label>
+<fieldset><legend className="font-bold">開始時間（必須・15分刻み）</legend><div className="flex items-center gap-2 mt-2"><select aria-label="開始時間の時" value={timeHour} onChange={e => setTimeHour(e.target.value)} className="flex-1 min-h-14 border border-gray-300 rounded-xl p-3 text-base bg-white"><option value="">時を選択</option>{Array.from({length:24}, (_, h) => String(h).padStart(2, '0')).map(h => <option key={h} value={h}>{h}時</option>)}</select><select aria-label="開始時間の分" value={timeMinute} onChange={e => setTimeMinute(e.target.value)} className="flex-1 min-h-14 border border-gray-300 rounded-xl p-3 text-base bg-white"><option value="">分を選択</option>{['00', '15', '30', '45'].map(m => <option key={m} value={m}>{m}分</option>)}</select></div></fieldset>
 <label className="block font-bold">主担当者（必須）<select value={assigneeUid} onChange={e => setAssigneeUid(e.target.value)} className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base bg-white"><option value="">名前を選んでください</option>{(sortedUsers || []).map(user => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label>
 <label className="block font-bold">終了予定時間（空欄でも可）<input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} placeholder="" className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label>
 </>,validate:() => !date || !time || !assigneeUid ? '日付・開始時間・主担当者を選んでください。' : ''},
-{title:'お願いする内容を教えてください', content:<><label className="block font-bold">詳しい内容（必須・写真だけでも可）<textarea rows={4} value={content} onChange={e => setContent(e.target.value)} placeholder="例：1階ロビーの電球を交換する" className="w-full mt-2 border border-gray-300 rounded-xl p-3 text-base"/></label><ImagePicker files={newPartnerImages} onChange={setNewPartnerImages} disabled={isSaving}/></>, validate:() => !content.trim() && !newPartnerImage ? '詳しい内容か写真を追加してください。' : ''}
+{title:'お願いする内容を教えてください', content:<><label className="block font-bold">詳しい内容（任意）<textarea rows={4} value={content} onChange={e => setContent(e.target.value)} placeholder="例：1階ロビーの電球を交換する" className="w-full mt-2 border border-gray-300 rounded-xl p-3 text-base"/></label><ImagePicker files={newPartnerImages} onChange={setNewPartnerImages} disabled={isSaving}/></>}
 ]}
 summary={[[ 'パートナー名', partnerName ], ['件名', subject], ['日付', date], ['開始時間', time], ['終了予定', endTime], ['主担当者', (sortedUsers || []).find(user => user.id === assigneeUid)?.name], ['内容', content], ['写真・動画', newPartnerImages.length + '件']]}
 />}
@@ -2880,7 +2880,7 @@ summary={[[ 'パートナー名', partnerName ], ['件名', subject], ['日付',
             <label className="block"><span className="text-[10px] font-bold text-gray-500">件名</span><input type="text" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="パートナータスクの件名を入力" className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400" /></label>
             {editingItemId && <PartnerUpdateHistory item={editingPartnerItem}/>}
             <label className="block">
-              <span className="text-[10px] font-bold text-gray-500">内容</span>
+              <span className="text-[10px] font-bold text-gray-500">詳しい内容（任意）</span>
               <textarea
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
