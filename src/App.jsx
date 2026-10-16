@@ -1,3 +1,4 @@
+import QuarterHourTime from './components/QuarterHourTime';
 import { newTaskAssignees } from './newTaskAssignees.mjs';
 import QuickEntry from './components/QuickEntry';
 import { establishReportSession, endReportSession } from './dailyReportApi.mjs';
@@ -1482,6 +1483,7 @@ steps={[
 {newTaskVisibility !== 'private' && <label className="block font-bold">どこで？どんな内容？（必須）<input type="text" value={newTaskSubject} onChange={e => setNewTaskSubject(e.target.value)} placeholder="例：1階ロビーの電球交換" className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label>}
 <label className="block font-bold">{newTaskVisibility === 'private' ? '個人メモ（内容か写真が必要）' : '詳しい内容（任意）'}<textarea rows={4} value={newTaskText} onChange={e => setNewTaskText(e.target.value)} placeholder="例：1階ロビーの電球を交換する" className="w-full mt-2 border border-gray-300 rounded-xl p-3 text-base"/></label>
 {newTaskVisibility !== 'private' && <fieldset className="my-4"><legend className="font-bold text-base">担当者（複数選べます）</legend><p className="text-sm text-gray-500 my-2">担当する人の名前をすべて選んでください。</p><div className="flex flex-wrap gap-2">{sortedUsers.map(user => <label key={user.id} className={`flex items-center gap-2 min-h-12 px-3 border-2 rounded-xl text-base ${taskAssigneeIds.includes(user.id) ? 'bg-blue-50 border-blue-500' : 'border-gray-200'}`}><input type="checkbox" checked={taskAssigneeIds.includes(user.id)} onChange={e => setNewAssigneeIds(e.target.checked ? [...taskAssigneeIds, user.id] : taskAssigneeIds.filter(id => id !== user.id))}/>{user.name}</label>)}</div></fieldset>}
+{newTaskVisibility !== 'private' && <QuarterHourTime label="終了予定時間" value={newTaskEndTime} onChange={setNewTaskEndTime} disabled={isUploading}/>}
 <ImagePicker files={newTaskImages} onChange={setNewTaskImages} disabled={isUploading}/>
 </>, validate:() => newTaskVisibility !== 'private' && !taskAssigneeIds.length ? '担当者を1人以上選んでください。' : newTaskVisibility !== 'private' && !newTaskSubject.trim() ? 'どこで？どんな内容？を入力してください。' : newTaskVisibility === 'private' && !newTaskText.trim() && !newTaskImage ? '個人メモか写真を追加してください。' : ''}
 ]}
@@ -2671,7 +2673,7 @@ steps={[
 <label className="block font-bold">日付（必須）<input type="date" value={date} onChange={e => setDate(e.target.value)} placeholder="" className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label>
 <fieldset><legend className="font-bold">開始時間（必須・15分刻み）</legend><div className="flex items-center gap-2 mt-2"><select aria-label="開始時間の時" value={timeHour} onChange={e => setTimeHour(e.target.value)} className="flex-1 min-h-14 border border-gray-300 rounded-xl p-3 text-base bg-white"><option value="">時を選択</option>{Array.from({length:24}, (_, h) => String(h).padStart(2, '0')).map(h => <option key={h} value={h}>{h}時</option>)}</select><select aria-label="開始時間の分" value={timeMinute} onChange={e => setTimeMinute(e.target.value)} className="flex-1 min-h-14 border border-gray-300 rounded-xl p-3 text-base bg-white"><option value="">分を選択</option>{['00', '15', '30', '45'].map(m => <option key={m} value={m}>{m}分</option>)}</select></div></fieldset>
 <label className="block font-bold">主担当者（必須）<select value={assigneeUid} onChange={e => setAssigneeUid(e.target.value)} className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base bg-white"><option value="">名前を選んでください</option>{(sortedUsers || []).map(user => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label>
-<label className="block font-bold">終了予定時間（空欄でも可）<input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} placeholder="" className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label>
+<QuarterHourTime label="終了予定時間" value={endTime} onChange={setEndTime}/>
 </>,validate:() => !date || !time || !assigneeUid ? '日付・開始時間・主担当者を選んでください。' : ''},
 {title:'お願いする内容を教えてください', content:<><label className="block font-bold">詳しい内容（任意）<textarea rows={4} value={content} onChange={e => setContent(e.target.value)} placeholder="例：1階ロビーの電球を交換する" className="w-full mt-2 border border-gray-300 rounded-xl p-3 text-base"/></label><ImagePicker files={newPartnerImages} onChange={setNewPartnerImages} disabled={isSaving}/></>}
 ]}
@@ -4942,4 +4944,5 @@ export default function App() {
     </GoogleOAuthProvider>
   );
 }
+
 
