@@ -21,7 +21,7 @@ test('preview reads retained manual cells using the actual day sheet and explici
 test('template preview uses the Drive writer cell positions and overflow pages', () => {
   const report = { date: '2026-10-16', staff: ['竹添'], entries: Array.from({ length: 23 }, (_, i) => ({ text: '作業' + i, names: '竹添' })), visitors: Array.from({ length: 5 }, (_, i) => ({ text: '業者' + i })), handoff: [{ text: '未終了' }] };
   const first = previewCells(report, { weather: '晴れ', chlorine: '2', remarks: '備考' }, 0);
-  assert.equal(first.T3, '竹添'); assert.equal(first.D14, '作業0'); assert.equal(first.AD14, '竹添'); assert.equal(first.C36, '業者0'); assert.equal(first.AF8, '2'); assert.equal(first.C40, '備考');
+  assert.equal(first.T3, '竹添'); assert.equal(first.E14, '作業0　竹添'); assert.equal(first.AD14, undefined); assert.equal(first.C36, '業者0'); assert.equal(first.AF8, '2'); assert.equal(first.C40, '備考');
   const second = previewCells(report, {}, 1);
-  assert.equal(second.D14, '作業22'); assert.equal(second.C36, '業者4'); assert.equal(second.D15, '');
+  assert.equal(second.E14, '作業22　竹添'); assert.equal(second.C36, '業者4'); assert.equal(second.E15, '');
 });

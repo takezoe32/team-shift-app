@@ -66,6 +66,7 @@ test('task titles link to their own saved attachment; regenerated rows clear old
   const report = { entries: [{ key: 'a' }, { key: 'b' }], handoff: [{ key: 'c' }] };
   const links = taskAttachmentRequests(7, report, [{ taskKey: 'a', savedUrl: 'https://drive.google.com/file/d/a/view' }, { taskKey: 'c', savedUrl: 'https://drive.google.com/file/d/c/view' }]);
   assert.equal(links[0].repeatCell.cell.userEnteredFormat.textFormat.link.uri, 'https://drive.google.com/file/d/a/view');
+  assert.equal(links[0].repeatCell.range.startColumnIndex, 4);
   assert.deepEqual(links[1].repeatCell.cell.userEnteredFormat.textFormat.link, undefined);
   assert.equal(links[22].repeatCell.cell.userEnteredFormat.textFormat.link, undefined);
   assert.ok(taskAttachmentRequests(7, report, [], 1).every(r => !r.repeatCell.cell.userEnteredFormat.textFormat.link?.uri));
