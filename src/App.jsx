@@ -1,3 +1,5 @@
+import PartnerScheduleEditor from './components/PartnerScheduleEditor';
+import { planPartnerSchedule } from './partnerSchedule.mjs';
 import { canCompleteTask } from './taskCompletionPermission.mjs';
 import QuarterHourTime from './components/QuarterHourTime';
 import { newTaskAssignees } from './newTaskAssignees.mjs';
@@ -2475,7 +2477,7 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
   );
 };
 
-const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartnerItem, togglePartnerItem, completePartnerItem, deletePartnerItem, addPartnerName, updatePartnerName, deletePartnerName, currentUser, debugLog, sortedUsers }) => {
+const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartnerItem, togglePartnerItem, completePartnerItem, reschedulePartnerItem, deletePartnerItem, addPartnerName, updatePartnerName, deletePartnerName, currentUser, debugLog, sortedUsers }) => {
   const [quickPartnerOpen, setQuickPartnerOpen] = useState(true);
   const [date, setDate] = useState(formatDate(new Date()));
   const [timeHour, setTimeHour] = useState('');
@@ -2631,7 +2633,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
   const activePartnerItems = sortedItems.filter(item => !item.completed);
   const completedPartnerItems = sortedItems.filter(item => item.completed).sort((a, b) => String(b.completedAt || '').localeCompare(String(a.completedAt || '')));
   const renderPartnerItem = (item) => (
-              <div key={item.id} className={`bg-white rounded-xl border ${item.completed ? 'border-green-200' : 'border-gray-200'} px-3 py-2 flex items-start gap-2`}>
+              <div key={item.id} className={`bg-white rounded-xl border ${item.completed ? 'border-green-200' : 'border-gray-200'} px-3 py-3 flex flex-wrap items-start gap-2`}>
                 <button type="button" disabled={changingPartnerId !== null} onClick={() => finishPartner(item)}
                   className={`shrink-0 mt-0.5 min-w-16 min-h-12 px-3 rounded-xl border-2 flex items-center justify-center ${item.completed ? 'border-green-500 bg-green-500 text-white' : 'border-green-600 bg-green-600 text-white hover:bg-green-700'}`}
                   title={item.completed ? '未完了に戻す' : '終了にする'}>
@@ -2642,6 +2644,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
                   <div className={`text-[11px] font-bold mt-0.5 ${item.completed ? 'text-gray-400 line-through' : 'text-gray-700'}`}>{item.time || '--:--'}</div>{item.endTime&&<div className="text-[9px] text-orange-600 mt-0.5">終了予定 {item.endTime}</div>}
                 </div>
                 <div className="flex-1 min-w-0">
+                  <span className={`inline-flex rounded-full px-3 py-1 mb-2 text-sm font-bold ${item.completed ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}`}>{item.completed ? '終了済み' : '未終了'}</span>
                   <div className={`text-[10px] font-bold mb-0.5 ${item.completed ? 'text-gray-400 line-through' : 'text-purple-600'}`}>{item.partnerName || 'パートナー未設定'}</div>
                   <div className="text-xs text-blue-600 font-bold mb-1">主担当: {(sortedUsers || []).find(user => user.id === item.assigneeUid)?.name || '未設定'}</div>
                   <div className="text-sm font-bold text-gray-800 mb-1">{item.subject || (item.content || '').split(/\r?\n/)[0] || '件名未設定'}</div>
@@ -2669,6 +2672,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
                   <button type="button" disabled={isSaving || deletingPartnerId !== null} aria-label={`${item.subject || 'パートナータスク'}を削除`} onClick={() => handleDeletePartnerItem(item)}
                     className="p-1 text-gray-300 hover:text-red-500 rounded-md" title="削除"><Trash2 size={14}/></button>
                 </div>
+                {!item.completed && <PartnerScheduleEditor item={item} onSave={reschedulePartnerItem} disabled={isSaving || !!editingItemId || deletingPartnerId !== null || changingPartnerId !== null}/>}
               </div>
   );
 
@@ -2941,7 +2945,7 @@ summary={[[ 'パートナー名', partnerName ], ['どこ？で何を？', subje
                 {showCompletedPartnerItems && <div className="border-t border-green-200 p-2 space-y-2">{completedPartnerItems.map(renderPartnerItem)}</div>}
               </div>
             )}
-{activePartnerItems.length > 0 && <div className="space-y-2"><div className="text-xs font-bold text-gray-500 px-1">対応中・予定（{activePartnerItems.length}件）</div>{activePartnerItems.map(renderPartnerItem)}</div>}
+{activePartnerItems.length > 0 && <div className="space-y-2"><div className="text-xs font-bold text-gray-500 px-1">未終了のタスク（{activePartnerItems.length}件）</div>{activePartnerItems.map(renderPartnerItem)}</div>}
 
             </>
           )}
@@ -4401,6 +4405,17 @@ export default function App() {
                   setPartnerItems(updatedItems);
                 }}
                 completePartnerItem={(itemId) => changeCalendarPartnerTask(itemId, 'complete')}
+                reschedulePartnerItem={async (itemId, schedule) => {
+                  const next = await runTransaction(db, async transaction => {
+                    const ref = doc(db, 'app_data', 'shared_state');
+                    const snapshot = await transaction.get(ref);
+                    if (!snapshot.exists()) throw new Error('共有データが見つかりません。');
+                    const nextItems = planPartnerSchedule(snapshot.data().partnerItems || [], itemId, schedule);
+                    transaction.update(ref, { partnerItems: nextItems });
+                    return nextItems;
+                  });
+                  setPartnerItems(next);
+                }}
                 togglePartnerItem={async (itemId) => {
                   const now = new Date().toISOString();
                   const updatedItems = partnerItems.map(item => item.id === itemId
@@ -4966,6 +4981,7 @@ export default function App() {
     </GoogleOAuthProvider>
   );
 }
+
 
 
 
