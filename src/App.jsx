@@ -23,7 +23,7 @@ import { planTaskEdit } from './taskEdit.mjs';
 import { prepareInventoryImage } from './inventoryImage.js';
 import { hasInventoryProductDetails, inventoryProductLabel, validateInventoryReplacement } from './inventoryProduct.mjs';
 import LabelOcrCapture from './components/LabelOcrCapture';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { GoogleOAuthProvider, GoogleLogin, googleLogout } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode';
 import { initializeApp } from 'firebase/app';
@@ -232,19 +232,32 @@ const createPartnerUpdate = (text, user, image = null, kind = 'handoff') => ({
 });
 
 const PartnerUpdateHistory = ({ item, onOpen }) => {
-  const updates = newestPartnerUpdates(getPartnerUpdates(item));
+  const updates = newestPartnerUpdates(getPartnerUpdates(item)).reverse();
   const historyRef = useRef(null);
-  const latestUpdateId = updates[0]?.id;
-  useEffect(() => { if (historyRef.current) historyRef.current.scrollTop = 0; }, [item?.id, latestUpdateId]);
+  const contentRef = useRef(null);
+  const latestUpdateId = updates[updates.length - 1]?.id;
+  useLayoutEffect(() => {
+    const scroller = historyRef.current;
+    const content = contentRef.current;
+    if (!scroller || !content) return;
+    let followBottom = true;
+    const toBottom = () => { if (followBottom) scroller.scrollTop = scroller.scrollHeight; };
+    const onScroll = () => { followBottom = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop < 12; };
+    toBottom();
+    scroller.addEventListener('scroll', onScroll);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(toBottom);
+    observer?.observe(content);
+    return () => { scroller.removeEventListener('scroll', onScroll); observer?.disconnect(); };
+  }, [item?.id, latestUpdateId]);
   if (!updates.length) return null;
   const renderUpdate = (update, latest = false) => <div key={update.id} className={`rounded-xl border p-3 ${latest ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-200'}`}>
     <div className="text-sm font-bold text-gray-600">（{update.authorName || '不明なユーザー'}）{update.createdAt ? ' ・ ' + new Date(update.createdAt).toLocaleString('ja-JP') : ''}</div>
     <div className="text-base text-gray-800 whitespace-pre-wrap break-words mt-2">{update.text}</div><ImageGallery item={update} onOpen={onOpen}/>
   </div>;
   return <section className="space-y-2" aria-label="申し送り履歴">
-    <h3 className="text-base font-bold text-blue-800">申し送り（新しい順）</h3>
+    <h3 className="text-base font-bold text-blue-800">申し送り（古い順）</h3>
     <div ref={historyRef} className="max-h-64 overflow-y-auto space-y-2 pr-1" tabIndex={0} aria-label="申し送りをスクロール">
-      {updates.map((update, index) => <div key={update.id}>{index === 0 && <p className="text-sm font-bold text-blue-700 mb-1">最新の申し送り</p>}{renderUpdate(update, index === 0)}</div>)}
+      <div ref={contentRef} className="space-y-2">{updates.map((update, index) => <div key={update.id}>{index === updates.length - 1 && <p className="text-sm font-bold text-blue-700 mb-1">最新の申し送り</p>}{renderUpdate(update, index === updates.length - 1)}</div>)}</div>
     </div>
   </section>;
 };
