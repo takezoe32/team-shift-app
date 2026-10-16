@@ -18,6 +18,24 @@ function fixture(options = {}) {
   return { handler, state, store };
 }
 
+test('preview uses canonical data without Drive writes, OAuth refresh or a monthly lock', async () => {
+  const { handler, state } = fixture(); const res = response();
+  await handler(request({ action: 'preview', date: '2026-10-15', fields: { weather: '晴れ' }, report: { entries: [{ text: 'forged' }] } }), res);
+  assert.equal(res.code, 200);
+  assert.equal(res.value.report.entries[0].text, 'canonical task');
+  assert.deepEqual(res.value.fields, { weather: '晴れ' });
+  assert.equal(state.reads, 1); assert.equal(state.access, 0); assert.equal(state.exchanges, 0); assert.equal(state.saves, 0); assert.equal(state.released, 0);
+  assert.ok(!JSON.stringify(res.value).includes('server-only'));
+});
+test('preview requires a session and validates its date and manual fields before reading', async () => {
+  const { handler, state } = fixture();
+  const req = request({ action: 'preview', date: '2026-10-15' }); req.headers.cookie = `__Host-teamshift_report_csrf=${csrf}`;
+  const unauthenticated = response(); await handler(req, unauthenticated); assert.equal(unauthenticated.code, 401);
+  for (const body of [{ action: 'preview', date: 'bad' }, { action: 'preview', date: '2026-10-15', fields: { remarks: 42 } }]) {
+    const res = response(); await handler(request(body), res); assert.equal(res.code, 400);
+  }
+  assert.equal(state.reads, 0); assert.equal(state.saves, 0);
+});
 test('server configuration fails closed and secret must have 256 bits', () => {
   assert.equal(configuration({}).ready, false);
   assert.throws(() => configuration({ GOOGLE_CLIENT_SECRET: 'x', REPORT_AUTH_SECRET: 'short', FIREBASE_SERVICE_ACCOUNT_JSON: '{}' }));
