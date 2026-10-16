@@ -18,13 +18,13 @@ function fixture(options = {}) {
   return { handler, state, store };
 }
 
-test('preview uses canonical data without Drive writes, OAuth refresh or a monthly lock', async () => {
+test('preview uses canonical data and reads Drive without writes or a monthly lock', async () => {
   const { handler, state } = fixture(); const res = response();
   await handler(request({ action: 'preview', date: '2026-10-15', fields: { weather: '晴れ' }, report: { entries: [{ text: 'forged' }] } }), res);
   assert.equal(res.code, 200);
   assert.equal(res.value.report.entries[0].text, 'canonical task');
   assert.deepEqual(res.value.fields, { weather: '晴れ' });
-  assert.equal(state.reads, 1); assert.equal(state.access, 0); assert.equal(state.exchanges, 0); assert.equal(state.saves, 0); assert.equal(state.released, 0);
+  assert.equal(state.reads, 1); assert.equal(state.access, 1); assert.equal(state.exchanges, 0); assert.equal(state.saves, 0); assert.equal(state.released, 0);
   assert.ok(!JSON.stringify(res.value).includes('server-only'));
 });
 test('preview requires a session and validates its date and manual fields before reading', async () => {

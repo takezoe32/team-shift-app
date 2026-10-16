@@ -1,6 +1,7 @@
 import { runDailyReport } from './_lib/save-daily-report.js';
 import { configuration, fault, oauth, privateStore, verifyIdentity, sessionFrom, issueSession, csrfToken, verifyRequest, clearSession } from './_lib/report-auth.js';
-import { collectDailyReport, validateReportDate } from '../src/dailyReport.mjs';
+import { validateReportDate } from '../src/dailyReport.mjs';
+import { previewDailyReport } from './_lib/preview-daily-report.js';
 import { saveDailyReportToDrive } from '../src/dailyReportDrive.mjs';
 
 export function createReportHandler({ configure = configuration, makeClient = oauth, makeStore = privateStore, verifyUser = verifyIdentity, saveReport = saveDailyReportToDrive, fetcher = fetch } = {}) {
@@ -59,8 +60,7 @@ export function createReportHandler({ configure = configuration, makeClient = oa
         fields[key] = body.fields[key];
       }
       if (body.action === 'preview') {
-        const report = collectDailyReport(await store.source(), body.date);
-        return res.status(200).json({ report, fields });
+        return res.status(200).json(await previewDailyReport({ store, client, date: body.date, fields, fetcher }));
       }
       const saved = await runDailyReport({ store, client, date: body.date, fields, saveReport, fetcher });
       issueSession(res, session.email, config);
