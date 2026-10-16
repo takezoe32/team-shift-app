@@ -21,10 +21,10 @@ test('completion date in Japan is used instead of planned date; private and unfi
 test('RAW range mapping preserves manual sections when omitted and paginates without dropping entries', () => {
   const report = { date: '2026-10-15', entries: Array.from({ length: 25 }, (_, i) => ({ text: '=' + i, names: '担当' })) };
   const map = Object.fromEntries(reportValueRanges(report, {}, '15').map(r => [r.range, r.values[0][0]]));
-  assert.equal(map["'15'!D14"], '=0'); assert.equal(map["'15'!D35"], '=21');
+  assert.equal(map["'15'!E14"], '=0　担当'); assert.equal(map["'15'!E35"], '=21　担当');
   assert.equal(map["'15'!C6"], '終了していないタスク（0件）'); assert.equal(map["'15'!T3"], ''); assert.equal(map["'15'!C40"], undefined);
   const overflow = Object.fromEntries(reportValueRanges(report, {}, '15-2', 1).map(r => [r.range, r.values[0][0]]));
-  assert.equal(overflow["'15-2'!D14"], '=22'); assert.equal(overflow["'15-2'!D17"], '');
+  assert.equal(overflow["'15-2'!E14"], '=22　担当'); assert.equal(overflow["'15-2'!E17"], '');
 });
 
 const response = (value, status = 200) => ({ ok: status < 400, status, json: async () => value });
@@ -46,7 +46,7 @@ test('Drive save reuses monthly file, creates visible overflow sheets, writes RA
   assert.ok(batches[0].requests.some(r => r.updateSheetProperties?.properties.hidden === false));
   const values = JSON.parse(calls.find(c => c.url.endsWith('/values:batchUpdate')).options.body);
   assert.equal(values.valueInputOption, 'RAW');
-  assert.equal(values.data.find(r => r.range === "'15-2'!D14").values[0][0], '作業22');
+  assert.equal(values.data.find(r => r.range === "'15-2'!E14").values[0][0], '作業22　担当');
 });
 
 test('inaccessible folder prevents any creation or data write', async () => {

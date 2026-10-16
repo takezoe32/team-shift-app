@@ -1,3 +1,4 @@
+import { reportWorkLayoutRequests, reportWorkHeight } from './dailyReportWork.mjs';
 import { archiveReportMedia, mediaSheetRequests, taskAttachmentRequests, handoffListRequests } from './dailyReportMedia.mjs';
 import { REPORT_FOLDER_ID, reportValueRanges, reportPageCount } from './dailyReport.mjs';
 
@@ -57,17 +58,14 @@ export async function saveDailyReportToDrive(token, report, fields = {}, fetcher
   if (requests.length) await call(`https://sheets.googleapis.com/v4/spreadsheets/${file.id}:batchUpdate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requests }) });
   const archivedMedia = await archiveReportMedia(report, call, fetcher);
   const heights = [];
+  for (let page = 0; page < pageCount; page++) heights.push(...reportWorkLayoutRequests(sheetIds[page === 0 ? day : `${day}-${page + 1}`], report.entries.slice(page * 22, (page + 1) * 22)));
   if (fields.weather !== undefined) {
     heights.push({ repeatCell: { range: { sheetId: sheetIds[day], startRowIndex: 4, endRowIndex: 5, startColumnIndex: 26, endColumnIndex: 31 }, cell: { userEnteredFormat: { textFormat: { fontSize: 9 }, wrapStrategy: 'WRAP', verticalAlignment: 'MIDDLE' } }, fields: 'userEnteredFormat.textFormat.fontSize,userEnteredFormat.wrapStrategy,userEnteredFormat.verticalAlignment' } });
     heights.push({ updateDimensionProperties: { range: { sheetId: sheetIds[day], dimension: 'ROWS', startIndex: 4, endIndex: 5 }, properties: { pixelSize: Math.max(26, Math.ceil([...('天候：' + fields.weather)].length / 10) * 16 + 4) }, fields: 'pixelSize' } });
   }
   for (let page = 0; page < pageCount; page++) for (let i = 0; i < 22; i++) {
     const entry = report.entries[page * 22 + i];
-    const lines = Math.max(1, ...(entry?.text || '').split('\n').map(line => Math.ceil([...line].length / 42)));
-    const nameLines = Math.max(1, Math.ceil([...(entry?.names || '')].length / 2));
-    const fontSize = Math.max(5, Math.min(10, Math.floor((lines * 19 + 2) / nameLines)));
-    heights.push({ repeatCell: { range: { sheetId: sheetIds[page === 0 ? day : `${day}-${page + 1}`], startRowIndex: 13 + i, endRowIndex: 14 + i, startColumnIndex: 29, endColumnIndex: 31 }, cell: { userEnteredFormat: { textFormat: { fontSize }, wrapStrategy: 'WRAP' } }, fields: 'userEnteredFormat.textFormat.fontSize,userEnteredFormat.wrapStrategy' } });
-    heights.push({ updateDimensionProperties: { range: { sheetId: sheetIds[page === 0 ? day : `${day}-${page + 1}`], dimension: 'ROWS', startIndex: 13 + i, endIndex: 14 + i }, properties: { pixelSize: Math.max(24, lines * 19 + 6, nameLines * fontSize * 1.4 + 6) }, fields: 'pixelSize' } });
+    heights.push({ updateDimensionProperties: { range: { sheetId: sheetIds[page === 0 ? day : `${day}-${page + 1}`], dimension: 'ROWS', startIndex: 13 + i, endIndex: 14 + i }, properties: { pixelSize: reportWorkHeight(entry) }, fields: 'pixelSize' } });
   }
   for (let page = 0; page < pageCount; page++) {
     const title = page === 0 ? day : `${day}-${page + 1}`;
@@ -113,3 +111,4 @@ export function reportSheetOrderRequests(sheetIds) {
   });
   return titles.map((title, index) => ({ updateSheetProperties: { properties: { sheetId: sheetIds[title], index }, fields: 'index' } }));
 }
+

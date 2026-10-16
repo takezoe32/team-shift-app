@@ -65,7 +65,7 @@ export function mediaSheetRequests(sheetId, media, rowCount = 1000, columnCount 
 
 export function taskAttachmentRequests(sheetId, report, media, page = 0) {
   const requests = [];
-  for (const [items, start, count, column] of [[report.entries, 13, 22, 3], [[], 5, 8, 2]]) {
+  for (const [items, start, count, column] of [[report.entries, 13, 22, 4], [[], 5, 8, 2]]) {
     for (let i = 0; i < count; i++) {
       const entry = items[page * count + i];
       const attachment = entry && media.find(item => item.taskKey === entry.key);
@@ -103,3 +103,4 @@ export function handoffListRequests(sheetId, handoff, media, rowCount = 43) {
   requests.push({ updateCells: { start: { sheetId, rowIndex: 44 + entries.length, columnIndex: 3 }, rows: [{ values: [formula(`=HYPERLINK("#gid=${sheetId}&range=C6","日報へ戻る")`)] }], fields: 'userEnteredValue,userEnteredFormat.textFormat.link' } });
   return requests;
 }
+

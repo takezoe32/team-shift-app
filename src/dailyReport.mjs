@@ -1,3 +1,4 @@
+import { reportCompletionTime, reportWorkText } from './dailyReportWork.mjs';
 import { partnerAssigneeIds } from './partnerAssignees.mjs';
 import { getTaskImages } from './taskImages.mjs';
 export const MEDIA_FOLDER_ID = '1ZH9lLBsZE0wtXvA_Cdq48Hl7PY3Ld-gw';
@@ -69,7 +70,7 @@ export function reportValueRanges(report, fields, sheetTitle, page = 0) {
   const quoted = `'${sheetTitle.replaceAll("'", "''")}'`;
   const cells = { B1: '施 設 業 務 日 誌', N5: year + '年', S5: Number(month) + '月', V5: Number(day) + '日', Y5: '(' + new Intl.DateTimeFormat('ja-JP', { weekday: 'short', timeZone: 'Asia/Tokyo' }).format(new Date(report.date + 'T12:00:00+09:00')) + ')' };
   const rows = report.entries.slice(page * 22, page * 22 + 22);
-  for (let i = 0; i < 22; i++) { cells['D' + (14 + i)] = rows[i]?.text || ''; cells['AD' + (14 + i)] = rows[i]?.names || ''; }
+  for (let i = 0; i < 22; i++) { cells['C' + (14 + i)] = reportCompletionTime(rows[i]?.completedAt); cells['E' + (14 + i)] = reportWorkText(rows[i]); }
   const names = report.staff || [];
   ['T3', 'W3', 'Z3', 'AC3', 'AF3'].forEach((cell, i) => { cells[cell] = i === 4 ? names.slice(4).join('・') : names[i] || ''; });
   for (const [field, start, count] of [['handoff', 6, 8], ['visitors', 36, 4]]) {
@@ -88,4 +89,5 @@ export function reportValueRanges(report, fields, sheetTitle, page = 0) {
   }
   return Object.entries(cells).map(([cell, value]) => ({ range: `${quoted}!${cell}`, values: [[value]] }));
 }
+
 
