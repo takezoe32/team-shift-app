@@ -2665,8 +2665,8 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
 steps={[
 {title:'どの会社に、何をお願いしますか？', content:<>
 <label className="block font-bold">パートナー名（必須）<input list="quick-partner-names" value={partnerName} onChange={e => setPartnerName(e.target.value)} placeholder="例：〇〇設備" className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base"/><datalist id="quick-partner-names">{(partnerNames || []).map(name => <option key={name} value={name}/>)}</datalist></label>
-<label className="block font-bold">件名（必須）<input type="text" value={subject} onChange={e => setSubject(e.target.value)} placeholder="例：エアコン点検" className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label>
-</>, validate:() => !partnerName.trim() || !subject.trim() ? 'パートナー名と件名を入力してください。' : ''},
+<label className="block font-bold">どこ？で何を？（必須）<input type="text" value={subject} onChange={e => setSubject(e.target.value)} placeholder="例：1階ロビーでエアコン点検" className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label>
+</>, validate:() => !partnerName.trim() || !subject.trim() ? 'パートナー名と「どこ？で何を？」を入力してください。' : ''},
 {title:'いつ、誰が担当しますか？', content:<>
 <label className="block font-bold">日付（必須）<input type="date" value={date} onChange={e => setDate(e.target.value)} placeholder="" className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label>
 <fieldset><legend className="font-bold">開始時間（必須・15分刻み）</legend><div className="flex items-center gap-2 mt-2"><select aria-label="開始時間の時" value={timeHour} onChange={e => setTimeHour(e.target.value)} className="flex-1 min-h-14 border border-gray-300 rounded-xl p-3 text-base bg-white"><option value="">時を選択</option>{Array.from({length:24}, (_, h) => String(h).padStart(2, '0')).map(h => <option key={h} value={h}>{h}時</option>)}</select><select aria-label="開始時間の分" value={timeMinute} onChange={e => setTimeMinute(e.target.value)} className="flex-1 min-h-14 border border-gray-300 rounded-xl p-3 text-base bg-white"><option value="">分を選択</option>{['00', '15', '30', '45'].map(m => <option key={m} value={m}>{m}分</option>)}</select></div></fieldset>
@@ -2675,7 +2675,7 @@ steps={[
 </>,validate:() => !date || !time || !assigneeUid ? '日付・開始時間・主担当者を選んでください。' : ''},
 {title:'お願いする内容を教えてください', content:<><label className="block font-bold">詳しい内容（任意）<textarea rows={4} value={content} onChange={e => setContent(e.target.value)} placeholder="例：1階ロビーの電球を交換する" className="w-full mt-2 border border-gray-300 rounded-xl p-3 text-base"/></label><ImagePicker files={newPartnerImages} onChange={setNewPartnerImages} disabled={isSaving}/></>}
 ]}
-summary={[[ 'パートナー名', partnerName ], ['件名', subject], ['日付', date], ['開始時間', time], ['終了予定', endTime], ['主担当者', (sortedUsers || []).find(user => user.id === assigneeUid)?.name], ['内容', content], ['写真・動画', newPartnerImages.length + '件']]}
+summary={[[ 'パートナー名', partnerName ], ['どこ？で何を？', subject], ['日付', date], ['開始時間', time], ['終了予定', endTime], ['主担当者', (sortedUsers || []).find(user => user.id === assigneeUid)?.name], ['内容', content], ['写真・動画', newPartnerImages.length + '件']]}
 />}
           {editingItemId && (
             <div className="flex items-center justify-between bg-blue-50 border border-blue-100 rounded-xl px-3 py-2">
