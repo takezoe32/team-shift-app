@@ -1227,7 +1227,7 @@ const DailyDetailView = ({
   addTask, toggleTask, deleteTask, updateTaskText, updateTaskAssignees, users, roles, sortedUsers
 }) => {
   const [newAssigneeIds, setNewAssigneeIds] = useState(null);
-  const [quickTaskOpen, setQuickTaskOpen] = useState(false);
+  const [quickTaskOpen, setQuickTaskOpen] = useState(true);
   const [newTaskSubject, setNewTaskSubject] = useState('');
   const [newTaskText, setNewTaskText] = useState('');
   const [newTaskEndTime, setNewTaskEndTime] = useState('');
@@ -2466,7 +2466,7 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
 };
 
 const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartnerItem, togglePartnerItem, deletePartnerItem, addPartnerName, updatePartnerName, deletePartnerName, currentUser, debugLog, sortedUsers }) => {
-  const [quickPartnerOpen, setQuickPartnerOpen] = useState(false);
+  const [quickPartnerOpen, setQuickPartnerOpen] = useState(true);
   const [date, setDate] = useState(formatDate(new Date()));
   const [timeHour, setTimeHour] = useState('');
   const [timeMinute, setTimeMinute] = useState('');
