@@ -1,3 +1,4 @@
+import HelpView from './components/HelpView';
 import AssigneePicker from './components/AssigneePicker';
 import { partnerAssigneeIds } from './partnerAssignees.mjs';
 import { newestPartnerUpdates } from './partnerUpdateOrder.mjs';
@@ -1695,256 +1696,6 @@ summary={[[ '登録日', selectedDate ], ['担当', newTaskVisibility === 'priva
   );
 };
 
-const GuideMockup = ({ title, active, steps, children }) => (
-  <div className="mt-5 rounded-3xl border-2 border-gray-200 bg-gray-100 p-3 sm:p-5">
-    <div className="text-sm font-black text-gray-500 mb-3">画面のイメージ</div>
-    <div className="rounded-2xl bg-white border border-gray-200 shadow-sm overflow-hidden">
-      <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between"><div className="font-black text-gray-800">{title}</div><div className="w-7 h-7 rounded-full bg-gray-200" /></div>
-      <div className="min-h-40 p-4 relative">{children}</div>
-      <div className="border-t border-gray-200 bg-white flex">{['カレンダー','シフト管理','日別タスク','パートナー'].map(name=><div key={name} className="flex-1 py-3 text-center text-[9px] sm:text-[11px] font-bold relative"><div className={name===active?'text-blue-600':'text-gray-400'}>{name}</div>{name===active&&<div className="absolute left-1/4 right-1/4 bottom-0 h-1 rounded-t bg-blue-600" />}</div>)}</div>
-    </div>
-    <div className="mt-4 space-y-3">{steps.map((step,index)=><div key={index} className="flex gap-3 items-start"><div className="shrink-0 w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center font-black">{index+1}</div><p className="text-base sm:text-lg font-bold text-gray-800 leading-relaxed">{step}</p></div>)}</div>
-  </div>
-);
-
-const HelpView = () => {
-  const [skipHelpOnLogin, setSkipHelpOnLogin] = useState(() => localStorage.getItem('teamshift_skip_help_on_login') === 'true');
-
-  const handleSkipHelpChange = (checked) => {
-    setSkipHelpOnLogin(checked);
-    localStorage.setItem('teamshift_skip_help_on_login', checked ? 'true' : 'false');
-  };
-
-  return (
-    <div className="flex-1 overflow-y-auto bg-gray-50 pb-24">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 space-y-5">
-        <section className="bg-blue-600 text-white rounded-3xl p-6 sm:p-8 shadow-sm">
-          <div className="flex items-center gap-3 mb-4">
-            <BookOpen size={34} />
-            <h1 className="text-2xl sm:text-3xl font-black">LUIGANSOPERATIONSCREW App 使い方</h1>
-          </div>
-          <p className="text-lg sm:text-xl font-bold leading-relaxed">
-            このページを見れば、このアプリで何をすればよいかが分かります。
-          </p>
-          <label className="mt-5 flex items-start gap-3 bg-white/15 rounded-2xl p-4 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={skipHelpOnLogin}
-              onChange={(e) => handleSkipHelpChange(e.target.checked)}
-              className="mt-1 w-5 h-5 rounded"
-            />
-            <span className="text-base sm:text-lg font-bold leading-relaxed">
-              次回から、ログインしたときに最初に「使い方」を開かない
-            </span>
-          </label>
-        </section>
-
-        <section className="bg-yellow-50 border-2 border-yellow-200 rounded-3xl p-5 sm:p-6 shadow-sm">
-          <p className="text-base sm:text-lg font-black text-gray-800 leading-relaxed">
-            「使い方」から戻るときは、画面の下にある「カレンダー」「シフト管理」「日別タスク」「パートナー」などのアイコンを押してください。
-          </p>
-          <p className="text-sm sm:text-base font-bold text-gray-600 mt-2">
-            押したアイコンの画面に戻ります。
-          </p>
-        </section>
-
-        <section className="bg-white rounded-3xl border border-blue-100 shadow-sm p-6 sm:p-8">
-          <h2 className="text-2xl font-black text-blue-700 mb-4">このツールの目的</h2>
-          <div className="bg-blue-50 rounded-2xl p-5 sm:p-6">
-            <p className="text-lg sm:text-xl font-bold text-gray-800 leading-loose">
-              このツールは何の作業が残っているの？どうゆう状況なの？明日のシフトは？などをまとめて確認できるようにするために作成したツールです。不具合等があれば竹添に伝えてください。
-            </p>
-          </div>
-        </section>
-
-        <section className="bg-green-50 border-2 border-green-200 rounded-3xl p-6 sm:p-8 shadow-sm">
-          <h2 className="text-2xl sm:text-3xl font-black text-green-800 mb-4">まず、この流れで使ってください</h2>
-          <div className="space-y-3">
-            {[
-              ['1', '今日・明日の自分の仕事を確認する', '「日別タスク」を開いて、今日または明日に自分がやらなければならない作業を確認します。'],
-              ['2', '自分がやる作業を日別タスクに書く', 'まだ登録されていない作業があれば、自分の名前を選んで、作業内容を書き、「保存」を押します。'],
-              ['3', 'パートナーから連絡があったら記録する', '「パートナー」を開いて、相手・日時・主担当を確認し、「今回の申し送り・追記」に連絡内容を書いて保存します。'],
-              ['4', '終わった作業はチェックする', '日別タスクの作業が終わったら、左の□を押して終了にします。'],
-              ['5', '次の人が見ても分かる状態にする', '作業の状況やパートナーからの連絡を残しておくことで、次の人も「何が残っているか」を確認できます。']
-            ].map(([number, title, text]) => (
-              <div key={number} className="flex gap-3 items-start bg-white rounded-2xl border border-green-100 p-4">
-                <div className="shrink-0 w-9 h-9 rounded-full bg-green-600 text-white flex items-center justify-center font-black">{number}</div>
-                <div>
-                  <h3 className="text-lg sm:text-xl font-black text-gray-800">{title}</h3>
-                  <p className="text-base sm:text-lg text-gray-700 leading-relaxed mt-1">{text}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="bg-white rounded-3xl border-2 border-blue-100 shadow-sm p-6 sm:p-8">
-          <h2 className="text-2xl font-black text-blue-700 mb-4">今日・明日の「自分がやる仕事」を登録する方法</h2>
-          <p className="text-base sm:text-lg leading-relaxed text-gray-700">
-            「あとでやる」「明日やる」「今日中にやらなければならない」など、<strong>自分が担当する作業</strong>は日別タスクに書いてください。
-          </p>
-          <GuideMockup title="日別タスク：自分の仕事を入力" active="日別タスク" steps={[
-            '下の「日別タスク」を押します。',
-            '上の「◀」「▶」で、今日または明日の日付にします。',
-            '上の名前から、自分の名前を押します。',
-            '入力欄に「自分がやる作業」を具体的に書きます。',
-            '右の「保存」を押します。これで、その日の自分のタスクとして登録されます。'
-          ]}>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-black text-gray-700">2026/10/05</span>
-                <span className="text-xs text-gray-500">← 今日・明日を選ぶ</span>
-              </div>
-              <div className="flex gap-2">
-                <div className="rounded-xl border-4 border-red-500 bg-blue-50 px-4 py-2 text-sm font-black relative">
-                  竹添
-                  <span className="absolute -top-7 left-1/2 -translate-x-1/2 bg-red-500 text-white rounded px-2 py-1 text-[9px] whitespace-nowrap">←自分を押す</span>
-                </div>
-                <div className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-bold text-gray-500">平川</div>
-                <div className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-bold text-gray-500">田中</div>
-              </div>
-              <div className="flex gap-2 items-end">
-                <div className="flex-1 border-4 border-red-500 rounded-xl bg-white px-3 py-3 text-sm font-bold text-gray-700">
-                  明日の開店準備をする
-                  <div className="text-[9px] text-red-500 mt-1">←ここに作業を書く</div>
-                </div>
-                <div className="bg-blue-600 text-white rounded-xl px-4 py-3 font-black text-sm">保存</div>
-              </div>
-            </div>
-          </GuideMockup>
-          <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-2xl p-4 text-base sm:text-lg font-bold leading-relaxed">
-            <strong>ポイント：</strong>「自分がやらなければならない作業」を、できるだけ具体的に書いてください。<br />
-            例：「○○さんへ電話する」「明日の資料を準備する」「入口の備品を確認する」
-          </div>
-        </section>
-
-        <section className="bg-white rounded-3xl border-2 border-purple-100 shadow-sm p-6 sm:p-8">
-          <h2 className="text-2xl font-black text-purple-700 mb-4">パートナーから連絡があったときの記録方法</h2>
-          <p className="text-base sm:text-lg leading-relaxed text-gray-700">
-            パートナーから電話・口頭・メッセージなどで連絡があったら、忘れないうちに「パートナー」に記録してください。
-          </p>
-          <GuideMockup title="パートナー：申し送りを追加" active="パートナー" steps={[
-            '下の「パートナー」を押します。',
-            '連絡を受けたパートナーを選びます。',
-            '「編集」を押します。必要なら日付・時間・主担当も確認します。',
-            '「今回の申し送り・追記」に、連絡内容をそのまま分かるように書きます。',
-            '「変更を保存」を押します。前の申し送りは消さず、新しい内容として追加します。'
-          ]}>
-            <div className="space-y-2">
-              <div className="rounded-xl border-2 border-gray-200 p-3">
-                <div className="text-sm font-black">パートナーA</div>
-                <div className="text-xs text-blue-600 font-bold mt-1">担当：竹添</div>
-              </div>
-              <div className="rounded-xl border border-gray-200 p-3 text-xs">
-                <div className="font-black text-gray-500 mb-1">これまでの申し送り</div>
-                <div>（竹添）10/5 来店予定です。</div>
-                <div>（平川）10/5 15時ごろ到着しました。</div>
-              </div>
-              <div className="relative rounded-xl border-4 border-red-500 bg-purple-50 p-3">
-                <div className="text-xs font-black text-purple-700">今回の申し送り・追記</div>
-                <div className="mt-2 text-sm font-bold text-gray-700">「明日10時に来店予定。入口で対応してください。」</div>
-                <span className="absolute -right-2 -top-7 bg-red-500 text-white rounded px-2 py-1 text-[9px] font-black">←ここに書く</span>
-              </div>
-              <div className="text-right"><span className="inline-block bg-blue-600 text-white rounded-xl px-5 py-2 font-black">変更を保存</span></div>
-            </div>
-          </GuideMockup>
-          <div className="mt-4 bg-red-50 border border-red-200 rounded-2xl p-4 text-base sm:text-lg font-bold leading-relaxed">
-            <strong>大事：</strong>以前の申し送りは削除しません。誰が・いつ・何を伝えたかが分かるように、今回の内容を追加してください。
-          </div>
-        </section>
-
-        <section className="bg-white rounded-3xl border border-gray-200 shadow-sm p-6 sm:p-8">
-          <h2 className="text-2xl font-black text-gray-800 mb-5">まず覚えるのは、この4つです</h2>
-          <div className="grid gap-4">
-            {[
-              ['1', 'カレンダー', '今日・明日などのシフトと、パートナーの予定を確認します。'],
-              ['2', 'シフト管理', 'スタッフの出勤・休みを確認、変更します。※使える人だけ表示されます。'],
-              ['3', '日別タスク', 'その日にやる仕事を確認し、終わったらチェックします。'],
-              ['4', 'パートナー', 'パートナーの予定や申し送りを確認・追加します。']
-            ].map(([number, title, text]) => (
-              <div key={number} className="flex gap-4 items-start border border-gray-200 rounded-2xl p-4">
-                <div className="shrink-0 w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center text-lg font-black">{number}</div>
-                <div>
-                  <h3 className="text-xl font-black text-gray-800">{title}</h3>
-                  <p className="text-base sm:text-lg text-gray-600 leading-relaxed mt-1">{text}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="bg-white rounded-3xl border border-gray-200 shadow-sm p-6 sm:p-8">
-          <h2 className="text-2xl font-black text-gray-800 mb-5">① カレンダー</h2>
-          <p className="text-base sm:text-lg leading-relaxed text-gray-700"><strong>まずここを見ます。</strong> 明日のシフトやパートナーの予定を確認します。</p>
-          <GuideMockup title="カレンダー" active="カレンダー" steps={['下の「カレンダー」を押します。','見たい日付を押します。','その日のシフト・パートナー予定が表示されます。']}>
-            <div className="grid grid-cols-7 gap-1 text-center text-[9px]">{['月','火','水','木','金','土','日'].map(d=><div key={d} className="font-black text-gray-400">{d}</div>)}{Array.from({length:14},(_,i)=><div key={i} className={i===7?'relative rounded-lg border-4 border-red-500 bg-blue-50 p-3 font-black text-blue-700':'rounded-lg bg-gray-50 p-3 text-gray-600'}>{i+1}</div>)}</div><div className="absolute right-3 bottom-3 bg-red-500 text-white rounded-full px-3 py-1 text-xs font-black shadow">← 見たい日を押す</div>
-          </GuideMockup>
-        </section>
-
-        <section className="bg-white rounded-3xl border border-gray-200 shadow-sm p-6 sm:p-8">
-          <h2 className="text-2xl font-black text-gray-800 mb-5">② シフト管理</h2>
-          <p className="text-base sm:text-lg leading-relaxed text-gray-700">出勤・休みを確認したり、変更するときに使います。</p>
-          <GuideMockup title="シフト管理" active="シフト管理" steps={['下の「シフト管理」を押します。','変更したい人・日付を探します。','変更する場所を押して、出勤・休みを選びます。','最後に、変更できているか確認します。']}>
-            <div className="space-y-2">{['竹添','平川','田中'].map((n,i)=><div key={n} className="flex items-center gap-2"><div className="w-16 text-xs font-bold">{n}</div>{['出勤','休み','出勤','出勤','休み'].map((s,j)=><div key={j} className={i===0&&j===2?'relative border-4 border-red-500 rounded-lg bg-blue-50 w-10 py-2 text-center font-black':'w-10 py-2 rounded-lg bg-gray-100 text-center font-bold'}>{s}{i===0&&j===2&&<span className="absolute -top-7 -right-8 bg-red-500 text-white rounded px-2 py-1 text-[9px] whitespace-nowrap">←ここを押す</span>}</div>)}</div>)}</div>
-          </GuideMockup>
-          <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-2xl p-4 text-base sm:text-lg font-bold">シフトを変更すると、他の人にも同じ内容が表示されます。</div>
-        </section>
-
-        <section className="bg-white rounded-3xl border border-gray-200 shadow-sm p-6 sm:p-8">
-          <h2 className="text-2xl font-black text-gray-800 mb-5">③ 日別タスク</h2>
-          <p className="text-base sm:text-lg leading-relaxed text-gray-700">その日にやる仕事を確認し、終わったらチェックします。</p>
-          <GuideMockup title="日別タスク" active="日別タスク" steps={['下の「日別タスク」を押します。','やる仕事を確認します。','終わった仕事の□を押します。','まだ終わっていない仕事は、そのままにします。']}>
-            <div className="space-y-3">{['開店準備をする','メールを確認する','パートナーの予定を確認する'].map((t,i)=><div key={t} className={i===1?'relative flex items-center gap-3 border-4 border-red-500 rounded-xl p-3 bg-blue-50':'flex items-center gap-3 border border-gray-200 rounded-xl p-3'}><div className="w-7 h-7 border-2 border-gray-500 rounded bg-white flex items-center justify-center text-sm">{i===0?'✓':''}</div><span className="font-bold text-gray-700">{t}</span>{i===1&&<span className="absolute -right-2 -top-7 bg-red-500 text-white rounded px-2 py-1 text-[9px] font-black">← 終わったら押す</span>}</div>)}</div>
-          </GuideMockup>
-        </section>
-
-        <section className="bg-white rounded-3xl border border-gray-200 shadow-sm p-6 sm:p-8">
-          <h2 className="text-2xl font-black text-gray-800 mb-5">④ パートナー</h2>
-          <p className="text-base sm:text-lg leading-relaxed text-gray-700">パートナーの予定と申し送りを確認・追加します。</p>
-          <GuideMockup title="パートナー" active="パートナー" steps={['下の「パートナー」を押します。','追加・編集したいパートナーを押します。','「今回の申し送り・追記」に文章を書きます。','「保存」を押します。']}>
-            <div className="space-y-2">
-              <div className="border-2 border-gray-200 rounded-xl p-3 font-bold">パートナーA <span className="text-blue-600">担当：竹添</span></div>
-              <div className="border-4 border-red-500 rounded-xl p-3 relative"><div className="text-xs font-black text-gray-500 mb-2">これまでの申し送り</div><div className="text-sm">（竹添）パートナーが来ました。</div><div className="text-sm">（平川）作業終了して帰りました。</div><div className="mt-3 border-2 border-blue-300 rounded-lg p-3 bg-blue-50"><div className="text-xs font-black text-blue-700">今回の申し送り・追記</div><div className="text-xs text-gray-400 mt-2">ここに今回の内容を書きます</div></div><span className="absolute -right-2 -top-7 bg-red-500 text-white rounded px-2 py-1 text-[9px] font-black">←ここに書く</span></div>
-              <div className="text-right"><span className="inline-block bg-blue-600 text-white rounded-lg px-5 py-2 font-black">保存</span></div>
-            </div>
-          </GuideMockup>
-          <div className="mt-4 bg-red-50 border border-red-200 rounded-2xl p-4 text-base sm:text-lg font-bold">過去の申し送りは消しません。新しい内容を下に追加してください。</div>
-        </section>
-
-        <section className="bg-white rounded-3xl border border-gray-200 shadow-sm p-6 sm:p-8">
-          <h2 className="text-2xl font-black text-gray-800 mb-5">パートナーの申し送りを追加する方法</h2>
-          <ol className="list-decimal pl-6 space-y-4 text-base sm:text-lg leading-relaxed text-gray-700">
-            <li>「パートナー」を押します。</li>
-            <li>追加・編集したいパートナーを選びます。</li>
-            <li>「今回の申し送り・追記」に、今回伝えたいことを書きます。</li>
-            <li>保存します。</li>
-          </ol>
-          <p className="mt-5 bg-red-50 border border-red-200 rounded-2xl p-4 text-base sm:text-lg font-bold text-gray-800">
-            過去の申し送りを消す必要はありません。新しい内容を追加してください。
-          </p>
-        </section>
-
-        <section className="bg-white rounded-3xl border border-gray-200 shadow-sm p-6 sm:p-8">
-          <h2 className="text-2xl font-black text-gray-800 mb-5">困ったときは</h2>
-          <div className="space-y-4 text-base sm:text-lg leading-relaxed text-gray-700">
-            <p>分からないときは、まずこの「使い方」を確認してください。</p>
-            <p>それでも分からない場合や、画面がおかしい・保存できないなどの<strong>不具合</strong>があれば、<strong>竹添に伝えてください。</strong></p>
-            <div className="bg-blue-600 text-white rounded-2xl p-5 text-center">
-              <p className="text-xl font-black">「おかしいかな？」と思ったら、無理に操作を続けず竹添へ。</p>
-            </div>
-          </div>
-        </section>
-
-        <section className="bg-gray-800 text-white rounded-3xl p-6 sm:p-8">
-          <h2 className="text-xl font-black mb-3">最後に</h2>
-          <p className="text-base sm:text-lg leading-relaxed">
-            このアプリは、「今どうなっているか」「次に何をするか」をみんなで分かるようにするためのものです。迷ったら、まずカレンダーと日別タスクを確認してください。
-          </p>
-        </section>
-      </div>
-    </div>
-  );
-};
 
 const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, currentUserUid, roleNames, updateRoleNames, roles, updateRoles, deleteUserCompletely, sortedUsers, userOrder, updateUserOrder, debugLogs }) => {
   const [newUserName, setNewUserName] = useState('');
@@ -4441,7 +4192,7 @@ export default function App() {
             </div>
 
             {activeTab === 'help' ? (
-              <HelpView />
+              <HelpView currentUser={currentUser}/>
             ) : activeTab === 'partner' ? (
               <PartnerView
                 currentUser={currentUser}
@@ -5030,6 +4781,7 @@ export default function App() {
     </GoogleOAuthProvider>
   );
 }
+
 
 
 
