@@ -3015,7 +3015,7 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
   };
 
   const toggleMonth = (monthKey) => {
-    setOpenMonths(prev => ({ ...prev, [monthKey]: prev[monthKey] === false }));
+    setOpenMonths(prev => ({ ...prev, [monthKey]: !prev[monthKey] }));
   };
 
 
@@ -3070,7 +3070,7 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
           return groups;
         }, {});
         const sortedDayKeys = Object.keys(dayGroups).sort((a, b) => b.localeCompare(a));
-        const isOpen = openMonths[monthKey] !== false;
+        const isOpen = openMonths[monthKey] === true;
 
         const renderEntry = (entry) => (
           <div key={entry.type + '-' + entry.id} className="p-3">
@@ -3108,6 +3108,7 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
           <button
             type="button"
             onClick={() => toggleMonth(monthKey)}
+            aria-expanded={isOpen}
             className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 border-b border-gray-100"
           >
             <span className="text-sm font-black text-gray-800">{formatMonth(monthKey)}</span>
