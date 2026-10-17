@@ -608,6 +608,8 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
   const daysInMonth = getDaysInMonth(year, month);
+  const shiftScrollRef = useRef(null);
+  const shiftNameHeaderRef = useRef(null);
   
   const [editingCell, setEditingCell] = useState(null);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -620,6 +622,17 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
 
   const holidays = getJapaneseHolidayMap(year);
   const todayStr = formatDate(new Date());
+  useLayoutEffect(() => {
+    if (!window.matchMedia('(max-width: 767px)').matches) return;
+    const container = shiftScrollRef.current;
+    const nameHeader = shiftNameHeaderRef.current;
+    if (!container || !nameHeader) return;
+    // Keep yesterday beside the pinned names; other months start at day one.
+    const [todayYear, todayMonth, todayDay] = todayStr.split('-').map(Number);
+    const day = year === todayYear && month === todayMonth - 1 ? Math.max(1, todayDay - 1) : 1;
+    const target = container.querySelector('[data-shift-day="' + day + '"]');
+    if (target) container.scrollLeft = Math.max(0, target.getBoundingClientRect().left - container.getBoundingClientRect().left + container.scrollLeft - nameHeader.getBoundingClientRect().width);
+  }, [year, month, todayStr]);
   const days = [];
   for(let i=1; i<=daysInMonth; i++) {
      const d = new Date(year, month, i);
@@ -830,15 +843,15 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
         <button onClick={() => changeMonth(1)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors active:scale-95"><ChevronRight className="w-5 h-5"/></button>
       </div>
       
-      <div className="flex-1 overflow-auto bg-white relative">
+      <div ref={shiftScrollRef} className="flex-1 overflow-auto bg-white relative">
         <table className="w-full text-xs border-collapse">
           <thead className="sticky top-0 z-10 bg-gray-50 shadow-sm">
             <tr>
-              <th className="sticky left-0 bg-gray-50 z-20 min-w-[100px] p-2 border-r border-b border-gray-200 text-left font-bold text-gray-600 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+              <th ref={shiftNameHeaderRef} className="sticky left-0 bg-gray-50 z-20 min-w-[100px] p-2 border-r border-b border-gray-200 text-left font-bold text-gray-600 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                 メンバー
               </th>
               {days.map(d => (
-                <th key={d.day} title={d.holiday || undefined} className={`min-w-[48px] p-1.5 border-r border-b border-gray-200 text-center font-medium ${d.dateStr < todayStr ? (d.holiday ? 'bg-gray-200 text-red-600' : 'bg-gray-200 text-gray-400') : d.holiday ? 'bg-rose-50 text-red-600' : d.weekDay === '日' ? 'text-red-500' : d.weekDay === '土' ? 'text-blue-500' : 'text-gray-500'}`}>
+                <th key={d.day} data-shift-day={d.day} title={d.holiday || undefined} className={`min-w-[48px] p-1.5 border-r border-b border-gray-200 text-center font-medium ${d.dateStr < todayStr ? (d.holiday ? 'bg-gray-200 text-red-600' : 'bg-gray-200 text-gray-400') : d.holiday ? 'bg-rose-50 text-red-600' : d.weekDay === '日' ? 'text-red-500' : d.weekDay === '土' ? 'text-blue-500' : 'text-gray-500'}`}>
                   {d.day}<br/>
                   <span className="text-[10px]">{d.weekDay}</span>
                 </th>
