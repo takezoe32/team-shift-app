@@ -1,3 +1,4 @@
+import { changeHandoff } from './handoffEdit.mjs';
 import { mergeTaskImages } from './taskImages.mjs';
 export function planTaskEdit(teamData, sourceDate, ownerUid, taskId, input) {
   const changes = typeof input === 'object' && input ? { ...input } : { text: input };
@@ -11,7 +12,10 @@ export function planTaskEdit(teamData, sourceDate, ownerUid, taskId, input) {
   if (!task) throw new Error('タスクが削除または移動されています。画面を更新してください。');
   const destination = tasks[targetDate]?.[ownerUid] || [];
   if (targetDate !== sourceDate && destination.some(item => item.id === taskId)) throw new Error('変更先に同じタスクがあります。画面を更新してください。');
-  if (Array.isArray(changes.updates)) changes.updates = [...(task.updates || []), ...changes.updates.slice(-1)];
+  if (changes.handoffOperation) Object.assign(changes, changeHandoff(task, changes.handoffOperation));
+  const editingHandoff = !!changes.handoffOperation;
+  delete changes.handoffOperation;
+  if (!editingHandoff && Array.isArray(changes.updates)) changes.updates = [...(task.updates || []), ...changes.updates.slice(-1)];
   if (Array.isArray(changes.newImages)) changes.images = mergeTaskImages(task, changes.newImages);
   delete changes.newImages;
   const edited = { ...task, ...changes };
