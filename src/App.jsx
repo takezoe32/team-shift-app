@@ -2421,17 +2421,17 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
   const activePartnerItems = sortedItems.filter(item => !item.completed);
   const completedPartnerItems = sortedItems.filter(item => item.completed).sort((a, b) => String(b.completedAt || '').localeCompare(String(a.completedAt || '')));
   const renderPartnerItem = (item) => (
-              <div key={item.id} className={`bg-white rounded-xl border ${item.completed ? 'border-green-200' : 'border-gray-200'} px-3 py-3 flex flex-wrap items-start gap-2`}>
+              <div key={item.id} className={`bg-white rounded-xl border ${item.completed ? 'border-green-200' : 'border-gray-200'} px-3 py-3 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 sm:grid-cols-[auto_auto_minmax(0,1fr)_auto]`}>
                 <button type="button" disabled={changingPartnerId !== null} onClick={() => finishPartner(item)}
-                  className={`shrink-0 mt-0.5 min-w-16 min-h-12 px-3 rounded-xl border-2 flex items-center justify-center ${item.completed ? 'border-green-500 bg-green-500 text-white' : 'border-green-600 bg-green-600 text-white hover:bg-green-700'}`}
+                  className={`col-span-2 row-start-3 sm:col-span-1 sm:row-start-1 sm:col-start-1 shrink-0 min-w-16 min-h-12 px-3 rounded-xl border-2 flex items-center justify-center ${item.completed ? 'border-green-500 bg-green-500 text-white' : 'border-green-600 bg-green-600 text-white hover:bg-green-700'}`}
                   title={item.completed ? '未完了に戻す' : "タスクを終了"}>
                   <span className="text-sm font-bold">{item.completed ? '✓ 終了済' : "タスクを終了"}</span>
                 </button>
-                <div className="shrink-0 text-center min-w-[68px]">
+                <div className="col-start-1 row-start-1 sm:col-start-2 min-w-0 text-left sm:text-center">
                   <div className={`text-[10px] font-bold ${item.completed ? 'text-gray-400 line-through' : 'text-blue-600'}`}>{item.date?.replace(/-/g, '/')}</div>
                   <div className={`text-[11px] font-bold mt-0.5 ${item.completed ? 'text-gray-400 line-through' : 'text-gray-700'}`}>{item.time || '--:--'}</div>{item.endTime&&<div className="text-[9px] text-orange-600 mt-0.5">終了予定 {item.endTime}</div>}
                 </div>
-                <div className="flex-1 min-w-0">
+                <div className="col-span-2 row-start-2 sm:col-span-1 sm:row-start-1 sm:col-start-3 min-w-0 w-full break-words">
                   <ImportantBadge important={item.important}/>{(item.completed || isPartnerOverdue(item, scheduleNow)) && <span className={`inline-flex rounded-full px-3 py-1 mb-2 text-sm font-bold ${item.completed ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}`}>{item.completed ? '終了済み' : '未終了'}</span>}
                   <div className={`text-[10px] font-bold mb-0.5 ${item.completed ? 'text-gray-400 line-through' : 'text-purple-600'}`}>{item.partnerName || 'パートナー未設定'}</div>
                   <div className="text-xs text-blue-600 font-bold mb-1">担当: {partnerAssigneeIds(item).map(id => (sortedUsers || []).find(user => user.id === id)?.name).filter(Boolean).join('・') || '未設定'}</div>
@@ -2440,7 +2440,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
                   <ImageGallery item={item}/>
                   {item.completedAt && <div className="text-[8px] text-green-600 mt-0.5">終了 {new Date(item.completedAt).toLocaleString('ja-JP')}</div>}
                 </div>
-                <div className="shrink-0 flex gap-0.5">
+                <div className="col-start-2 row-start-1 sm:col-start-4 shrink-0 flex gap-1">
                   <ActionIconButton action="edit" type="button" disabled={isSaving || deletingPartnerId !== null} aria-label={`${item.subject || 'パートナータスク'}を編集`} onClick={() => {
                     if (editingItemId && editingItemId !== item.id && !confirmEditDiscard(true, isSaving)) return;
                     setEditingItemId(item.id);
@@ -2460,7 +2460,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
                   }} title="編集" className=""/>
                   <ActionIconButton action="delete" type="button" disabled={isSaving || deletingPartnerId !== null} aria-label={`${item.subject || 'パートナータスク'}を削除`} onClick={() => handleDeletePartnerItem(item)} title="削除" className=""/>
                 </div>
-                {!item.completed && <PartnerScheduleEditor item={item} onSave={reschedulePartnerItem} disabled={isSaving || !!editingItemId || deletingPartnerId !== null || changingPartnerId !== null}/>}
+                {!item.completed && <div className="col-span-2 row-start-4 sm:col-span-4 sm:row-start-2 min-w-0"><PartnerScheduleEditor item={item} onSave={reschedulePartnerItem} disabled={isSaving || !!editingItemId || deletingPartnerId !== null || changingPartnerId !== null}/></div>}
               </div>
   );
 
