@@ -1,3 +1,4 @@
+import { changeHandoff } from './handoffEdit.mjs';
 export function getTaskImages(item) {
   const images = [...(Array.isArray(item?.images) ? item.images : []), ...(item?.imageUrl ? [item] : [])];
   const seen = new Set();
@@ -5,10 +6,14 @@ export function getTaskImages(item) {
 }
 export const mergeTaskImages = (item, images) => getTaskImages({ images: [...getTaskImages(item), ...images] });
 export function mergePartnerImageChanges(current, changes) {
+  if (changes.handoffOperation) {
+    const { handoffOperation, ...other } = changes;
+    return { ...current, ...other, ...changeHandoff(current, handoffOperation, 'content') };
+  }
   const next = { ...current, ...changes };
   if (Array.isArray(changes.images)) next.images = mergeTaskImages(current, changes.images);
   if (Array.isArray(changes.updates)) {
-    const updates = [...(current.updates || [])];
+    const updates = [...(current.updates?.length ? current.updates : current.content ? [{ id: 'legacy_' + current.id, text: current.content, authorUid: current.createdByUid || '', authorName: current.createdByName || '登録時の内容', createdAt: current.createdAt || null, kind: 'initial' }] : [])];
     for (const update of changes.updates) if (!updates.some(existing => existing.id === update.id)) updates.push(update);
     next.updates = updates;
   }
