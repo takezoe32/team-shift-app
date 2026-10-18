@@ -1,3 +1,4 @@
+import { reportWeatherFields } from './report-weather.js';
 import { collectDailyReport, REPORT_FOLDER_ID } from '../../src/dailyReport.mjs';
 import { fault } from './report-auth.js';
 
@@ -28,5 +29,6 @@ export async function previewDailyReport({ store, client, date, fields, fetcher 
       preserved.remarks = (values[2]?.values || []).map(row => row[0] ?? '').join('\n');
     }
   }
-  return { report, fields: { ...preserved, ...fields } };
+  const weather = await reportWeatherFields(date, { ...(preserved.weather ? { weather: preserved.weather } : {}), ...fields }, fetcher, Date.now, undefined, store);
+  return { report, fields: { ...preserved, ...weather.fields }, ...(weather.weatherWarning ? { weatherWarning: weather.weatherWarning } : {}) };
 }
