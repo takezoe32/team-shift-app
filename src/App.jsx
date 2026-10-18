@@ -1,3 +1,5 @@
+import SharedCalendarNote from './components/SharedCalendarNote';
+import { planCalendarNote } from './calendarNote.mjs';
 import ActionIconButton from './components/ActionIconButton';
 import ImportantToggle, { ImportantBadge } from './components/ImportantToggle';
 import CalendarDayPanel from './components/CalendarDayPanel';
@@ -409,7 +411,7 @@ const getJapaneseHolidayMap = (year) => {
   return holidays;
 };
 
-const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partnerNames, currentUserUid, shiftTypes, sortedUsers, roles, currentUser, updateTaskAssignees, updateTaskText, deleteTask, toggleTask, updatePartnerItem, completePartnerItem, reschedulePartnerItem, deletePartnerItem }) => {
+const CalendarView = ({ calendarNote, saveCalendarNote, currentDate, changeMonth, teamData, partnerItems, partnerNames, currentUserUid, shiftTypes, sortedUsers, roles, currentUser, updateTaskAssignees, updateTaskText, deleteTask, toggleTask, updatePartnerItem, completePartnerItem, reschedulePartnerItem, deletePartnerItem }) => {
   const partnerDetailBodyRef = useRef(null);
   const [calendarDay, setCalendarDay] = useState(null);
   const [detailTask, setDetailTask] = useState(null);
@@ -556,7 +558,7 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partne
 
   return <div className="flex-1 flex flex-col bg-gray-50 pb-[68px] overflow-hidden">
     <div className="bg-white px-4 py-3 flex items-center justify-between shadow-sm z-10 shrink-0 md:border-b md:border-gray-200"><button onClick={()=>changeMonth(-1)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full"><ChevronLeft className="w-5 h-5"/></button><h2 className="text-base font-bold text-gray-800">{year}年 {month+1}月</h2><button onClick={()=>changeMonth(1)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full"><ChevronRight className="w-5 h-5"/></button></div>
-    <div className="flex-1 overflow-y-auto bg-white"><div className="md:grid md:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.85fr)] md:items-start md:gap-3 md:p-3">
+    <div className="flex-1 overflow-y-auto bg-white"><SharedCalendarNote note={calendarNote} onSave={saveCalendarNote}/><div className="md:grid md:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.85fr)] md:items-start md:gap-3 md:p-3">
       <div className="min-w-0 md:border md:border-gray-200 md:rounded-xl md:overflow-hidden"><div className="grid grid-cols-7 border-b border-gray-200 sticky top-0 bg-white z-10 shadow-sm">{DAYS_OF_WEEK.map((d,i)=><div key={d} className={`py-2 text-center text-[10px] font-bold ${i===0?'text-red-500':i===6?'text-blue-500':'text-gray-500'}`}>{d}</div>)}</div><div className="grid grid-cols-7 border-l border-gray-100">{days}</div></div>
       <div className="min-w-0 md:space-y-3">
         <div className="border-t border-gray-200 bg-blue-50/40 px-3 py-2"><div className="flex items-center justify-between mb-1.5"><h3 className="text-[11px] font-bold text-gray-600">パートナータスク</h3><span className="text-[9px] text-gray-400">{activePartnerItems.length}件</span></div>{activePartnerItems.length===0?<p className="text-[10px] text-gray-400 py-1">登録されている未終了のパートナータスクはありません</p>:<div className="space-y-1.5">{activePartnerItems.map(item=><button type="button" key={item.id} onClick={async ()=>{setDetailPartner(item);setIsEditingPartner(false);const handoffs=getPartnerHandoffUpdates(item);const latest=handoffs[handoffs.length-1];if(latest?.id&&item?.handoffReadBy?.[currentUserUid]!==latest.id){try{await updatePartnerItem(item.id,{handoffReadBy:{...(item.handoffReadBy||{}),[currentUserUid]:latest.id}});}catch(e){console.error("申し送り確認状態の保存に失敗しました:",e);}}}} className={`w-full text-left min-w-0 transition-colors ${item.important === true ? '!border-red-500 !border-2' : ''} ${item.date === todayStr ? 'bg-white min-h-[88px] border-2 border-blue-500 rounded-2xl p-2 shadow-sm hover:bg-blue-50' : 'bg-white min-h-11 border border-blue-100 rounded-md px-2 py-1.5 flex items-center gap-2 hover:border-blue-300 active:bg-blue-50'}`}>{item.date === todayStr ? <div className="space-y-1">
@@ -3614,6 +3616,7 @@ export default function App() {
   const [teamData, setTeamData] = useState({ shifts: {}, tasks: {} });
   const [partnerItems, setPartnerItems] = useState([]);
   const [partnerNames, setPartnerNames] = useState([]);
+  const [calendarNote, setCalendarNote] = useState(null);
   const [inventoryItems, setInventoryItems] = useState([]);
   const [inventoryMovements, setInventoryMovements] = useState([]);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -3881,6 +3884,7 @@ export default function App() {
         setUserOrder(currentUserOrder);
         if (data.teamData || needsCleanup) setTeamData({ shifts: currentShifts, tasks: currentTasks });
         setPartnerItems(currentPartnerItems);
+        setCalendarNote(data.calendarNote || null);
         setPartnerNames(currentPartnerNames);
         setInventoryItems(currentInventoryItems);
         setInventoryMovements(Array.isArray(data.inventoryMovements) ? data.inventoryMovements : []);
@@ -4321,6 +4325,19 @@ export default function App() {
               />
             ) : activeTab === 'calendar' ? (
               <CalendarView
+                calendarNote={calendarNote}
+                saveCalendarNote={async (text, expectedVersion) => {
+                  const saved = await runTransaction(db, async transaction => {
+                    const ref = doc(db, 'app_data', 'shared_state');
+                    const snapshot = await transaction.get(ref);
+                    if (!snapshot.exists()) throw new Error('共有データが見つかりません。');
+                    const next = planCalendarNote(snapshot.data().calendarNote, text, expectedVersion, currentUser);
+                    transaction.update(ref, { calendarNote: next });
+                    return next;
+                  });
+                  setCalendarNote(saved);
+                  return saved;
+                }}
                 completePartnerItem={(itemId) => changeCalendarPartnerTask(itemId, 'complete')}
                 reschedulePartnerItem={reschedulePartnerTask}
                 deletePartnerItem={(itemId) => changeCalendarPartnerTask(itemId, 'delete')}
