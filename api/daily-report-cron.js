@@ -22,7 +22,7 @@ export function createCronHandler({ env = globalThis.process.env, configure = co
       const config = configure();
       if (!config.ready) return res.status(503).json({ date, error: '初回サーバー設定が必要です。' });
       const result = await run({ config, store: makeStore(config), client: makeClient(config), date, automatic: true, now });
-      log(JSON.stringify({ event: 'daily-report-cron', date, status: result.skipped ? 'skipped' : 'saved' }));
+      log(JSON.stringify({ event: 'daily-report-cron', date, status: result.skipped ? 'skipped' : 'saved', weatherWarning: result.weatherWarning || '' }));
       return res.status(200).json({ ok: true, date, skipped: !!result.skipped });
     } catch (error) {
       const status = error.status || 500;

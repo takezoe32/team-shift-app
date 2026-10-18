@@ -96,6 +96,13 @@ export function privateStore(config, fetcher = fetch) {
   };
   const path = '_server_integrations/daily_report_drive';
   return {
+    async weather(date) {
+      const doc = await request('_server_integrations/report_weather_' + date);
+      try { return JSON.parse(doc?.fields?.data?.stringValue || 'null'); } catch { return null; }
+    },
+    async putWeather(date, value) {
+      await request('_server_integrations/report_weather_' + date, { method: 'PATCH', body: JSON.stringify({ fields: { data: { stringValue: JSON.stringify(value) } } }) });
+    },
     async automaticRun(date) {
       const doc = await request('_server_integrations/report_auto_' + date);
       return doc?.fields?.status?.stringValue === 'saved';

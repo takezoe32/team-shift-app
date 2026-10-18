@@ -63,7 +63,7 @@ function fixture() {
   };
   const handler = createCronHandler({ env, configure: () => ({ ready: true }), makeStore: () => store, makeClient: () => client,
     now: () => Date.parse('2026-10-15T15:42:00Z'), log: v => state.logs.push(v),
-    run: args => runDailyReport({ ...args, saveReport }) });
+    run: args => runDailyReport({ ...args, saveReport, loadWeather: async () => null }) });
   return { state, handler, store, client, saveReport };
 }
 
@@ -80,7 +80,7 @@ test('duplicate delivery skips a completed day, while a manual save can still re
   const { handler, state, store, client, saveReport } = fixture();
   await handler(req(), response()); const duplicate = response(); await handler(req(), duplicate);
   assert.equal(duplicate.body.skipped, true); assert.equal(state.attempts, 1);
-  await runDailyReport({ store, client, saveReport, date: '2026-10-15' });
+  await runDailyReport({ store, client, saveReport, loadWeather: async () => null, date: '2026-10-15' });
   assert.equal(state.attempts, 2);
 });
 
