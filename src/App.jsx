@@ -1,3 +1,5 @@
+import ActionIconButton from './components/ActionIconButton';
+import ImportantToggle, { ImportantBadge } from './components/ImportantToggle';
 import CalendarDayPanel from './components/CalendarDayPanel';
 import HelpView from './components/HelpView';
 import AssigneePicker from './components/AssigneePicker';
@@ -37,14 +39,12 @@ import {
   Calendar as CalendarIcon, 
   CheckSquare, 
   Plus, 
-  Trash2, 
   ChevronLeft, 
   ChevronRight, 
   ChevronUp,
   ChevronDown,
   X, 
   Users, 
-  Edit2, 
   Save, 
   LogOut, 
   ClipboardList,
@@ -418,6 +418,7 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partne
   const [isUpdatingAssignees, setIsUpdatingAssignees] = useState(false);
   const [assigneeUpdateMessage, setAssigneeUpdateMessage] = useState('');
   const [editingTaskText, setEditingTaskText] = useState('');
+  const [editingTaskImportant, setEditingTaskImportant] = useState(false);
   const [calendarTaskImages, setCalendarTaskImages] = useState([]);
   const calendarSavingRef = useRef(false);
   const [calendarUploadProgress, setCalendarUploadProgress] = useState(null);
@@ -426,6 +427,7 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partne
   useEffect(() => { partnerDetailBodyRef.current?.scrollTo({ top: 0 }); }, [detailPartner?.id, isEditingPartner]);
   const [partnerEditName, setPartnerEditName] = useState('');
   const [partnerEditSubject, setPartnerEditSubject] = useState('');
+  const [partnerEditImportant, setPartnerEditImportant] = useState(false);
   const [partnerEditAssigneeIds, setPartnerEditAssigneeIds] = useState([]);
   const partnerEditAssigneeUid = partnerEditAssigneeIds[0] || '';
   const [partnerEditDate, setPartnerEditDate] = useState('');
@@ -469,7 +471,7 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partne
   const activePartnerItems=(partnerItems||[]).filter(i=>!i.completed).sort((a,b)=>`${a.date||''}T${a.time||'00:00'}`.localeCompare(`${b.date||''}T${b.time||'00:00'}`));
   const datesToShow=Array.from(new Set([...Object.keys(teamData.tasks||{}).filter(d=>d<todayStr),selectedCalendarTaskDate])).sort();
   const selectedTasks=datesToShow.flatMap(taskDate=>(sortedUsers||[]).flatMap(member=>(teamData.tasks[taskDate]?.[member.id]||[]).filter(t=>t.visibility!=='private'&&!t.completed).map(task=>({...task,ownerUid:member.id,member,taskDate,assigneeIds:Array.isArray(task.assigneeIds)&&task.assigneeIds.length?task.assigneeIds:[member.id]}))));
-  const startPartnerEdit=()=>{const [h='',m='']=String(detailPartner?.time||'').split(':');setPartnerEditName(detailPartner?.partnerName||'');setPartnerEditSubject(detailPartner?.subject||'');setPartnerEditAssigneeIds(partnerAssigneeIds(detailPartner));setPartnerEditDate(detailPartner?.date||'');setPartnerEditHour(h);setPartnerEditMinute(m);setPartnerEditEndTime(detailPartner?.endTime||'');setPartnerEditNote('');setPartnerEditImages([]);setCalendarUploadProgress(null);setIsEditingPartner(true);};
+  const startPartnerEdit=()=>{const [h='',m='']=String(detailPartner?.time||'').split(':');setPartnerEditName(detailPartner?.partnerName||'');setPartnerEditSubject(detailPartner?.subject||'');setPartnerEditImportant(detailPartner?.important === true);setPartnerEditAssigneeIds(partnerAssigneeIds(detailPartner));setPartnerEditDate(detailPartner?.date||'');setPartnerEditHour(h);setPartnerEditMinute(m);setPartnerEditEndTime(detailPartner?.endTime||'');setPartnerEditNote('');setPartnerEditImages([]);setCalendarUploadProgress(null);setIsEditingPartner(true);};
   useEditGuard(isEditingTask || isEditingPartner, isSaving);
   const closeTaskDetail = () => { if (confirmEditDiscard(isEditingTask, isSaving)) { setDetailTask(null); setIsEditingTask(false); } };
   const closePartnerDetail = () => { if (confirmEditDiscard(isEditingPartner, isSaving)) { setDetailPartner(null); setIsEditingPartner(false); } };
@@ -527,8 +529,8 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partne
     setPartnerImagePosition({x:partnerPanRef.current.startPosition.x+dx,y:partnerPanRef.current.startPosition.y+dy});
   };
   const handlePartnerImageMouseUp=()=>{partnerPanRef.current=null;};
-  const savePartnerEdit=async()=>{if(!detailPartner||!updatePartnerItem||calendarSavingRef.current)return;if(!partnerEditName||!partnerEditSubject.trim()||!partnerEditAssigneeUid||!partnerEditDate||!partnerEditHour||!partnerEditMinute){alert('パートナー名・件名・担当者・日付・時間を入力してください。');return;}const noteText=partnerEditNote.trim();calendarSavingRef.current=true;setCalendarUploadProgress({stage:'checking'});setIsSaving(true);try{const changes={partnerName:partnerEditName,subject:partnerEditSubject.trim(),assigneeUid:partnerEditAssigneeUid,assigneeIds:partnerEditAssigneeIds,date:partnerEditDate,time:`${partnerEditHour}:${partnerEditMinute}`,endTime:partnerEditEndTime};const imageData=await uploadTaskImages(partnerEditImages, setCalendarUploadProgress);if(noteText||imageData.length){const updates=[...getPartnerUpdates(detailPartner),createPartnerUpdate(noteText,currentUser,imageData)];changes.updates=updates;changes.content=noteText||detailPartner.content||'';}await updatePartnerItem(detailPartner.id,changes);setDetailPartner(p=>p?{...p,...changes}:p);setCalendarUploadProgress({stage:'done'});setIsEditingPartner(false);setPartnerEditNote('');clearPartnerEditImage();}catch(e){setCalendarUploadProgress({stage:'error',message:e.message});console.error('パートナー申し送り画像の保存に失敗しました:',e);alert(`パートナータスクの更新に失敗しました。\n${e?.message||'画像のアップロードに失敗しました。'}`);}finally{calendarSavingRef.current=false;setIsSaving(false);}};
-  const saveTaskEdit=async()=>{if(!detailTask||!canEditTask||calendarSavingRef.current)return;calendarSavingRef.current=true;setCalendarUploadProgress({stage:'checking'});setIsSaving(true);try{const text=editingTaskText.trim();const newImages=await uploadTaskImages(calendarTaskImages, setCalendarUploadProgress);await updateTaskText(detailTask.taskDate,detailTask.ownerUid,detailTask.id,{text,newImages});setDetailTask(p=>p?{...p,text,images:mergeTaskImages(p,newImages)}:p);setCalendarTaskImages([]);setCalendarUploadProgress({stage:'done'});setIsEditingTask(false);}catch{setCalendarUploadProgress({stage:'error'});alert('タスクの更新に失敗しました。');}finally{calendarSavingRef.current=false;setIsSaving(false);}};
+  const savePartnerEdit=async()=>{if(!detailPartner||!updatePartnerItem||calendarSavingRef.current)return;if(!partnerEditName||!partnerEditSubject.trim()||!partnerEditAssigneeUid||!partnerEditDate||!partnerEditHour||!partnerEditMinute){alert('パートナー名・件名・担当者・日付・時間を入力してください。');return;}const noteText=partnerEditNote.trim();calendarSavingRef.current=true;setCalendarUploadProgress({stage:'checking'});setIsSaving(true);try{const changes={partnerName:partnerEditName,subject:partnerEditSubject.trim(),important:partnerEditImportant,assigneeUid:partnerEditAssigneeUid,assigneeIds:partnerEditAssigneeIds,date:partnerEditDate,time:`${partnerEditHour}:${partnerEditMinute}`,endTime:partnerEditEndTime};const imageData=await uploadTaskImages(partnerEditImages, setCalendarUploadProgress);if(noteText||imageData.length){const updates=[...getPartnerUpdates(detailPartner),createPartnerUpdate(noteText,currentUser,imageData)];changes.updates=updates;changes.content=noteText||detailPartner.content||'';}await updatePartnerItem(detailPartner.id,changes);setDetailPartner(p=>p?{...p,...changes}:p);setCalendarUploadProgress({stage:'done'});setIsEditingPartner(false);setPartnerEditNote('');clearPartnerEditImage();}catch(e){setCalendarUploadProgress({stage:'error',message:e.message});console.error('パートナー申し送り画像の保存に失敗しました:',e);alert(`パートナータスクの更新に失敗しました。\n${e?.message||'画像のアップロードに失敗しました。'}`);}finally{calendarSavingRef.current=false;setIsSaving(false);}};
+  const saveTaskEdit=async()=>{if(!detailTask||!canEditTask||calendarSavingRef.current)return;calendarSavingRef.current=true;setCalendarUploadProgress({stage:'checking'});setIsSaving(true);try{const text=editingTaskText.trim();const newImages=await uploadTaskImages(calendarTaskImages, setCalendarUploadProgress);await updateTaskText(detailTask.taskDate,detailTask.ownerUid,detailTask.id,{text,newImages,important:editingTaskImportant});setDetailTask(p=>p?{...p,text,important:editingTaskImportant,images:mergeTaskImages(p,newImages)}:p);setCalendarTaskImages([]);setCalendarUploadProgress({stage:'done'});setIsEditingTask(false);}catch{setCalendarUploadProgress({stage:'error'});alert('タスクの更新に失敗しました。');}finally{calendarSavingRef.current=false;setIsSaving(false);}};
   const removeTask=async()=>{if(!detailTask||!canEditTask||calendarSavingRef.current)return;if(!window.confirm('このタスクを削除してもよろしいですか？\n使用済みの商品がある場合は在庫へ戻します。'))return;calendarSavingRef.current=true;setIsSaving(true);try{await deleteTask(detailTask.taskDate,detailTask.ownerUid,detailTask.id);setDetailTask(null);}catch(error){alert(`タスクを削除できませんでした。\n${error.message||'もう一度お試しください。'}`);}finally{calendarSavingRef.current=false;setIsSaving(false);}};
   const runPartnerAction = async (action) => {
     if (!detailPartner || calendarSavingRef.current) return;
@@ -557,25 +559,25 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partne
     <div className="flex-1 overflow-y-auto bg-white"><div className="md:grid md:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.85fr)] md:items-start md:gap-3 md:p-3">
       <div className="min-w-0 md:border md:border-gray-200 md:rounded-xl md:overflow-hidden"><div className="grid grid-cols-7 border-b border-gray-200 sticky top-0 bg-white z-10 shadow-sm">{DAYS_OF_WEEK.map((d,i)=><div key={d} className={`py-2 text-center text-[10px] font-bold ${i===0?'text-red-500':i===6?'text-blue-500':'text-gray-500'}`}>{d}</div>)}</div><div className="grid grid-cols-7 border-l border-gray-100">{days}</div></div>
       <div className="min-w-0 md:space-y-3">
-        <div className="border-t border-gray-200 bg-blue-50/40 px-3 py-2"><div className="flex items-center justify-between mb-1.5"><h3 className="text-[11px] font-bold text-gray-600">パートナータスク</h3><span className="text-[9px] text-gray-400">{activePartnerItems.length}件</span></div>{activePartnerItems.length===0?<p className="text-[10px] text-gray-400 py-1">登録されている未終了のパートナータスクはありません</p>:<div className="space-y-1.5">{activePartnerItems.map(item=><button type="button" key={item.id} onClick={async ()=>{setDetailPartner(item);setIsEditingPartner(false);const handoffs=getPartnerHandoffUpdates(item);const latest=handoffs[handoffs.length-1];if(latest?.id&&item?.handoffReadBy?.[currentUserUid]!==latest.id){try{await updatePartnerItem(item.id,{handoffReadBy:{...(item.handoffReadBy||{}),[currentUserUid]:latest.id}});}catch(e){console.error("申し送り確認状態の保存に失敗しました:",e);}}}} className={`w-full text-left min-w-0 transition-colors ${item.date === todayStr ? 'bg-white min-h-[88px] border-2 border-blue-500 rounded-2xl p-2 shadow-sm hover:bg-blue-50' : 'bg-white min-h-11 border border-blue-100 rounded-md px-2 py-1.5 flex items-center gap-2 hover:border-blue-300 active:bg-blue-50'}`}>{item.date === todayStr ? <div className="space-y-1">
-  <div className="flex flex-wrap items-center justify-between gap-1"><span className="rounded-full bg-blue-600 text-white px-2 py-0.5 text-xs font-bold">今日</span><span className="text-xs font-bold text-blue-700">{item.date.replace(/-/g, '/')}</span><span className="text-lg font-bold text-gray-900">{item.time || '--:--'}{item.endTime && <span className="ml-1 text-sm text-gray-600">〜 {item.endTime}</span>}</span></div>
+        <div className="border-t border-gray-200 bg-blue-50/40 px-3 py-2"><div className="flex items-center justify-between mb-1.5"><h3 className="text-[11px] font-bold text-gray-600">パートナータスク</h3><span className="text-[9px] text-gray-400">{activePartnerItems.length}件</span></div>{activePartnerItems.length===0?<p className="text-[10px] text-gray-400 py-1">登録されている未終了のパートナータスクはありません</p>:<div className="space-y-1.5">{activePartnerItems.map(item=><button type="button" key={item.id} onClick={async ()=>{setDetailPartner(item);setIsEditingPartner(false);const handoffs=getPartnerHandoffUpdates(item);const latest=handoffs[handoffs.length-1];if(latest?.id&&item?.handoffReadBy?.[currentUserUid]!==latest.id){try{await updatePartnerItem(item.id,{handoffReadBy:{...(item.handoffReadBy||{}),[currentUserUid]:latest.id}});}catch(e){console.error("申し送り確認状態の保存に失敗しました:",e);}}}} className={`w-full text-left min-w-0 transition-colors ${item.important === true ? '!border-red-500 !border-2' : ''} ${item.date === todayStr ? 'bg-white min-h-[88px] border-2 border-blue-500 rounded-2xl p-2 shadow-sm hover:bg-blue-50' : 'bg-white min-h-11 border border-blue-100 rounded-md px-2 py-1.5 flex items-center gap-2 hover:border-blue-300 active:bg-blue-50'}`}>{item.date === todayStr ? <div className="space-y-1">
+  <div className="flex flex-wrap items-center justify-between gap-1"><span className="rounded-full bg-blue-600 text-white px-2 py-0.5 text-xs font-bold">今日</span><span className="text-xs font-bold text-blue-700">{item.date.replace(/-/g, '/')}</span><span className="text-lg font-bold text-gray-900">{item.time || '--:--'}{item.endTime && <span className="ml-1 text-sm text-gray-600">〜 {item.endTime}</span>}</span><ImportantBadge important={item.important}/></div>
   <div className="text-base font-bold text-gray-900 whitespace-pre-wrap break-words"><span className="text-sm text-purple-700">{item.partnerName || 'パートナー未設定'} ／ </span>{item.subject || (item.content || '').split(/\r?\n/)[0] || '件名未設定'}</div>
   <div className="flex flex-wrap justify-between gap-1 text-xs text-gray-600"><span>担当：{partnerAssigneeIds(item).map(id => (sortedUsers || []).find(user => user.id === id)?.name).filter(Boolean).join('・') || '未設定'}</span><span className="font-bold text-blue-700">詳細を開く ›</span>{hasUnreadPartnerHandoff(item,currentUserUid) && <span className="font-bold text-orange-800">申し送りあり</span>}</div>
-</div> : <>{item.date&&item.date<todayStr?<span className="shrink-0 text-[8px] font-bold text-red-500 whitespace-nowrap">未終了 {item.date.replace(/-/g,'/')}</span>:<span className="shrink-0 text-[8px] font-bold text-blue-600 whitespace-nowrap">{item.date?item.date.replace(/-/g,'/'):'日付なし'}</span>}<span className="shrink-0 text-[8px] text-gray-500">{item.time||'--:--'}</span>{item.endTime&&<span className="shrink-0 text-[8px] text-orange-600">終了 {item.endTime}</span>}<span className="shrink-0 max-w-24 text-[9px] font-bold text-purple-600 truncate">{item.partnerName||'パートナー未設定'}</span><span className="min-w-0 flex-1 text-[10px] font-bold text-gray-800 truncate">{item.subject||(item.content||'').split(/\r?\n/)[0]||'件名未設定'}</span>{hasUnreadPartnerHandoff(item,currentUserUid)&&<span className="shrink-0 w-1.5 h-1.5 bg-blue-500 rounded-full shrink-0 mt-1" title="申し送りあり" aria-label="申し送りあり"></span>}</>}</button>)}</div>}</div>
-        <div className="border-t border-gray-200 bg-gray-50 px-3 py-2"><div className="flex items-center justify-between mb-1.5"><h3 className="text-[11px] font-bold text-gray-600">本日のタスク（全員）</h3><span className="text-[9px] text-gray-400">{selectedCalendarTaskDate.replace(/-/g,'/')}・{selectedTasks.length}件</span></div>{selectedTasks.length===0?<p className="text-[10px] text-gray-400 py-1">本日までに終了していないタスクはありません</p>:<div className="space-y-1.5">{[...selectedTasks].sort((a, b) => a.taskDate.localeCompare(b.taskDate) || String(a.createdAt || '').localeCompare(String(b.createdAt || ''))).map(task=><button type="button" key={`${task.taskDate}-${task.ownerUid}-${task.id}`} onClick={()=>{setDetailTask(task);setSelectedAssigneeIds(task.assigneeIds);setAssigneeUpdateMessage('');setIsEditingTask(false);}} className={`w-full text-left bg-white min-w-0 transition-colors ${task.taskDate === todayStr ? 'min-h-[88px] border-2 border-blue-500 rounded-2xl p-2 shadow-sm hover:bg-blue-50' : 'min-h-11 border rounded-md px-2 py-1.5 flex items-center gap-2 hover:border-purple-300 active:bg-purple-50'}`}>{task.taskDate === todayStr ? <div className="space-y-1">
-  <div className="flex flex-wrap items-center justify-between gap-1"><span className="rounded-full bg-blue-600 text-white px-2 py-0.5 text-xs font-bold">今日</span><span className="text-xs font-bold text-blue-700">{task.taskDate.replace(/-/g, '/')}</span><span className="text-sm font-bold text-orange-700">終了予定 {task.endTime || '未設定'}</span></div>
+</div> : <>{item.date&&item.date<todayStr?<span className="shrink-0 text-[8px] font-bold text-red-500 whitespace-nowrap">未終了 {item.date.replace(/-/g,'/')}</span>:<span className="shrink-0 text-[8px] font-bold text-blue-600 whitespace-nowrap">{item.date?item.date.replace(/-/g,'/'):'日付なし'}</span>}<span className="shrink-0 text-[8px] text-gray-500">{item.time||'--:--'}</span><ImportantBadge important={item.important}/><span className="shrink-0 max-w-24 text-[9px] font-bold text-purple-600 truncate">{item.partnerName||'パートナー未設定'}</span><span className="min-w-0 flex-1 text-[10px] font-bold text-gray-800 truncate">{item.subject||(item.content||'').split(/\r?\n/)[0]||'件名未設定'}</span>{hasUnreadPartnerHandoff(item,currentUserUid)&&<span className="shrink-0 w-1.5 h-1.5 bg-blue-500 rounded-full shrink-0 mt-1" title="申し送りあり" aria-label="申し送りあり"></span>}</>}</button>)}</div>}</div>
+        <div className="border-t border-gray-200 bg-gray-50 px-3 py-2"><div className="flex items-center justify-between mb-1.5"><h3 className="text-[11px] font-bold text-gray-600">本日のタスク（全員）</h3><span className="text-[9px] text-gray-400">{selectedCalendarTaskDate.replace(/-/g,'/')}・{selectedTasks.length}件</span></div>{selectedTasks.length===0?<p className="text-[10px] text-gray-400 py-1">本日までに終了していないタスクはありません</p>:<div className="space-y-1.5">{[...selectedTasks].sort((a, b) => a.taskDate.localeCompare(b.taskDate) || String(a.createdAt || '').localeCompare(String(b.createdAt || ''))).map(task=><button type="button" key={`${task.taskDate}-${task.ownerUid}-${task.id}`} onClick={()=>{setDetailTask(task);setSelectedAssigneeIds(task.assigneeIds);setAssigneeUpdateMessage('');setIsEditingTask(false);}} className={`w-full text-left bg-white min-w-0 transition-colors ${task.important === true ? '!border-red-500 !border-2' : ''} ${task.taskDate === todayStr ? 'min-h-[88px] border-2 border-blue-500 rounded-2xl p-2 shadow-sm hover:bg-blue-50' : 'min-h-11 border rounded-md px-2 py-1.5 flex items-center gap-2 hover:border-purple-300 active:bg-purple-50'}`}>{task.taskDate === todayStr ? <div className="space-y-1">
+  <div className="flex flex-wrap items-center justify-between gap-1"><span className="rounded-full bg-blue-600 text-white px-2 py-0.5 text-xs font-bold">今日</span><span className="text-xs font-bold text-blue-700">{task.taskDate.replace(/-/g, '/')}</span><ImportantBadge important={task.important}/><span className="text-sm font-bold text-orange-700">終了予定 {task.endTime || '未設定'}</span></div>
   <div className="text-base font-bold text-gray-900 whitespace-pre-wrap break-words">{task.subject || task.text || '📷 画像タスク'}</div>
   {task.subject && task.text && <div className="text-sm text-gray-600 whitespace-pre-wrap break-words line-clamp-2">{task.text}</div>}
   <div className="flex flex-wrap justify-between gap-1 text-xs text-gray-600"><span>担当：{task.assigneeIds.map(id => sortedUsers.find(user => user.id === id)?.name?.split(' ')[0] || '').filter(Boolean).join('・') || '未設定'}</span><span className="font-bold text-blue-700">詳細を開く ›</span></div>
-</div> : <>{task.taskDate<todayStr&&<span className="shrink-0 text-[8px] font-bold text-red-500 whitespace-nowrap">対象日 {task.taskDate.replace(/-/g,'/')}</span>}<span className="min-w-0 flex-1 text-[10px] truncate text-gray-700"><span className="font-bold">{task.subject||task.text||'📷 画像タスク'}</span>{task.subject&&task.text&&<span className="ml-1 text-gray-500">{task.text}</span>}</span><span className="shrink-0 text-[8px] text-orange-600">終了予定 {task.endTime||'未設定'}</span><span className="shrink-0 max-w-32 text-[8px] text-purple-600 truncate">担当: {task.assigneeIds.map(id=>sortedUsers.find(u=>u.id===id)?.name?.split(' ')[0]||'').filter(Boolean).join('・')}</span><span className="shrink-0 text-[8px] text-gray-400">開始 {task.createdAt?new Date(task.createdAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}):'--:--'}</span></>}</button>)}</div>}</div>
+</div> : <><span className="shrink-0 text-[8px] font-bold text-gray-600 whitespace-nowrap">対象日 {task.taskDate.replace(/-/g,'/')}</span><ImportantBadge important={task.important}/><span className="min-w-0 flex-1 text-[10px] truncate text-gray-700"><span className="font-bold">{task.subject||task.text||'📷 画像タスク'}</span>{task.subject&&task.text&&<span className="ml-1 text-gray-500">{task.text}</span>}</span><span className="shrink-0 text-[8px] text-orange-600">終了予定 {task.endTime||'未設定'}</span><span className="shrink-0 max-w-32 text-[8px] text-purple-600 truncate">担当: {task.assigneeIds.map(id=>sortedUsers.find(u=>u.id===id)?.name?.split(' ')[0]||'').filter(Boolean).join('・')}</span><span className="shrink-0 text-[8px] text-gray-400">開始 {task.createdAt?new Date(task.createdAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}):'--:--'}</span></>}</button>)}</div>}</div>
       </div>
     </div>
     {calendarDay && !detailTask && !detailPartner && <CalendarDayPanel date={calendarDay} today={todayStr} teamData={teamData} partnerItems={partnerItems || []} users={sortedUsers || []} shiftTypes={shiftTypes} onClose={() => setCalendarDay(null)} onDateChange={date => { setCalendarDay(date); setSelectedCalendarTaskDate(date); }} onTask={task => { setDetailTask(task); setSelectedAssigneeIds(task.assigneeIds); setAssigneeUpdateMessage(''); setIsEditingTask(false); }} onPartner={async item => { setDetailPartner(item); setIsEditingPartner(false); const updates = getPartnerHandoffUpdates(item); const latest = updates[updates.length - 1]; if (latest?.id && item.handoffReadBy?.[currentUserUid] !== latest.id) { try { await updatePartnerItem(item.id, { handoffReadBy: { ...(item.handoffReadBy || {}), [currentUserUid]: latest.id } }); } catch (error) { console.error('申し送り確認状態の保存に失敗しました:', error); } } }}/>}
-    {detailPartner&&<div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-2 sm:p-4" onClick={closePartnerDetail}><div className="w-full max-w-md max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col" onClick={e=>e.stopPropagation()}><div className="px-4 py-3 border-b flex items-center justify-between shrink-0"><div><div className="text-sm font-bold text-gray-800">パートナータスク詳細</div><div className="text-[10px] text-gray-400">{detailPartner.date?.replace(/-/g,'/')} {detailPartner.time||'--:--'} ・ 終了予定 {detailPartner.endTime||'未設定'}</div></div><button onClick={closePartnerDetail} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-full"><X size={18}/></button></div><div ref={partnerDetailBodyRef} className="p-4 space-y-3 overflow-y-auto min-h-0 flex-1">{isEditingPartner?<><select value={partnerEditName} onChange={e=>setPartnerEditName(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm"><option value="">パートナーを選択</option>{(partnerNames||[]).map(n=><option key={n} value={n}>{n}</option>)}</select><input type="text" value={partnerEditSubject} onChange={e=>setPartnerEditSubject(e.target.value)} placeholder="件名" className="w-full border rounded-lg px-3 py-2 text-sm"/><AssigneePicker users={sortedUsers} value={partnerEditAssigneeIds} onChange={setPartnerEditAssigneeIds} disabled={isSaving}/><div className="grid grid-cols-2 gap-2"><input type="date" value={partnerEditDate} onChange={e=>setPartnerEditDate(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm"/><div className="flex gap-1"><select value={partnerEditHour} onChange={e=>setPartnerEditHour(e.target.value)} className="w-1/2 border rounded-lg px-1 py-2 text-sm"><option value="">時</option>{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(v=><option key={v} value={v}>{v}</option>)}</select><select value={partnerEditMinute} onChange={e=>setPartnerEditMinute(e.target.value)} className="w-1/2 border rounded-lg px-1 py-2 text-sm"><option value="">分</option>{['00','15','30','45'].map(v=><option key={v} value={v}>{v}</option>)}</select></div><label className="block"><span className="text-[10px] font-bold text-gray-500">終了予定時刻</span><div className="flex items-center gap-1"><select aria-label="終了予定時刻の時" value={partnerEditEndTime ? partnerEditEndTime.split(':')[0] : ''} onChange={e=>setPartnerEditEndTime(e.target.value ? e.target.value+':'+((partnerEditEndTime||'').split(':')[1]||'00') : '')} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" ><option value="">時</option>{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(v=><option key={v} value={v}>{v}</option>)}</select><span>:</span><select aria-label="終了予定時刻の分" value={partnerEditEndTime ? partnerEditEndTime.split(':')[1] : ''} onChange={e=>setPartnerEditEndTime(((partnerEditEndTime||'').split(':')[0]||'00')+':'+e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" ><option value="">分</option>{['00','15','30','45'].map(v=><option key={v} value={v}>{v}</option>)}</select></div></label></div><div className="space-y-2"><PartnerUpdateHistory item={detailPartner} onOpen={openPartnerImage}/><div><div className="text-[10px] font-bold text-gray-500 mb-1">今回の申し送り・追記</div><textarea value={partnerEditNote} onChange={e=>setPartnerEditNote(e.target.value)} rows={5} placeholder="今回追加する申し送りを入力" className="w-full border rounded-lg px-3 py-2 text-sm resize-y"/><ImagePicker files={partnerEditImages} onChange={setPartnerEditImages} disabled={isSaving}/><TaskSaveProgress progress={calendarUploadProgress}/><p className="text-[9px] text-gray-400 mt-1">画像は各10MB以下。動画は30秒以内。20MBを超える動画は自動圧縮します。添付だけでも保存できます。</p></div></div><div className="flex gap-2 sticky bottom-0 bg-white pt-2 pb-1 border-t border-gray-100"><button type="button" onClick={()=>{if(confirmEditDiscard(true,isSaving))setIsEditingPartner(false);}} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-xs font-bold">キャンセル</button><button type="button" disabled={isSaving} onClick={savePartnerEdit} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold"><span>{isSaving?'保存中…':'変更を保存'}</span></button></div></>:<><div className="text-xs font-bold text-purple-600">{detailPartner.partnerName||'パートナー未設定'}</div><div className="text-base font-bold text-gray-800">{detailPartner.subject||(detailPartner.content||'').split(/\r?\n/)[0]||'件名未設定'}</div>{((detailPartner.updates||[]).some(u=>u?.kind==='handoff')||(detailPartner.updates||[]).length>1)&&<div className="inline-flex px-2 py-1 rounded-full bg-orange-50 text-orange-700 text-[10px] font-bold">申し送りあり</div>}<div className="text-xs font-bold text-blue-600">担当: {partnerAssigneeIds(detailPartner).map(id => (sortedUsers || []).find(user => user.id === id)?.name).filter(Boolean).join('・') || '未設定'}</div>{!detailPartner.completed && <PartnerScheduleEditor item={detailPartner} disabled={isSaving} onSave={async (id, schedule) => { await reschedulePartnerItem(id, schedule); setDetailPartner(item => item?.id === id ? { ...item, ...schedule } : item); }}/>}<PartnerUpdateHistory item={detailPartner} onOpen={openPartnerImage}/><ImageGallery item={detailPartner} onOpen={openPartnerImage}/>{!detailPartner.completed && <div className="sticky bottom-0 bg-white pt-3 border-t border-gray-100 space-y-2">
-<button type="button" disabled={isSaving} onClick={startPartnerEdit} className="w-full min-h-11 py-2.5 rounded-xl bg-blue-50 text-blue-700 text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50"><Edit2 size={14}/><span>編集</span></button>
+    {detailPartner&&<div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-2 sm:p-4" onClick={closePartnerDetail}><div className="w-full max-w-md max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col" onClick={e=>e.stopPropagation()}><div className="px-4 py-3 border-b flex items-center justify-between shrink-0"><div><div className="text-sm font-bold text-gray-800">パートナータスク詳細</div><div className="text-[10px] text-gray-400">{detailPartner.date?.replace(/-/g,'/')} {detailPartner.time||'--:--'} ・ 終了予定 {detailPartner.endTime||'未設定'}</div></div><button onClick={closePartnerDetail} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-full"><X size={18}/></button></div><div ref={partnerDetailBodyRef} className="p-4 space-y-3 overflow-y-auto min-h-0 flex-1">{isEditingPartner?<><select value={partnerEditName} onChange={e=>setPartnerEditName(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm"><option value="">パートナーを選択</option>{(partnerNames||[]).map(n=><option key={n} value={n}>{n}</option>)}</select><input type="text" value={partnerEditSubject} onChange={e=>setPartnerEditSubject(e.target.value)} placeholder="件名" className="w-full border rounded-lg px-3 py-2 text-sm"/><ImportantToggle value={partnerEditImportant} onChange={setPartnerEditImportant} disabled={isSaving}/><AssigneePicker users={sortedUsers} value={partnerEditAssigneeIds} onChange={setPartnerEditAssigneeIds} disabled={isSaving}/><div className="grid grid-cols-2 gap-2"><input type="date" value={partnerEditDate} onChange={e=>setPartnerEditDate(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm"/><div className="flex gap-1"><select value={partnerEditHour} onChange={e=>setPartnerEditHour(e.target.value)} className="w-1/2 border rounded-lg px-1 py-2 text-sm"><option value="">時</option>{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(v=><option key={v} value={v}>{v}</option>)}</select><select value={partnerEditMinute} onChange={e=>setPartnerEditMinute(e.target.value)} className="w-1/2 border rounded-lg px-1 py-2 text-sm"><option value="">分</option>{['00','15','30','45'].map(v=><option key={v} value={v}>{v}</option>)}</select></div><label className="block"><span className="text-[10px] font-bold text-gray-500">終了予定時刻</span><div className="flex items-center gap-1"><select aria-label="終了予定時刻の時" value={partnerEditEndTime ? partnerEditEndTime.split(':')[0] : ''} onChange={e=>setPartnerEditEndTime(e.target.value ? e.target.value+':'+((partnerEditEndTime||'').split(':')[1]||'00') : '')} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" ><option value="">時</option>{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(v=><option key={v} value={v}>{v}</option>)}</select><span>:</span><select aria-label="終了予定時刻の分" value={partnerEditEndTime ? partnerEditEndTime.split(':')[1] : ''} onChange={e=>setPartnerEditEndTime(((partnerEditEndTime||'').split(':')[0]||'00')+':'+e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" ><option value="">分</option>{['00','15','30','45'].map(v=><option key={v} value={v}>{v}</option>)}</select></div></label></div><div className="space-y-2"><PartnerUpdateHistory item={detailPartner} onOpen={openPartnerImage}/><div><div className="text-[10px] font-bold text-gray-500 mb-1">今回の申し送り・追記</div><textarea value={partnerEditNote} onChange={e=>setPartnerEditNote(e.target.value)} rows={5} placeholder="今回追加する申し送りを入力" className="w-full border rounded-lg px-3 py-2 text-sm resize-y"/><ImagePicker files={partnerEditImages} onChange={setPartnerEditImages} disabled={isSaving}/><TaskSaveProgress progress={calendarUploadProgress}/><p className="text-[9px] text-gray-400 mt-1">画像は各10MB以下。動画は30秒以内。20MBを超える動画は自動圧縮します。添付だけでも保存できます。</p></div></div><div className="flex gap-2 sticky bottom-0 bg-white pt-2 pb-1 border-t border-gray-100"><button type="button" onClick={()=>{if(confirmEditDiscard(true,isSaving))setIsEditingPartner(false);}} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-xs font-bold">キャンセル</button><button type="button" disabled={isSaving} onClick={savePartnerEdit} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold"><span>{isSaving?'保存中…':'変更を保存'}</span></button></div></>:<><div className="text-xs font-bold text-purple-600">{detailPartner.partnerName||'パートナー未設定'}</div><div className="text-base font-bold text-gray-800">{detailPartner.subject||(detailPartner.content||'').split(/\r?\n/)[0]||'件名未設定'}</div>{((detailPartner.updates||[]).some(u=>u?.kind==='handoff')||(detailPartner.updates||[]).length>1)&&<div className="inline-flex px-2 py-1 rounded-full bg-orange-50 text-orange-700 text-[10px] font-bold">申し送りあり</div>}<div className="text-xs font-bold text-blue-600">担当: {partnerAssigneeIds(detailPartner).map(id => (sortedUsers || []).find(user => user.id === id)?.name).filter(Boolean).join('・') || '未設定'}</div>{!detailPartner.completed && <PartnerScheduleEditor item={detailPartner} disabled={isSaving} onSave={async (id, schedule) => { await reschedulePartnerItem(id, schedule); setDetailPartner(item => item?.id === id ? { ...item, ...schedule } : item); }}/>}<PartnerUpdateHistory item={detailPartner} onOpen={openPartnerImage}/><ImageGallery item={detailPartner} onOpen={openPartnerImage}/>{!detailPartner.completed && <div className="sticky bottom-0 bg-white pt-3 border-t border-gray-100 space-y-2">
+<ActionIconButton action="edit" type="button" disabled={isSaving} onClick={startPartnerEdit} className="w-full"/>
 <div className="grid grid-cols-2 gap-2">
-<button type="button" disabled={isSaving} onClick={() => runPartnerAction('complete')} className="min-h-11 py-2.5 rounded-xl bg-green-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50"><CheckSquare size={14}/><span>終了</span></button>
-<button type="button" disabled={isSaving} onClick={() => runPartnerAction('delete')} className="min-h-11 py-2.5 rounded-xl bg-red-50 text-red-700 text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50"><Trash2 size={14}/><span>削除</span></button>
+<button type="button" disabled={isSaving} onClick={() => runPartnerAction('complete')} className="min-h-11 py-2.5 rounded-xl bg-green-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50"><CheckSquare size={14}/><span>タスクを終了</span></button>
+<ActionIconButton action="delete" type="button" disabled={isSaving} onClick={() => runPartnerAction('delete')} className=""/>
 </div>{isSaving && <p role="status" className="text-xs text-gray-500">処理中…</p>}</div>}{detailPartner.completed && <p className="font-bold text-green-700">終了済み</p>}</>}</div></div></div>}
     {selectedPartnerImage&&<div className="fixed inset-0 z-[70] bg-black/90 flex flex-col" onClick={closePartnerImage}>
       <div className="shrink-0 flex items-center justify-between px-3 py-2 text-white bg-black/60" onClick={e=>e.stopPropagation()}>
@@ -602,7 +604,7 @@ const CalendarView = ({ currentDate, changeMonth, teamData, partnerItems, partne
         />
       </div>
     </div>}
-    {detailTask&&<div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={closeTaskDetail}><div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden" onClick={e=>e.stopPropagation()}><div className="px-4 py-3 border-b flex items-center justify-between"><div><div className="text-sm font-bold text-gray-800">タスク詳細</div><div className="text-[10px] text-gray-400">登録者: {detailTask.member.name}</div>{!canEditTask&&<div className="text-[9px] text-gray-400">他のメンバーのタスクは操作できません</div>}</div><button onClick={closeTaskDetail} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-full"><X size={18}/></button></div><div className="p-4 space-y-3">{isEditingTask?<><ImageGallery item={detailTask}/><ImagePicker files={calendarTaskImages} onChange={setCalendarTaskImages} disabled={isSaving}/><TaskSaveProgress progress={calendarUploadProgress}/><textarea value={editingTaskText} onChange={e=>setEditingTaskText(e.target.value)} rows={5} className="w-full border rounded-xl px-3 py-2.5 text-sm resize-y"/><div className="flex gap-2"><button type="button" onClick={()=>{if(confirmEditDiscard(true,isSaving))setIsEditingTask(false);}} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-xs font-bold">キャンセル</button><button type="button" disabled={isSaving} onClick={saveTaskEdit} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold"><span>{isSaving?'保存中…':'変更を保存'}</span></button></div></>:<><div className="text-base font-bold text-gray-800 whitespace-pre-wrap break-words">{detailTask.subject||detailTask.text||'📷 画像タスク'}</div>{detailTask.subject&&detailTask.text&&<div className="text-sm text-gray-700 whitespace-pre-wrap break-words">{detailTask.text}</div>}<div className="text-xs text-orange-600 font-bold">終了予定: {detailTask.endTime||'未設定'}</div><ImageGallery item={detailTask}/><div className="grid grid-cols-2 gap-2 text-[10px] text-gray-500"><div className="bg-gray-50 rounded-lg p-2">開始<br/><span className="font-bold text-gray-700">{detailTask.createdAt?new Date(detailTask.createdAt).toLocaleString('ja-JP'):'--'}</span></div><div className="bg-gray-50 rounded-lg p-2">終了<br/><span className="font-bold text-gray-700">{detailTask.completedAt?new Date(detailTask.completedAt).toLocaleString('ja-JP'):'--'}</span></div></div><div><div className="text-xs font-bold text-gray-600 mb-2">担当者（複数選択可）</div><div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">{(sortedUsers||[]).map(member=>{const checked=selectedAssigneeIds.includes(member.id);return <label key={member.id} className={`flex items-center gap-2 p-2 rounded-lg border ${canEditTask?'cursor-pointer':'cursor-not-allowed opacity-70'} ${checked?'border-purple-400 bg-purple-50':'border-gray-200'}`}><input type="checkbox" disabled={!canEditTask} checked={checked} onChange={()=>setSelectedAssigneeIds(p=>checked?p.filter(id=>id!==member.id):[...p,member.id])}/><span className="text-xs font-bold text-gray-700 truncate">{member.name.split(' ')[0]}</span></label>})}</div></div>{canEditTask&&<><button type="button" disabled={!selectedAssigneeIds.length||isUpdatingAssignees} onClick={async()=>{setIsUpdatingAssignees(true);setAssigneeUpdateMessage('');try{await updateTaskAssignees(detailTask.ownerUid,detailTask.taskDate,detailTask.id,selectedAssigneeIds);setDetailTask(p=>p?{...p,assigneeIds:[...selectedAssigneeIds]}:p);setAssigneeUpdateMessage('担当者を更新しました');}catch{setAssigneeUpdateMessage('担当者の更新に失敗しました。')}finally{setIsUpdatingAssignees(false);}}} className="w-full py-2.5 rounded-xl bg-purple-600 text-white text-xs font-bold disabled:opacity-40"><span>{isUpdatingAssignees?'更新中…':'担当者を更新'}</span></button><div className="flex gap-2"><button type="button" onClick={()=>{setEditingTaskText(detailTask.text||'');setCalendarTaskImages([]);setIsEditingTask(true);}} className="flex-1 py-2 rounded-xl bg-blue-50 text-blue-700 text-xs font-bold"><span>編集</span></button><button type="button" disabled={!canFinishTask || isSaving} onClick={finishTask} className="flex-1 py-2 rounded-xl bg-green-50 text-green-700 text-xs font-bold disabled:opacity-40"><span>{detailTask.completed ? '未終了に戻す' : '終了にする'}</span></button><button type="button" disabled={isSaving} aria-label="タスクを削除" onClick={removeTask} className="p-2 rounded-xl bg-red-50 text-red-600"><Trash2 size={16}/></button></div></>}{!canEditTask && canFinishTask && <button type="button" disabled={isSaving} onClick={finishTask} className="w-full min-h-12 rounded-xl bg-green-600 text-white text-base font-bold">{detailTask.completed ? '未終了に戻す' : '終了にする'}</button>}{assigneeUpdateMessage&&<div className="text-[10px] text-green-600 font-bold">{assigneeUpdateMessage}</div>}</>}</div></div></div>}
+    {detailTask&&<div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={closeTaskDetail}><div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden" onClick={e=>e.stopPropagation()}><div className="px-4 py-3 border-b flex items-center justify-between"><div><div className="text-sm font-bold text-gray-800">タスク詳細</div><div className="text-[10px] text-gray-400">登録者: {detailTask.member.name}</div>{!canEditTask&&<div className="text-[9px] text-gray-400">他のメンバーのタスクは操作できません</div>}</div><button onClick={closeTaskDetail} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-full"><X size={18}/></button></div><div className="p-4 space-y-3">{isEditingTask?<><ImageGallery item={detailTask}/><ImagePicker files={calendarTaskImages} onChange={setCalendarTaskImages} disabled={isSaving}/><TaskSaveProgress progress={calendarUploadProgress}/><ImportantToggle value={editingTaskImportant} onChange={setEditingTaskImportant} disabled={isSaving}/><textarea value={editingTaskText} onChange={e=>setEditingTaskText(e.target.value)} rows={5} className="w-full border rounded-xl px-3 py-2.5 text-sm resize-y"/><div className="flex gap-2"><button type="button" onClick={()=>{if(confirmEditDiscard(true,isSaving))setIsEditingTask(false);}} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-xs font-bold">キャンセル</button><button type="button" disabled={isSaving} onClick={saveTaskEdit} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold"><span>{isSaving?'保存中…':'変更を保存'}</span></button></div></>:<><div className="text-base font-bold text-gray-800 whitespace-pre-wrap break-words">{detailTask.subject||detailTask.text||'📷 画像タスク'}</div>{detailTask.subject&&detailTask.text&&<div className="text-sm text-gray-700 whitespace-pre-wrap break-words">{detailTask.text}</div>}<div className="text-xs text-orange-600 font-bold">終了予定: {detailTask.endTime||'未設定'}</div><ImageGallery item={detailTask}/><div className="grid grid-cols-2 gap-2 text-[10px] text-gray-500"><div className="bg-gray-50 rounded-lg p-2">開始<br/><span className="font-bold text-gray-700">{detailTask.createdAt?new Date(detailTask.createdAt).toLocaleString('ja-JP'):'--'}</span></div><div className="bg-gray-50 rounded-lg p-2">終了<br/><span className="font-bold text-gray-700">{detailTask.completedAt?new Date(detailTask.completedAt).toLocaleString('ja-JP'):'--'}</span></div></div><div><div className="text-xs font-bold text-gray-600 mb-2">担当者（複数選択可）</div><div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">{(sortedUsers||[]).map(member=>{const checked=selectedAssigneeIds.includes(member.id);return <label key={member.id} className={`flex items-center gap-2 p-2 rounded-lg border ${canEditTask?'cursor-pointer':'cursor-not-allowed opacity-70'} ${checked?'border-purple-400 bg-purple-50':'border-gray-200'}`}><input type="checkbox" disabled={!canEditTask} checked={checked} onChange={()=>setSelectedAssigneeIds(p=>checked?p.filter(id=>id!==member.id):[...p,member.id])}/><span className="text-xs font-bold text-gray-700 truncate">{member.name.split(' ')[0]}</span></label>})}</div></div>{canEditTask&&<><button type="button" disabled={!selectedAssigneeIds.length||isUpdatingAssignees} onClick={async()=>{setIsUpdatingAssignees(true);setAssigneeUpdateMessage('');try{await updateTaskAssignees(detailTask.ownerUid,detailTask.taskDate,detailTask.id,selectedAssigneeIds);setDetailTask(p=>p?{...p,assigneeIds:[...selectedAssigneeIds]}:p);setAssigneeUpdateMessage('担当者を更新しました');}catch{setAssigneeUpdateMessage('担当者の更新に失敗しました。')}finally{setIsUpdatingAssignees(false);}}} className="w-full py-2.5 rounded-xl bg-purple-600 text-white text-xs font-bold disabled:opacity-40"><span>{isUpdatingAssignees?'更新中…':'担当者を更新'}</span></button><div className="flex gap-2"><ActionIconButton action="edit" type="button" onClick={()=>{setEditingTaskText(detailTask.text||'');setEditingTaskImportant(detailTask.important === true);setCalendarTaskImages([]);setIsEditingTask(true);}} className="flex-1"/><button type="button" disabled={!canFinishTask || isSaving} onClick={finishTask} className="flex-1 py-2 rounded-xl bg-green-50 text-green-700 text-xs font-bold disabled:opacity-40"><span>{detailTask.completed ? '未終了に戻す' : "タスクを終了"}</span></button><ActionIconButton action="delete" type="button" disabled={isSaving} aria-label="タスクを削除" onClick={removeTask} className=""/></div></>}{!canEditTask && canFinishTask && <button type="button" disabled={isSaving} onClick={finishTask} className="w-full min-h-12 rounded-xl bg-green-600 text-white text-base font-bold">{detailTask.completed ? '未終了に戻す' : "タスクを終了"}</button>}{assigneeUpdateMessage&&<div className="text-[10px] text-green-600 font-bold">{assigneeUpdateMessage}</div>}</>}</div></div></div>}
     </div>
   </div>;
 };
@@ -995,6 +997,7 @@ const DailyTaskItem = ({ task, selectedDate, selectedUserUid, currentUserUid, cu
     const [completing, setCompleting] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [editVal, setEditVal] = useState(task.text || '');
+    const [editImportant, setEditImportant] = useState(task.important === true);
     const [editSubject, setEditSubject] = useState(task.subject || task.text || '');
     const [editEndTime, setEditEndTime] = useState(task.endTime || '');
     const [editTaskImages, setEditTaskImages] = useState([]);
@@ -1049,6 +1052,7 @@ const DailyTaskItem = ({ task, selectedDate, selectedUserUid, currentUserUid, cu
         <div className="bg-white p-3 rounded-xl border border-blue-400 shadow-sm space-y-2">
           <ImageGallery item={task}/><ImagePicker files={editTaskImages} onChange={setEditTaskImages} disabled={isSavingEdit}/><TaskSaveProgress progress={editUploadProgress}/>
           <label className="block text-xs font-bold text-gray-600">タスクの日付<input type="date" value={editDate} disabled={isSavingEdit} onChange={e=>setEditDate(e.target.value)} className="mt-1 min-h-11 w-full border border-gray-300 rounded-lg px-3 text-sm"/></label>
+          <ImportantToggle value={editImportant} onChange={setEditImportant} disabled={isSavingEdit}/>
           <input type="text" value={editSubject} onChange={e=>setEditSubject(e.target.value)} placeholder="件名" className="w-full bg-blue-50/50 p-2 text-sm rounded outline-none" />
           <label className="flex items-center gap-2 text-xs text-gray-600">終了予定時刻 <div className="flex items-center gap-1"><select aria-label="終了予定時刻の時" value={editEndTime ? editEndTime.split(':')[0] : ''} onChange={e=>setEditEndTime(e.target.value ? e.target.value+':'+((editEndTime||'').split(':')[1]||'00') : '')} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" ><option value="">時</option>{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(v=><option key={v} value={v}>{v}</option>)}</select><span>:</span><select aria-label="終了予定時刻の分" value={editEndTime ? editEndTime.split(':')[1] : ''} onChange={e=>setEditEndTime(((editEndTime||'').split(':')[0]||'00')+':'+e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" ><option value="">分</option>{['00','15','30','45'].map(v=><option key={v} value={v}>{v}</option>)}</select></div></label>
           <div className="flex gap-2 items-start">
@@ -1067,7 +1071,7 @@ const DailyTaskItem = ({ task, selectedDate, selectedUserUid, currentUserUid, cu
                 setIsSavingEdit(true);
                 try {
                   const newImages = await uploadTaskImages(editTaskImages, setEditUploadProgress);
-                  await updateTaskText(task.taskDate || selectedDate, task.ownerUid || selectedUserUid, task.id, { newImages, targetDate: editDate, subject: editSubject.trim(), text: editVal.trim(), endTime: editEndTime, updates: [...(Array.isArray(task.updates) ? task.updates : []), createPartnerUpdate(editVal.trim(), currentUser, null, 'handoff')] });
+                  await updateTaskText(task.taskDate || selectedDate, task.ownerUid || selectedUserUid, task.id, { newImages, targetDate: editDate, subject: editSubject.trim(), text: editVal.trim(), endTime: editEndTime, important: editImportant, updates: [...(Array.isArray(task.updates) ? task.updates : []), createPartnerUpdate(editVal.trim(), currentUser, null, 'handoff')] });
                   setEditUploadProgress({stage:'done'});
                   setIsEditing(false);
                 } catch (error) { setEditUploadProgress({stage:'error',message:error.message}); alert(error.message || 'タスクの保存に失敗しました。'); }
@@ -1088,7 +1092,7 @@ const DailyTaskItem = ({ task, selectedDate, selectedUserUid, currentUserUid, cu
     return (
       <div
         onClick={() => setSelectedTaskId(isSelected ? null : task.id)}
-        className={`bg-white p-3 rounded-xl border transition-all cursor-pointer ${
+        className={`bg-white p-3 rounded-xl border transition-all cursor-pointer ${task.important === true ? '!border-red-500 !border-2' : ''} ${
           isSelected
             ? 'border-purple-400 bg-purple-50/20 ring-2 ring-purple-400/20 shadow-md'
             : task.completed ? 'border-green-200 bg-green-50/60' : 'border-gray-200 shadow-sm hover:border-gray-300'
@@ -1098,7 +1102,7 @@ const DailyTaskItem = ({ task, selectedDate, selectedUserUid, currentUserUid, cu
           type="button"
           disabled={completing}
           aria-label={task.completed ? 'タスクを未完了に戻す' : 'タスクを完了にする'}
-          title={canFinishTask ? (task.completed ? '未完了に戻す' : '完了にする') : '担当者または管理者が終了できます'}
+          title={canFinishTask ? (task.completed ? '未完了に戻す' : "タスクを終了") : '担当者または管理者が終了できます'}
           onClick={async (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -1176,10 +1180,10 @@ const DailyTaskItem = ({ task, selectedDate, selectedUserUid, currentUserUid, cu
                 : 'bg-gray-100 border-gray-300 text-gray-400'
           }`}
         >
-          <span className="text-sm font-bold">{task.completed ? '✓ 終了済' : '終了'}</span>
+          <span className="text-sm font-bold">{task.completed ? '✓ 終了済' : "タスクを終了"}</span>
         </button>
         <div className="flex-1 min-w-0">
-          {task.completed && <span className="inline-flex items-center gap-1 rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-[9px] font-black mb-1"><CheckSquare size={11}/>終了済み</span>}
+          <ImportantBadge important={task.important}/>{task.completed && <span className="inline-flex items-center gap-1 rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-[9px] font-black mb-1"><CheckSquare size={11}/>終了済み</span>}
           {(task.subject || task.text) && <span className={`text-sm font-bold block whitespace-pre-wrap leading-tight ${task.completed ? 'text-gray-500 line-through' : 'text-gray-800'}`}>{task.subject || task.text}</span>}
           {task.subject && task.text && <span className="text-xs block mt-1 whitespace-pre-wrap text-gray-600">{task.text}</span>}
           {task.endTime && <div className="text-[10px] text-orange-600 font-bold mt-1">終了予定 {task.endTime}</div>}
@@ -1265,22 +1269,8 @@ const DailyTaskItem = ({ task, selectedDate, selectedUserUid, currentUserUid, cu
         </div>
 
         <div className="shrink-0 flex gap-1" onClick={(e) => e.stopPropagation()}>
-          <button type="button"
-            disabled={!canEditTask || deletingTaskId !== null}
-            onClick={() => { setEditVal(task.text || ''); setEditSubject(task.subject || task.text || ''); setEditEndTime(task.endTime || ''); setEditDate(task.taskDate || selectedDate); setEditTaskImages([]); setEditUploadProgress(null); setIsEditing(true); }}
-            className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-gray-100 rounded-lg active:scale-95"
-            title="編集"
-          >
-            <Edit2 size={16}/>
-          </button>
-          <button type="button"
-            disabled={!canEditTask || deletingTaskId !== null}
-            onClick={() => handleDeleteDailyTask(task)}
-            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg active:scale-95"
-            title="削除"
-          >
-            <Trash2 size={16}/>
-          </button>
+          <ActionIconButton action="edit" type="button" disabled={!canEditTask || deletingTaskId !== null} onClick={() => { setEditImportant(task.important === true); setEditVal(task.text || ''); setEditSubject(task.subject || task.text || ''); setEditEndTime(task.endTime || ''); setEditDate(task.taskDate || selectedDate); setEditTaskImages([]); setEditUploadProgress(null); setIsEditing(true); }} title="編集" className=""/>
+          <ActionIconButton action="delete" type="button" disabled={!canEditTask || deletingTaskId !== null} onClick={() => handleDeleteDailyTask(task)} title="削除" className=""/>
         </div>
       </div>
     );
@@ -1293,6 +1283,7 @@ const DailyDetailView = ({
   const [newAssigneeIds, setNewAssigneeIds] = useState(null);
   const [quickTaskOpen, setQuickTaskOpen] = useState(true);
   const [newTaskSubject, setNewTaskSubject] = useState('');
+  const [newTaskImportant, setNewTaskImportant] = useState(false);
   const [newTaskText, setNewTaskText] = useState('');
   const [newTaskEndTime, setNewTaskEndTime] = useState('');
   const [newTaskProductId, setNewTaskProductId] = useState('');
@@ -1470,11 +1461,12 @@ const DailyDetailView = ({
       }
       const productQuantity = Number(newTaskProductQuantity);
       if (newTaskProductId && (!Number.isInteger(productQuantity) || productQuantity < 1)) { alert('使用数量は1以上の整数を入力してください。'); return; }
-      await addTask(selectedDate, selectedUserUid, newTaskText.trim(), imageUrl, imageName, imagePublicId, imageBytes, newTaskVisibility, newTaskVisibility === 'private' ? '' : newTaskSubject.trim(), newTaskVisibility === 'private' ? '' : newTaskEndTime, newTaskVisibility === 'private' ? '' : newTaskProductId, newTaskProductId ? productQuantity : 1, images, assignees);
+      await addTask(selectedDate, selectedUserUid, newTaskText.trim(), imageUrl, imageName, imagePublicId, imageBytes, newTaskVisibility, newTaskVisibility === 'private' ? '' : newTaskSubject.trim(), newTaskVisibility === 'private' ? '' : newTaskEndTime, newTaskVisibility === 'private' ? '' : newTaskProductId, newTaskProductId ? productQuantity : 1, images, assignees, newTaskVisibility !== 'private' && newTaskImportant);
       setTaskUploadProgress({stage:'done'});
       setNewAssigneeIds(null);
       setNewTaskVisibility('public');
       setNewTaskSubject('');
+      setNewTaskImportant(false);
       setNewTaskText('');
       setNewTaskEndTime('');
       setNewTaskProductId('');
@@ -1539,11 +1531,12 @@ const DailyDetailView = ({
         <div className="bg-white border-b border-gray-200 p-3 shrink-0 shadow-sm">
           <div className="max-w-3xl mx-auto">
 <button type="button" disabled={isUploading} onClick={() => setQuickTaskOpen(true)} className="w-full min-h-14 mb-4 rounded-xl bg-blue-50 border-2 border-blue-500 text-blue-700 text-lg font-bold">かんたん入力（タスク）</button>
-{quickTaskOpen && <QuickEntry hasDraft={!!(newTaskSubject.trim() || newTaskText.trim() || newTaskEndTime || newTaskProductId || newTaskImages.length)} tasksContent={<div className="space-y-3">{[...unfinishedPastTasks, ...selectedDateActiveTasks].length ? [...unfinishedPastTasks, ...selectedDateActiveTasks].map(task => <DailyTaskItem key={`${task.taskDate}-${task.ownerUid}-${task.id}`} {...taskItemProps} task={task}/>) : <p className="rounded-xl bg-white border p-5">この担当者の未終了タスクはありません。</p>}</div>} tasksDescription={`${selectedDate} ／ ${users[selectedUserUid]?.name || ''} のタスクと過去の未終了タスクです。終わった作業の「終了」を押してください。`} title="タスクのかんたん入力" onClose={() => setQuickTaskOpen(false)} onSave={handleAddTask}
+{quickTaskOpen && <QuickEntry hasDraft={!!(newTaskImportant || newTaskSubject.trim() || newTaskText.trim() || newTaskEndTime || newTaskProductId || newTaskImages.length)} tasksContent={<div className="space-y-3">{[...unfinishedPastTasks, ...selectedDateActiveTasks].length ? [...unfinishedPastTasks, ...selectedDateActiveTasks].map(task => <DailyTaskItem key={`${task.taskDate}-${task.ownerUid}-${task.id}`} {...taskItemProps} task={task}/>) : <p className="rounded-xl bg-white border p-5">この担当者の未終了タスクはありません。</p>}</div>} tasksDescription={`${selectedDate} ／ ${users[selectedUserUid]?.name || ''} のタスクと過去の未終了タスクです。終わった作業の「タスクを終了」を押してください。`} title="タスクのかんたん入力" onClose={() => setQuickTaskOpen(false)} onSave={handleAddTask}
 steps={[
 {title:'何をしますか？何をしましたか？', content:<>
 <p>登録日：{selectedDate}</p>
 <p>{newTaskVisibility === 'private' ? '自分だけの個人メモ' : 'みんなに公開するタスク'}</p>
+{newTaskVisibility !== 'private' && <ImportantToggle value={newTaskImportant} onChange={setNewTaskImportant} disabled={isUploading}/>}
 {newTaskVisibility !== 'private' && <label className="block font-bold">どこで？どんな内容？（必須）<input type="text" value={newTaskSubject} onChange={e => setNewTaskSubject(e.target.value)} placeholder="例：1階ロビーの電球交換" className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label>}
 <label className="block font-bold">{newTaskVisibility === 'private' ? '個人メモ（内容か写真が必要）' : '詳しい内容（任意）'}<textarea rows={4} value={newTaskText} onChange={e => setNewTaskText(e.target.value)} placeholder="例：1階ロビーの電球を交換する" className="w-full mt-2 border border-gray-300 rounded-xl p-3 text-base"/></label>
 {newTaskVisibility !== 'private' && <fieldset className="my-4"><legend className="font-bold text-base">担当者（複数選べます）</legend><p className="text-sm text-gray-500 my-2">担当する人の名前をすべて選んでください。</p><div className="flex flex-wrap gap-2">{sortedUsers.map(user => <label key={user.id} className={`flex items-center gap-2 min-h-12 px-3 border-2 rounded-xl text-base ${taskAssigneeIds.includes(user.id) ? 'bg-blue-50 border-blue-500' : 'border-gray-200'}`}><input type="checkbox" checked={taskAssigneeIds.includes(user.id)} onChange={e => setNewAssigneeIds(e.target.checked ? [...taskAssigneeIds, user.id] : taskAssigneeIds.filter(id => id !== user.id))}/>{user.name}</label>)}</div></fieldset>}
@@ -1551,7 +1544,7 @@ steps={[
 <ImagePicker files={newTaskImages} onChange={setNewTaskImages} disabled={isUploading}/>
 </>, validate:() => newTaskVisibility !== 'private' && !taskAssigneeIds.length ? '担当者を1人以上選んでください。' : newTaskVisibility !== 'private' && !newTaskSubject.trim() ? 'どこで？どんな内容？を入力してください。' : newTaskVisibility === 'private' && !newTaskText.trim() && !newTaskImage ? '個人メモか写真を追加してください。' : ''}
 ]}
-summary={[[ '登録日', selectedDate ], ['担当', newTaskVisibility === 'private' ? users[selectedUserUid]?.name : taskAssigneeIds.map(id => users[id]?.name).filter(Boolean).join('・')], ['公開範囲', newTaskVisibility === 'private' ? '自分だけの個人メモ' : 'みんなに公開'], ['どこで？どんな内容？', newTaskSubject], ['内容', newTaskText], ['終了予定', newTaskEndTime], ['使用する商品', newTaskProductId ? inventoryProductLabel(inventoryItems.find(item => item.id === newTaskProductId) || {}) + ' × ' + newTaskProductQuantity : 'なし'], ['写真・動画', newTaskImages.length + '件']]}
+summary={[[ '重要', newTaskVisibility !== 'private' && newTaskImportant ? '重要' : 'なし' ], [ '登録日', selectedDate ], ['担当', newTaskVisibility === 'private' ? users[selectedUserUid]?.name : taskAssigneeIds.map(id => users[id]?.name).filter(Boolean).join('・')], ['公開範囲', newTaskVisibility === 'private' ? '自分だけの個人メモ' : 'みんなに公開'], ['どこで？どんな内容？', newTaskSubject], ['内容', newTaskText], ['終了予定', newTaskEndTime], ['使用する商品', newTaskProductId ? inventoryProductLabel(inventoryItems.find(item => item.id === newTaskProductId) || {}) + ' × ' + newTaskProductQuantity : 'なし'], ['写真・動画', newTaskImages.length + '件']]}
 />}
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <span className="text-xs font-black text-gray-600">このタスクを</span>
@@ -1561,6 +1554,7 @@ summary={[[ '登録日', selectedDate ], ['担当', newTaskVisibility === 'priva
             </div>
 
             <div className="space-y-2 mb-2">
+              {newTaskVisibility !== 'private' && <ImportantToggle value={newTaskImportant} onChange={setNewTaskImportant} disabled={isUploading}/>}
               {newTaskVisibility !== 'private' && <label className="block text-sm font-bold">どこで？どんな内容？（必須）<input type="text" value={newTaskSubject} onChange={e=>setNewTaskSubject(e.target.value)} placeholder="例：1階ロビーの電球交換" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm" disabled={isUploading}/></label>}
               {newTaskVisibility !== 'private' && <label className="flex items-center gap-2 text-xs text-gray-600"><span className="font-bold">終了予定時刻</span><div className="flex items-center gap-1"><select aria-label="終了予定時刻の時" value={newTaskEndTime ? newTaskEndTime.split(':')[0] : ''} onChange={e=>setNewTaskEndTime(e.target.value ? e.target.value+':'+((newTaskEndTime||'').split(':')[1]||'00') : '')} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" disabled={isUploading}><option value="">時</option>{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(v=><option key={v} value={v}>{v}</option>)}</select><span>:</span><select aria-label="終了予定時刻の分" value={newTaskEndTime ? newTaskEndTime.split(':')[1] : ''} onChange={e=>setNewTaskEndTime(((newTaskEndTime||'').split(':')[0]||'00')+':'+e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" disabled={isUploading}><option value="">分</option>{['00','15','30','45'].map(v=><option key={v} value={v}>{v}</option>)}</select></div></label>}
               {newTaskVisibility !== 'private' && <div className="space-y-2"><label className="block text-xs text-gray-600"><span className="block font-bold mb-1">使用する商品（任意）</span><select value={newTaskProductId} onChange={e=>setNewTaskProductId(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white" disabled={isUploading}><option value="">商品を選択しない</option>{inventoryItems.map(item=><option key={item.id} value={item.id} disabled={Number(item.stock||0)<=0}>{item.kind ? item.kind + '：' : ''}{inventoryProductLabel(item)}{item.usageLocation ? '／使用箇所：' + item.usageLocation : ''}（在庫 {Number(item.stock||0)} 個）</option>)}</select></label><div className="flex gap-2"><button type="button" onClick={()=>setProductScannerOpen(true)} disabled={isUploading} className="min-h-10 px-3 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-bold inline-flex items-center gap-1"><Camera size={15}/>バーコード読取</button><label className="flex-1 text-xs text-gray-600 flex items-center gap-2">使用数量<input type="number" min="1" step="1" value={newTaskProductQuantity} onChange={e=>setNewTaskProductQuantity(e.target.value)} className="min-h-10 w-20 rounded-lg border border-gray-200 px-2 text-center text-sm"/></label></div>{productScanMessage && <p className="text-xs text-blue-700">{productScanMessage}</p>}</div>}
@@ -1699,8 +1693,8 @@ summary={[[ '登録日', selectedDate ], ['担当', newTaskVisibility === 'priva
               ) : (
                 <>
                   <button type="button" onClick={closePersonalMemoDetail} disabled={isDeletingPersonalMemo} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-xs font-bold disabled:opacity-50">閉じる</button>
-                  <button type="button" onClick={deletePersonalMemo} disabled={isDeletingPersonalMemo} className="flex-1 py-2.5 rounded-xl bg-red-50 text-red-700 border border-red-200 text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-50"><Trash2 size={14}/>{isDeletingPersonalMemo ? '削除中…' : '削除'}</button>
-                  <button type="button" onClick={startPersonalMemoEdit} disabled={isDeletingPersonalMemo} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-50"><Edit2 size={14}/>編集</button>
+                  <ActionIconButton action="delete" type="button" onClick={deletePersonalMemo} disabled={isDeletingPersonalMemo} className="flex-1"/>
+                  <ActionIconButton action="edit" type="button" onClick={startPersonalMemoEdit} disabled={isDeletingPersonalMemo} className="flex-1"/>
                 </>
               )}
             </div>
@@ -1972,13 +1966,7 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
                   onChange={(e) => handleLabelChange(shift.id, e.target.value)}
                   className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
-                <button
-                  onClick={() => handleDeleteShift(shift.id)}
-                  className="p-1.5 text-gray-400 hover:text-red-500 rounded-md transition-colors shrink-0"
-                  title="シフトを削除"
-                >
-                  <Trash2 size={16}/>
-                </button>
+                <ActionIconButton action="delete" onClick={() => handleDeleteShift(shift.id)} title="シフトを削除" className=""/>
               </div>
             ))}
           </div>
@@ -2042,13 +2030,7 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
                     className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none font-bold text-gray-800"
                     placeholder={roleInfo.name}
                   />
-                  <button
-                    onClick={() => handleDeleteRole(key)}
-                    className="p-2 text-gray-400 hover:text-red-500 rounded-md transition-colors shrink-0"
-                    title="役職を削除"
-                  >
-                    <Trash2 size={16}/>
-                  </button>
+                  <ActionIconButton action="delete" onClick={() => handleDeleteRole(key)} title="役職を削除" className=""/>
                 </div>
               );
             })}
@@ -2184,13 +2166,7 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
                             {isMe && (
                               <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.2 rounded shrink-0 font-normal">あなた</span>
                             )}
-                            <button
-                              onClick={() => handleStartRename(u)}
-                              className="p-1 text-gray-400 hover:text-blue-600 rounded-md transition-colors shrink-0"
-                              title="編集"
-                            >
-                              <Edit2 size={13}/>
-                            </button>
+                            <ActionIconButton action="edit" onClick={() => handleStartRename(u)} title="編集" className=""/>
                           </div>
                           <div className="text-xs text-gray-400 font-normal truncate mt-0.5">
                             {u.email || 'メールアドレス未設定'}
@@ -2234,14 +2210,7 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
                       ))}
                     </select>
 
-                    <button 
-                      aria-label={`${u.name}さんを削除`}
-                      onClick={() => handleDeleteUser(u.id)}
-                      disabled={isMe}
-                      className="p-1.5 text-gray-400 hover:text-red-500 rounded-md disabled:opacity-30"
-                    >
-                      <Trash2 size={16}/>
-                    </button>
+                    <ActionIconButton action="delete" aria-label={`${u.name}さんを削除`} onClick={() => handleDeleteUser(u.id)} disabled={isMe} className=""/>
                   </div>
                 </div>
               );
@@ -2296,6 +2265,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
   const [endTime, setEndTime] = useState('');
   const [partnerName, setPartnerName] = useState('');
   const [subject, setSubject] = useState('');
+  const [partnerImportant, setPartnerImportant] = useState(false);
   const [partnerAssignees, setPartnerAssignees] = useState([]);
   const assigneeUid = partnerAssignees[0] || '';
   const [content, setContent] = useState('');
@@ -2328,7 +2298,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
     try {
       await deletePartnerItem(item.id);
       if (editingItemId === item.id) {
-        setEditingItemId(null); setPartnerName(''); setSubject(''); setContent(''); setNewPartnerImages([]);
+        setEditingItemId(null); setPartnerName(''); setSubject(''); setPartnerImportant(false); setContent(''); setNewPartnerImages([]);
       }
     } catch (error) {
       alert(`削除できませんでした。\n${error.message || 'もう一度お試しください。'}`);
@@ -2387,7 +2357,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
       const hasNewUpdate = !!(content.trim() || addedImages.length);
       const newUpdate = hasNewUpdate ? createPartnerUpdate(content.trim(), currentUser, addedImages, editingItemId ? 'handoff' : 'initial') : null;
       const updates = editingItemId ? [...getPartnerUpdates(currentItem), ...(newUpdate ? [newUpdate] : [])] : (newUpdate ? [newUpdate] : []);
-      const itemData = { images, partnerName, subject: subject.trim(), assigneeUid, assigneeIds: partnerAssignees, date, time, endTime, content: content.trim() || currentItem?.content || '', updates, createdByUid: editingItemId ? (currentItem?.createdByUid || '') : (currentUser?.id || ''), createdByName: editingItemId ? (currentItem?.createdByName || '') : (currentUser?.name || ''), ...(imageUrl ? { imageUrl, imageName, imagePublicId, imageBytes, imageUploadedAt: new Date().toISOString() } : {}) };
+      const itemData = { images, partnerName, important: partnerImportant, subject: subject.trim(), assigneeUid, assigneeIds: partnerAssignees, date, time, endTime, content: content.trim() || currentItem?.content || '', updates, createdByUid: editingItemId ? (currentItem?.createdByUid || '') : (currentUser?.id || ''), createdByName: editingItemId ? (currentItem?.createdByName || '') : (currentUser?.name || ''), ...(imageUrl ? { imageUrl, imageName, imagePublicId, imageBytes, imageUploadedAt: new Date().toISOString() } : {}) };
       if (editingItemId) {
         const savedItemId = editingItemId;
         await debugLog?.('INFO', action + '.firestore.update.start', { itemId: savedItemId, itemData });
@@ -2408,7 +2378,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
       }
       setPartnerUploadProgress({stage:'done'});
       setContent('');
-      setSubject('');
+      setSubject(''); setPartnerImportant(false);
       setTimeHour(''); setTimeMinute(''); setEndTime('');
       setPartnerName('');
       setPartnerAssignees([]);
@@ -2447,15 +2417,15 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
               <div key={item.id} className={`bg-white rounded-xl border ${item.completed ? 'border-green-200' : 'border-gray-200'} px-3 py-3 flex flex-wrap items-start gap-2`}>
                 <button type="button" disabled={changingPartnerId !== null} onClick={() => finishPartner(item)}
                   className={`shrink-0 mt-0.5 min-w-16 min-h-12 px-3 rounded-xl border-2 flex items-center justify-center ${item.completed ? 'border-green-500 bg-green-500 text-white' : 'border-green-600 bg-green-600 text-white hover:bg-green-700'}`}
-                  title={item.completed ? '未完了に戻す' : '終了にする'}>
-                  <span className="text-sm font-bold">{item.completed ? '✓ 終了済' : '終了'}</span>
+                  title={item.completed ? '未完了に戻す' : "タスクを終了"}>
+                  <span className="text-sm font-bold">{item.completed ? '✓ 終了済' : "タスクを終了"}</span>
                 </button>
                 <div className="shrink-0 text-center min-w-[68px]">
                   <div className={`text-[10px] font-bold ${item.completed ? 'text-gray-400 line-through' : 'text-blue-600'}`}>{item.date?.replace(/-/g, '/')}</div>
                   <div className={`text-[11px] font-bold mt-0.5 ${item.completed ? 'text-gray-400 line-through' : 'text-gray-700'}`}>{item.time || '--:--'}</div>{item.endTime&&<div className="text-[9px] text-orange-600 mt-0.5">終了予定 {item.endTime}</div>}
                 </div>
                 <div className="flex-1 min-w-0">
-                  {(item.completed || isPartnerOverdue(item, scheduleNow)) && <span className={`inline-flex rounded-full px-3 py-1 mb-2 text-sm font-bold ${item.completed ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}`}>{item.completed ? '終了済み' : '未終了'}</span>}
+                  <ImportantBadge important={item.important}/>{(item.completed || isPartnerOverdue(item, scheduleNow)) && <span className={`inline-flex rounded-full px-3 py-1 mb-2 text-sm font-bold ${item.completed ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}`}>{item.completed ? '終了済み' : '未終了'}</span>}
                   <div className={`text-[10px] font-bold mb-0.5 ${item.completed ? 'text-gray-400 line-through' : 'text-purple-600'}`}>{item.partnerName || 'パートナー未設定'}</div>
                   <div className="text-xs text-blue-600 font-bold mb-1">担当: {partnerAssigneeIds(item).map(id => (sortedUsers || []).find(user => user.id === id)?.name).filter(Boolean).join('・') || '未設定'}</div>
                   <div className="text-sm font-bold text-gray-800 mb-1">{item.subject || (item.content || '').split(/\r?\n/)[0] || '件名未設定'}</div>
@@ -2464,10 +2434,11 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
                   {item.completedAt && <div className="text-[8px] text-green-600 mt-0.5">終了 {new Date(item.completedAt).toLocaleString('ja-JP')}</div>}
                 </div>
                 <div className="shrink-0 flex gap-0.5">
-                  <button type="button" disabled={isSaving || deletingPartnerId !== null} aria-label={`${item.subject || 'パートナータスク'}を編集`} onClick={() => {
+                  <ActionIconButton action="edit" type="button" disabled={isSaving || deletingPartnerId !== null} aria-label={`${item.subject || 'パートナータスク'}を編集`} onClick={() => {
                     if (editingItemId && editingItemId !== item.id && !confirmEditDiscard(true, isSaving)) return;
                     setEditingItemId(item.id);
                     setPartnerName(item.partnerName || '');
+                    setPartnerImportant(item.important === true);
                     setSubject(item.subject || (item.content || '').split(/\r?\n/)[0] || '');
                     setPartnerAssignees(partnerAssigneeIds(item));
                     setDate(item.date || formatDate(new Date()));
@@ -2479,9 +2450,8 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
                     setNewPartnerImages([]);
                     setPartnerUploadProgress(null);
                     revealPartnerForm();
-                  }} className="p-1 text-gray-300 hover:text-blue-500 rounded-md" title="編集"><Edit2 size={14}/></button>
-                  <button type="button" disabled={isSaving || deletingPartnerId !== null} aria-label={`${item.subject || 'パートナータスク'}を削除`} onClick={() => handleDeletePartnerItem(item)}
-                    className="p-1 text-gray-300 hover:text-red-500 rounded-md" title="削除"><Trash2 size={14}/></button>
+                  }} title="編集" className=""/>
+                  <ActionIconButton action="delete" type="button" disabled={isSaving || deletingPartnerId !== null} aria-label={`${item.subject || 'パートナータスク'}を削除`} onClick={() => handleDeletePartnerItem(item)} title="削除" className=""/>
                 </div>
                 {!item.completed && <PartnerScheduleEditor item={item} onSave={reschedulePartnerItem} disabled={isSaving || !!editingItemId || deletingPartnerId !== null || changingPartnerId !== null}/>}
               </div>
@@ -2497,9 +2467,10 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
       <div className="p-4 max-w-2xl mx-auto space-y-4">
         <div ref={partnerFormRef} tabIndex={-1} role="region" aria-label={editingItemId ? "パートナータスク編集フォーム" : "パートナータスク登録フォーム"} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 space-y-3 scroll-mt-4">
 {!editingItemId && <button type="button" disabled={isSaving} onClick={() => setQuickPartnerOpen(true)} className="w-full min-h-14 mb-4 rounded-xl bg-blue-50 border-2 border-blue-500 text-blue-700 text-lg font-bold">かんたん入力（パートナータスク）</button>}
-{quickPartnerOpen && <QuickEntry hasDraft={!!(partnerName || subject.trim() || content.trim() || timeHour || assigneeUid || newPartnerImages.length)} tasksContent={<div className="space-y-3">{activePartnerItems.length ? activePartnerItems.map(renderPartnerItem) : <p className="rounded-xl bg-white border p-5">未終了のパートナータスクはありません。</p>}</div>} tasksDescription="終わった作業の「終了」を押してください。" title="パートナータスクのかんたん入力" onClose={() => setQuickPartnerOpen(false)} onSave={handleSave}
+{quickPartnerOpen && <QuickEntry hasDraft={!!(partnerImportant || partnerName || subject.trim() || content.trim() || timeHour || assigneeUid || newPartnerImages.length)} tasksContent={<div className="space-y-3">{activePartnerItems.length ? activePartnerItems.map(renderPartnerItem) : <p className="rounded-xl bg-white border p-5">未終了のパートナータスクはありません。</p>}</div>} tasksDescription="終わった作業の「タスクを終了」を押してください。" title="パートナータスクのかんたん入力" onClose={() => setQuickPartnerOpen(false)} onSave={handleSave}
 steps={[
 {title:'どの会社に、何をお願いしますか？', content:<>
+<ImportantToggle value={partnerImportant} onChange={setPartnerImportant} disabled={isSaving}/>
 <label className="block font-bold">パートナー名（必須）<input list="quick-partner-names" value={partnerName} onChange={e => setPartnerName(e.target.value)} placeholder="例：〇〇設備" className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base"/><datalist id="quick-partner-names">{(partnerNames || []).map(name => <option key={name} value={name}/>)}</datalist></label>
 <label className="block font-bold">どこ？で何を？（必須）<input type="text" value={subject} onChange={e => setSubject(e.target.value)} placeholder="例：1階ロビーでエアコン点検" className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label>
 </>, validate:() => !partnerName.trim() || !subject.trim() ? 'パートナー名と「どこ？で何を？」を入力してください。' : ''},
@@ -2511,14 +2482,14 @@ steps={[
 </>,validate:() => !date || !time || !assigneeUid ? '日付・開始時間・担当者を選んでください。' : ''},
 {title:'お願いする内容を教えてください', content:<><label className="block font-bold">詳しい内容（任意）<textarea rows={4} value={content} onChange={e => setContent(e.target.value)} placeholder="例：1階ロビーの電球を交換する" className="w-full mt-2 border border-gray-300 rounded-xl p-3 text-base"/></label><ImagePicker files={newPartnerImages} onChange={setNewPartnerImages} disabled={isSaving}/></>}
 ]}
-summary={[[ 'パートナー名', partnerName ], ['どこ？で何を？', subject], ['日付', date], ['開始時間', time], ['終了予定', endTime], ['担当者', partnerAssignees.map(id => (sortedUsers || []).find(user => user.id === id)?.name).filter(Boolean).join('・')], ['内容', content], ['写真・動画', newPartnerImages.length + '件']]}
+summary={[[ '重要', partnerImportant ? '重要' : 'なし' ], [ 'パートナー名', partnerName ], ['どこ？で何を？', subject], ['日付', date], ['開始時間', time], ['終了予定', endTime], ['担当者', partnerAssignees.map(id => (sortedUsers || []).find(user => user.id === id)?.name).filter(Boolean).join('・')], ['内容', content], ['写真・動画', newPartnerImages.length + '件']]}
 />}
           {editingItemId && (
             <div className="flex items-center justify-between bg-blue-50 border border-blue-100 rounded-xl px-3 py-2">
               <span className="text-[10px] font-bold text-blue-700">パートナー予定を編集中</span>
               <button type="button" onClick={() => {
                 if (!confirmEditDiscard(true, isSaving)) return;
-                setEditingItemId(null); setPartnerName(''); setSubject(''); setPartnerAssignees([]); setDate(formatDate(new Date())); setTimeHour(''); setTimeMinute(''); setEndTime(''); setContent(''); setNewPartnerImages([]);
+                setEditingItemId(null); setPartnerName(''); setSubject(''); setPartnerImportant(false); setPartnerAssignees([]); setDate(formatDate(new Date())); setTimeHour(''); setTimeMinute(''); setEndTime(''); setContent(''); setNewPartnerImages([]);
               }} className="text-[10px] font-bold text-gray-500 hover:text-gray-800">キャンセル</button>
             </div>
           )}
@@ -2637,24 +2608,8 @@ summary={[[ 'パートナー名', partnerName ], ['どこ？で何を？', subje
                               >
                                 {name}
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => handleStartEditPartnerName(name)}
-                                aria-label={`パートナー名「${name}」を編集`}
-                                className="shrink-0 min-w-11 min-h-11 p-3 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
-                                title="パートナー名を編集"
-                              >
-                                <Edit2 size={18}/>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeletePartnerName(name)}
-                                aria-label={`パートナー名「${name}」を削除`}
-                                className="shrink-0 min-w-11 min-h-11 p-3 mr-1 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg"
-                                title="パートナー名を削除"
-                              >
-                                <Trash2 size={18}/>
-                              </button>
+                              <ActionIconButton action="edit" type="button" onClick={() => handleStartEditPartnerName(name)} aria-label={`パートナー名「${name}」を編集`} title="パートナー名を編集" className=""/>
+                              <ActionIconButton action="delete" type="button" onClick={() => handleDeletePartnerName(name)} aria-label={`パートナー名「${name}」を削除`} title="パートナー名を削除" className=""/>
                             </>
                           )}
                         </div>
@@ -2713,6 +2668,7 @@ summary={[[ 'パートナー名', partnerName ], ['どこ？で何を？', subje
           {editingItemId && <ImageGallery item={(partnerItems || []).find(item=>item.id===editingItemId)}/>}
 
           <div className="space-y-2">
+            <ImportantToggle value={partnerImportant} onChange={setPartnerImportant} disabled={isSaving}/>
             <label className="block"><span className="text-[10px] font-bold text-gray-500">件名</span><input type="text" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="パートナータスクの件名を入力" className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400" /></label>
 
             {editingItemId && <PartnerUpdateHistory item={editingPartnerItem}/>}
@@ -2930,11 +2886,7 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
               )}
               <ImageGallery item={entry}/>
               {(entry.type === 'partner' || isAdmin || entry.ownerUid === currentUserUid) && (
-                <button type="button" onClick={() => handleDelete(entry)} disabled={deletingKey !== null}
-                  aria-label={`${entry.title}の終了履歴を削除`}
-                  className="mt-2 min-h-10 px-3 rounded-lg text-xs font-bold text-red-600 border border-red-200 flex items-center gap-1.5 disabled:opacity-50">
-                  <Trash2 size={14}/>{deletingKey === `${entry.type}-${entry.date}-${entry.ownerUid}-${entry.id}` ? '削除中…' : '削除'}
-                </button>
+                <ActionIconButton action="delete" type="button" onClick={() => handleDelete(entry)} disabled={deletingKey !== null} aria-label={`${entry.title}の終了履歴を削除`} className=""/>
               )}
             </div>
           </div>
@@ -3474,7 +3426,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
                   {editingPhotoPreview && <p className="text-xs text-blue-700">この写真を商品画像として保存します。</p>}
                   {editingImageRemoved && <p className="text-xs text-red-600">商品画像を削除します。保存するまでは反映されません。</p>}
                   <button type="button" disabled={isSaving} onClick={()=>setEditingOcrOpen(open=>!open)} className="min-h-11 w-full rounded-lg border border-indigo-300 bg-indigo-50 px-3 text-sm font-bold text-indigo-900 disabled:opacity-50">{editingOcrOpen ? 'ラベル読み取りを閉じる' : 'ラベルを撮影・追加する'}</button>
-                  {(editingPhoto || (!editingImageRemoved && item.imageUrl)) && <button type="button" disabled={isSaving} onClick={removeEditingImage} className="min-h-11 text-sm font-bold text-red-600 disabled:opacity-50">商品画像を削除</button>}
+                  {(editingPhoto || (!editingImageRemoved && item.imageUrl)) && <ActionIconButton action="delete" type="button" disabled={isSaving} onClick={removeEditingImage} className=""/>}
                   {editingImageRemoved && <button type="button" disabled={isSaving} onClick={()=>setEditingImageRemoved(false)} className="min-h-11 text-sm font-bold text-gray-600">画像の削除を取り消す</button>}
                   {editingOcrOpen && <LabelOcrCapture key={item.id} onUseImage={selectEditingPhoto} disabled={isSaving} onApply={(field,value)=>{const text=normalizeInventoryName(value).slice(0,120);if(field==='name')setEditingName(text);if(field==='manufacturer')setEditingManufacturer(text);if(field==='modelNumber')setEditingModelNumber(text);}}/>}
                 </div>
@@ -3505,8 +3457,8 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
                 {uploadingImageId===item.id ? <Loader2 size={16} className="animate-spin"/> : <ImageIcon size={16}/>}
                 <input type="file" accept="image/*" className="hidden" disabled={uploadingImageId===item.id || isSaving} onChange={e=>{const file=e.target.files?.[0];if(file)void handleImageUpload(item,file);e.target.value='';}}/>
               </label>
-              <button type="button" disabled={isSaving || !!uploadingImageId} onClick={()=>startEdit(item)} aria-label={name+'の商品情報を編集'} className="w-10 h-10 rounded-lg border border-gray-300 bg-white flex items-center justify-center"><Edit2 size={16}/></button>
-              <button type="button" onClick={()=>void handleDelete(item)} disabled={isSaving || uploadingImageId===item.id} aria-label={name+'を削除'} className="w-10 h-10 rounded-lg border border-red-200 bg-white text-red-600 flex items-center justify-center disabled:opacity-50"><Trash2 size={16}/></button>
+              <ActionIconButton action="edit" type="button" disabled={isSaving || !!uploadingImageId} onClick={()=>startEdit(item)} aria-label={name+'の商品情報を編集'} className=""/>
+              <ActionIconButton action="delete" type="button" onClick={()=>void handleDelete(item)} disabled={isSaving || uploadingImageId===item.id} aria-label={name+'を削除'} className=""/>
             </div>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -3526,7 +3478,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
         <div className="flex items-center justify-between gap-2"><h3 className="text-sm font-black text-gray-700">バーコード・QRコードで商品を確認</h3><button type="button" disabled={isSaving} onClick={()=>setScannerOpen(true)} className="shrink-0 inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-indigo-600 px-3 text-xs font-bold text-white"><Camera size={16}/>カメラで読取</button></div>
         <label className="block text-xs font-bold text-gray-600">バーコード番号（任意）<input value={newBarcode} onChange={e=>changeBarcode(e.target.value)} inputMode="numeric" placeholder="バーコードを読み取るか入力" className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base" maxLength={80}/></label>
         {scannedStockItemId && <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-2"><div className="text-sm font-bold text-emerald-800">登録済み商品の入出庫：{inventoryProductLabel(inventoryItems.find(item=>item.id===scannedStockItemId))}</div>{renderReplacementInfo(inventoryItems.find(item=>item.id===scannedStockItemId))}<div className="flex gap-2"><select aria-label="入出庫区分" value={scanDirection} onChange={e=>setScanDirection(e.target.value)} className="rounded-lg border border-emerald-300"><option value="in">入庫</option><option value="out">出庫</option></select><input type="number" min="1" step="1" value={scanQuantity} onChange={e=>setScanQuantity(e.target.value)} aria-label="入出庫数量" className="min-h-11 w-24 rounded-lg border border-emerald-300 px-2 text-center text-base"/><button type="button" onClick={()=>void handleScannedStockAdd()} disabled={isSaving} className="flex-1 min-h-11 rounded-lg bg-emerald-600 px-3 text-sm font-bold text-white disabled:opacity-50">この数量の入出庫を保存</button></div></div>}
-        {scannedStockItemId && <button type="button" onClick={editScannedProduct} disabled={isSaving || !!uploadingImageId || !inventoryItems.some(item => item.id === scannedStockItemId)} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-blue-300 bg-blue-50 px-3 text-sm font-bold text-blue-800 disabled:opacity-50"><Edit2 size={16}/>この商品の情報を編集</button>}
+        {scannedStockItemId && <ActionIconButton action="edit" type="button" onClick={editScannedProduct} disabled={isSaving || !!uploadingImageId || !inventoryItems.some(item => item.id === scannedStockItemId)} className="w-full"/>}
         {qrModelCandidates.length > 0 && <div className="space-y-2">{qrModelCandidates.map(id => inventoryItems.find(item => item.id === id)).filter(Boolean).map(item => <button type="button" key={item.id} disabled={isSaving} onClick={() => { setScannedStockItemId(item.id); setQrModelCandidates([]); setBarcodeLookupMessage('登録済み商品：' + inventoryProductLabel(item) + '。入出庫・編集ができます。'); }} className="min-h-11 w-full rounded-lg border border-blue-300 p-2 text-left text-sm font-bold text-blue-800">{inventoryProductLabel(item)} ・ 棚番号：{item.shelfNumber || '未設定'}</button>)}</div>}
         {!scannedStockItemId && barcodeLookupMessage && <p className="text-xs text-blue-800">{barcodeLookupMessage}</p>}
         {scannedStockItemId && barcodeLookupMessage && <p className="text-xs text-emerald-800">{barcodeLookupMessage}</p>}
@@ -4590,7 +4542,7 @@ export default function App() {
             ) : activeTab === 'daily' ? (
               <DailyDetailView 
                 inventoryItems={inventoryItems}
-                addTask={async (dateStr, targetUid, text, imageUrl = '', imageName = '', imagePublicId = '', imageBytes = 0, visibility = 'public', subject = '', endTime = '', productId = '', productQuantity = 1, images = [], assigneeIds = [targetUid]) => {
+                addTask={async (dateStr, targetUid, text, imageUrl = '', imageName = '', imagePublicId = '', imageBytes = 0, visibility = 'public', subject = '', endTime = '', productId = '', productQuantity = 1, images = [], assigneeIds = [targetUid], important = false) => {
                   const selectedAssignees = newTaskAssignees(assigneeIds, targetUid, visibility, sortedUsers.map(user => user.id));
                   const product = productId ? inventoryItems.find(item => item.id === productId) : null;
                   const quantity = Math.max(1, Number(productQuantity) || 1);
@@ -4614,6 +4566,7 @@ export default function App() {
                             id: Date.now().toString(),
                             text,
                             subject: subject || text,
+                            important: visibility !== 'private' && important === true,
                             endTime: endTime || '',
                             images,
                             updates: [createPartnerUpdate(text, currentUser, images.length ? images : imageUrl ? { imageUrl, imageName, imagePublicId, imageBytes } : null, 'initial')],
