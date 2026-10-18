@@ -1102,7 +1102,7 @@ const DailyTaskItem = ({ task, selectedDate, selectedUserUid, currentUserUid, cu
           isSelected
             ? 'border-purple-400 bg-purple-50/20 ring-2 ring-purple-400/20 shadow-md'
             : task.completed ? 'border-green-200 bg-green-50/60' : 'border-gray-200 shadow-sm hover:border-gray-300'
-        } flex items-start gap-3`}
+        } grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 sm:grid-cols-[auto_minmax(0,1fr)_auto]`}
       >
         <button
           type="button"
@@ -1178,7 +1178,7 @@ const DailyTaskItem = ({ task, selectedDate, selectedUserUid, currentUserUid, cu
             }
             } finally { completionRef.current = false; setCompleting(false); }
           }}
-          className={`relative z-20 shrink-0 mt-0.5 min-w-16 min-h-12 px-3 rounded-xl border-2 flex items-center justify-center cursor-pointer touch-manipulation transition-colors ${
+          className={`relative z-20 col-start-1 row-start-2 sm:row-start-1 shrink-0 mt-0.5 min-w-16 min-h-12 px-3 rounded-xl border-2 flex items-center justify-center cursor-pointer touch-manipulation transition-colors ${
             task.completed
               ? 'bg-green-500 border-green-500 text-white'
               : canFinishTask
@@ -1188,7 +1188,7 @@ const DailyTaskItem = ({ task, selectedDate, selectedUserUid, currentUserUid, cu
         >
           <span className="text-sm font-bold">{task.completed ? '✓ 終了済' : "タスクを終了"}</span>
         </button>
-        <div className="flex-1 min-w-0">
+        <div className="col-span-2 row-start-1 min-w-0 w-full break-words sm:col-span-1 sm:col-start-2">
           <ImportantBadge important={task.important}/>{task.completed && <span className="inline-flex items-center gap-1 rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-[9px] font-black mb-1"><CheckSquare size={11}/>終了済み</span>}
           {(task.subject || task.text) && <span className={`text-sm font-bold block whitespace-pre-wrap leading-tight ${task.completed ? 'text-gray-500 line-through' : 'text-gray-800'}`}>{task.subject || task.text}</span>}
           {task.subject && task.text && <span className="text-xs block mt-1 whitespace-pre-wrap text-gray-600">{task.text}</span>}
@@ -1274,7 +1274,7 @@ const DailyTaskItem = ({ task, selectedDate, selectedUserUid, currentUserUid, cu
           <ImageGallery item={task}/>
         </div>
 
-        <div className="shrink-0 flex gap-1" onClick={(e) => e.stopPropagation()}>
+        <div className="col-start-2 row-start-2 shrink-0 flex gap-1 sm:col-start-3 sm:row-start-1" onClick={(e) => e.stopPropagation()}>
           <ActionIconButton action="edit" type="button" disabled={!canEditTask || deletingTaskId !== null} onClick={() => { setEditImportant(task.important === true); setEditVal(task.text || ''); setEditSubject(task.subject || task.text || ''); setEditEndTime(task.endTime || ''); setEditDate(task.taskDate || selectedDate); setEditTaskImages([]); setEditUploadProgress(null); setIsEditing(true); }} title="編集" className=""/>
           <ActionIconButton action="delete" type="button" disabled={!canEditTask || deletingTaskId !== null} onClick={() => handleDeleteDailyTask(task)} title="削除" className=""/>
         </div>
