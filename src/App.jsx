@@ -4168,7 +4168,6 @@ export default function App() {
                 >
                 <img src={currentUser.picture} alt="Avatar" className="w-6 h-6 rounded-full" />
                 <div className="text-right flex items-center">
-                  <span className="text-xs font-bold text-gray-500 mr-1.5">{roleNames[currentUser.role] || roles[currentUser.role]?.name || '管理者'}</span>
                   <span className="text-xs font-bold text-gray-800">{currentUser.name.split(' ')[0]}</span>
                 </div>
                   <LogOut className="text-gray-500 ml-1" size={15}/>
