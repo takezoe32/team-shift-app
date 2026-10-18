@@ -1,3 +1,4 @@
+import BarcodeScannerModal from './components/BarcodeScannerModal';
 import CalendarBlocks from './components/CalendarBlocks';
 import ViewerWorkspace from './components/ViewerWorkspace';
 import { VIEWER_ROLE, withViewerRole, isReadOnlyUser, guardWrites } from './viewerPermission.mjs';
@@ -2941,56 +2942,6 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
 
 
 const normalizeInventoryName = (value) => String(value ?? '').normalize('NFKC').trim();
-
-const BarcodeScannerModal = ({ onDetected, onClose }) => {
-  const videoRef = useRef(null);
-  const controlsRef = useRef(null);
-  const [status, setStatus] = useState('カメラを準備しています…');
-  const [manualCode, setManualCode] = useState('');
-  const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    let reader = null;
-    const start = async () => {
-      try {
-        setStatus('カメラを起動しています…');
-        const ZXing = await import(/* @vite-ignore */ 'https://esm.sh/@zxing/browser@0.2.1');
-        if (cancelled) return;
-        reader = new ZXing.BrowserMultiFormatReader();
-        controlsRef.current = await reader.decodeFromConstraints(
-          { video: { facingMode: { ideal: 'environment' } }, audio: false },
-          videoRef.current,
-          (result) => {
-            if (!result || cancelled) return;
-            cancelled = true;
-            controlsRef.current?.stop();
-            onDetected(String(result.getText?.() || result.text || '').trim());
-          }
-        );
-        if (!cancelled) setStatus('バーコードまたはQRコードを映してください。');
-      } catch (error) {
-        console.error('バーコードスキャナーを起動できません:', error);
-        if (!cancelled) setStatus('カメラを起動できませんでした。カメラの許可とHTTPS接続を確認するか、番号を手入力してください。');
-      }
-    };
-    void start();
-    return () => { cancelled = true; controlsRef.current?.stop(); reader?.reset?.(); };
-  }, [onDetected]);
-  const submitManual = () => {
-    const code = manualCode.trim();
-    if (!code) return;
-    setBusy(true);
-    onDetected(code);
-  };
-  return <div className="fixed inset-0 z-[100] bg-black/70 flex items-center justify-center p-3" role="dialog" aria-modal="true" aria-label="バーコード・QRコード読み取り">
-    <div className="w-full max-w-md rounded-2xl bg-white p-4 space-y-3 shadow-xl">
-      <div className="flex items-center justify-between"><h3 className="font-black text-gray-800">バーコード・QRコード読取</h3><button type="button" onClick={onClose} className="p-2 rounded-lg border border-gray-200" aria-label="閉じる">×</button></div>
-      <video ref={videoRef} muted playsInline className="w-full aspect-[4/3] bg-black rounded-xl object-cover" />
-      <p className="text-xs text-gray-600">{status}</p>
-      <div className="border-t pt-3 space-y-2"><label className="block text-xs font-bold text-gray-600">カメラで読めない場合は番号を入力<input value={manualCode} onChange={e=>setManualCode(e.target.value)} inputMode="numeric" autoComplete="off" placeholder="バーコード番号" className="mt-1 w-full min-h-11 rounded-xl border border-gray-300 px-3 text-base"/></label><button type="button" disabled={!manualCode.trim()||busy} onClick={submitManual} className="w-full min-h-11 rounded-xl bg-blue-600 text-white font-bold disabled:opacity-50">番号を使用</button></div>
-    </div>
-  </div>;
-};
 
 const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInventoryItem, adjustInventoryStock, editInventoryItem, deleteInventoryItem, updateInventoryImage }) => {
   const [sortOrder, setSortOrder] = useState(() => localStorage.getItem('inventory_sort_order') || 'name');
