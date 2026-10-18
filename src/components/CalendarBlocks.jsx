@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { captureDragPointer, releaseDragPointer, cancelPendingGesture } from '../calendarDragPointer.mjs';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { DEFAULT_CALENDAR_BLOCKS, normalizeCalendarBlocks, moveCalendarBlock } from '../calendarBlocks.mjs';
 const labels = { memo: '連絡メモ', calendar: 'カレンダー', partner: 'パートナータスク', member: 'メンバータスク' };
 export default function CalendarBlocks({ userKey, blocks }) {
@@ -15,18 +16,38 @@ export default function CalendarBlocks({ userKey, blocks }) {
     setOrder(next); try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch { /* Keep the layout for this session. */ }
     setMessage('配置を保存しました。');
   };
-  useEffect(() => {
-    const preventScroll = event => { if (gesture.current?.active && event.cancelable) event.preventDefault(); };
-    document.addEventListener('touchmove', preventScroll, { passive: false });
-    return () => { document.removeEventListener('touchmove', preventScroll); clearTimeout(gesture.current?.timer); cancelAnimationFrame(gesture.current?.frame); };
-  }, []);
-  const cancel = () => {
+  const cancel = useCallback(() => {
     const state = gesture.current;
     gesture.current = null;
     clearTimeout(state?.timer); cancelAnimationFrame(state?.frame);
-    if (state?.element?.hasPointerCapture(state.pointer)) state.element.releasePointerCapture(state.pointer);
+    releaseDragPointer(state?.element, state?.pointer);
     setDragging(null); setOver(null); setOffset({ x: 0, y: 0 });
-  };
+  }, []);
+  useEffect(() => {
+    const preventScroll = event => { if (gesture.current?.active && event.cancelable) event.preventDefault(); };
+    const endPending = event => cancelPendingGesture(gesture, event.pointerId);
+    const endTouch = () => { if (gesture.current) cancelPendingGesture(gesture, gesture.current.pointer); };
+    const hidden = () => { if (document.hidden) cancel(); };
+    document.addEventListener('touchmove', preventScroll, { passive: false });
+    window.addEventListener('pointerup', endPending, true);
+    window.addEventListener('pointercancel', endPending, true);
+    window.addEventListener('touchend', endTouch, true);
+    window.addEventListener('touchcancel', cancel, true);
+    window.addEventListener('blur', cancel);
+    document.addEventListener('visibilitychange', hidden);
+    return () => {
+      document.removeEventListener('touchmove', preventScroll);
+      window.removeEventListener('pointerup', endPending, true);
+      window.removeEventListener('pointercancel', endPending, true);
+      window.removeEventListener('touchend', endTouch, true);
+      window.removeEventListener('touchcancel', cancel, true);
+      window.removeEventListener('blur', cancel);
+      document.removeEventListener('visibilitychange', hidden);
+      clearTimeout(gesture.current?.timer); cancelAnimationFrame(gesture.current?.frame);
+      releaseDragPointer(gesture.current?.element, gesture.current?.pointer);
+      gesture.current = null;
+    };
+  }, [cancel]);
   const down = (event, id) => {
     if (event.button !== 0 || gesture.current || event.target.closest('input, textarea, select, a, summary, img, video, [contenteditable="true"]')) return;
     if (event.pointerType === 'mouse' && !event.target.closest('button, label')) event.preventDefault();
@@ -36,7 +57,7 @@ export default function CalendarBlocks({ userKey, blocks }) {
     gesture.current = state;
     state.timer = setTimeout(() => {
       if (gesture.current !== state) return;
-      element.setPointerCapture(state.pointer);
+      if (!captureDragPointer(element, state.pointer)) { cancel(); return; }
       state.active = true; setDragging(id); setOver(id); setMessage(labels[id] + 'が移動できる状態になりました。');
       const tick = () => {
         if (gesture.current !== state) return;
