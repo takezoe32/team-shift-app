@@ -51,7 +51,7 @@ export function createLineHandler({ env = globalThis.process.env, makeStore = ma
         if (privateChat) {
           if (!['message', 'postback', 'follow'].includes(event.type) || (event.type === 'message' && !['text', 'image', 'video'].includes(event.message?.type))) continue;
           const authorized = await authorizePrivateLine({ event, store, fetcher, env, now });
-          if (!authorized) { await reply(event, '初回はアプリの「使い方」→「LINEから登録」→「自分のLINEを連携する」で本人用のコードを発行し、この個別トークに送ってください。\n例：連携 コード\nアプリに登録されたメールアドレスとLINEを結び付けます。コードは他の人に渡さないでください。'); continue; }
+          if (!authorized) { await reply(event, '初回はアプリの「使い方」→「LINEから登録」→「LINEと連携する」から本人確認してください。\nアプリに登録されたメールアドレスと、ご本人のLINEを結び付けます。LINE名が違っても大丈夫です。\nボタンが準備中の場合は管理者の初回設定が必要です。'); continue; }
           event = { ...event, privateAuthorized: true, privateAppUid: authorized.appUid, source: { ...event.source, groupId: 'private:' + event.source.userId } };
           if (event.type === 'message' && ['image', 'video'].includes(event.message.type)) { await processHandoff(event); continue; }
           const text = event.message?.text?.trim() || '';
