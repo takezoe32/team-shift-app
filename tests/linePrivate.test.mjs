@@ -36,7 +36,7 @@ function fixture({ inGroup = true, group = 'G1', displayName = '竹添三剛', l
     assert.equal(res.code, 200, JSON.stringify(res.body));
     return { event, messages: replies.at(-1)?.messages };
   };
-  const buttons = () => replies.at(-1).messages.at(-1).template.actions;
+  const buttons = () => { const card = replies.at(-1).messages.at(-1); return card.type === 'flex' ? card.contents.body.contents.filter(item => item.type === 'button').map(item => item.action) : card.template.actions; };
   const press = async label => { const button = buttons().find(action => action.label === label); assert.ok(button, label); return send(button); };
   return { docs, store, send, press, buttons, replies, requests };
 }

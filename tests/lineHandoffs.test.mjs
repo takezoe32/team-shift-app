@@ -53,7 +53,7 @@ function fixture() {
     const handled = await process(event);
     return { handled, event, reply: replies[replies.length - 1] };
   };
-  const actions = message => (Array.isArray(message) ? message[1] : message).template.actions;
+  const actions = message => { const card = Array.isArray(message) ? message[1] : message; return card.type === 'flex' ? card.contents.body.contents.filter(item => item.type === 'button').map(item => item.action) : card.template.actions; };
   return { docs, replies, taskId, send, actions, advance: milliseconds => { time += milliseconds; } };
 }
 test('registered reply has a reusable add-handoff button', () => {
@@ -202,3 +202,4 @@ test('long vertical entries stay within text limit and cancelled selection ignor
   assert.match(result.reply, /キャンセル/);
   assert.equal((await f.send('1')).handled, false);
 });
+
