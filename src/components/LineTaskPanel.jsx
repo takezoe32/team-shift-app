@@ -64,7 +64,7 @@ export default function LineTaskPanel({ users }) {
   return <section className="rounded-xl border border-green-200 bg-green-50 p-3 space-y-3">
     <button type="button" aria-expanded={open} onClick={() => setOpen(value => !value)} className="min-h-11 text-sm font-bold text-green-900">LINEタスク連携 {open ? '▲' : '▼'}</button>
     {open && <>
-      <p className="text-sm">LINEの「@」候補から「管理課 タスク受付」を選んでメンションした投稿だけを受け付けます。「@管理課 タスク受付 タスク 内容」で新規登録、「@管理課 タスク受付 追記」で種類選択・未終了タスク一覧を開きます。番号も「@管理課 タスク受付 3」のように送り、対象選択後は「@管理課 タスク受付 追記 内容」を送って確認ボタンで保存します。選択・確認ボタンはそのまま押せます。画像はこの連携の対象外です。</p>
+      <p className="text-sm">LINEの「@」候補から「管理課 タスク受付」を選んでメンションした投稿だけを受け付けます。「@管理課 タスク受付 タスク 内容」で新規登録、「@管理課 タスク受付 追記」で種類選択・未終了タスク一覧を開きます。番号も「@管理課 タスク受付 3」のように送り、対象選択後は「@管理課 タスク受付 追記 内容」を送って確認ボタンで保存します。選択・確認ボタンはそのまま押せます。担当者は投稿者本人です。初回のみアプリ上の名前を確認する場合があります。不足項目はLINEで質問し、パートナー名が一致しなければ候補から選べます。画像はこの連携の対象外です。</p>
       {!connection ? <p className="text-sm">連携状態を確認中…</p> : !connection.authenticated ? <><p className="text-sm">管理者のGoogleログインを確認してください（日報保存と共通）。</p><GoogleLogin onSuccess={async response => { try { await reportAction('session', { credential: response.credential }, connection.csrf); await refresh(); } catch (error) { setMessage(error.message); } }} onError={() => setMessage('ログインを確認できませんでした。')}/></> : <>
         <p className="text-sm font-bold">{connection.connected ? 'LINEグループ連携済み' : 'LINEグループは未連携です'}</p>
         {!connection.ready && <p className="text-sm text-orange-800">VercelのProductionにLINE_CHANNEL_SECRETとLINE_CHANNEL_ACCESS_TOKENをSecretで設定してください。</p>}
@@ -75,7 +75,7 @@ export default function LineTaskPanel({ users }) {
         <button type="button" onClick={() => void refresh().catch(error => setMessage(error.message))} className="ml-2 min-h-11 rounded-lg border px-3 text-sm">更新</button>
         <h3 className="text-sm font-bold">LINEからの要確認（{connection.inbox?.length || 0}件）</h3>
         {(connection.inbox || []).map(item => <ReviewTask key={item.id} item={item} users={users} csrf={connection.csrf} onSaved={refresh}/>)}
-        <p className="text-xs text-gray-600">読み取り例（@はLINEの候補から選択）：<br/>@管理課 タスク受付 タスク<br/>日付：明日<br/>件名：217号室の防水調査<br/>時間：10:00<br/>パートナー：山下健装<br/>担当：竹添</p>
+        <p className="text-xs text-gray-600">読み取り例（@はLINEの候補から選択）：<br/>@管理課 タスク受付 タスク<br/>日付：明日<br/>件名：217号室の防水調査<br/>時間：10:00<br/>パートナー：山下健装</p>
       </>}
     </>}
     {message && <p role="status" className="whitespace-pre-wrap text-sm text-gray-700">{message}</p>}

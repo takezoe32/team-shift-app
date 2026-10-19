@@ -67,10 +67,10 @@ test('signature covers exact raw bytes, including Japanese and newlines', () => 
   assert.deepEqual(choices.template.actions.map(action => action.label), ['メンバータスク', 'パートナータスク', 'キャンセル']);
 });
 
-function fixture() {
+function fixture({ displayName = '竹添三剛', profileUnavailable = false } = {}) {
   const docs = {
     [lineConfigPath]: { ownerUid: 'admin', groupId: 'G1' },
-    'app_data/shared_state': { users, partnerNames: ['山下健装'], teamData: { tasks: {}, shifts: {} } }
+    'app_data/shared_state': { users: structuredClone(users), partnerNames: ['山下健装'], teamData: { tasks: {}, shifts: {} } }
   };
   const replies = [];
   const store = {
@@ -83,7 +83,7 @@ function fixture() {
       return result.result;
     }
   };
-  const handler = createLineHandler({ env: { VERCEL_ENV: 'production', LINE_CHANNEL_SECRET: 'secret', LINE_CHANNEL_ACCESS_TOKEN: 'token' }, makeStore: () => store, now: () => timestamp, fetcher: async (_url, options) => { replies.push(JSON.parse(options.body)); return { ok: true }; } });
+  const handler = createLineHandler({ env: { VERCEL_ENV: 'production', LINE_CHANNEL_SECRET: 'secret', LINE_CHANNEL_ACCESS_TOKEN: 'token' }, makeStore: () => store, now: () => timestamp, fetcher: async (url, options) => { if (url.includes('/member/')) return { ok: !profileUnavailable, json: async () => ({ displayName }) }; replies.push(JSON.parse(options.body)); return { ok: true }; } });
   const send = async (events, valid = true) => {
     const raw = Buffer.from(JSON.stringify({ events }));
     const req = Readable.from([raw]);
@@ -185,13 +185,14 @@ test('original sender chooses type; replay, duplicate and stale other-user click
   assert.equal(f.docs[linePendingPath(id)].status, 'registered');
   assert.equal(f.docs['app_data/shared_state'].teamData.tasks['2026-10-20'].admin.length, 1);
 });
-test('missing partner name becomes review, and cancellation never creates a task', async () => {
+test('missing partner name is asked in LINE, and cancellation never creates a task', async () => {
   const f = fixture();
   await f.send([f.message()]);
   await f.send([f.postback('123', 'partner')]);
   const id = 'line_' + hash('123').slice(0, 40);
-  assert.equal(f.docs[linePendingPath(id)].status, 'review');
-  assert.ok(f.docs[linePendingPath(id)].reasons.includes('パートナー名'));
+  assert.equal(f.docs[linePendingPath(id)].status, 'collecting');
+  assert.equal(f.docs[linePendingPath(id)].step, 'partner');
+  assert.match(f.replies.at(-1).messages[0].template.text, /パートナー名を入力/);
   await f.send([f.message('456')]);
   await f.send([f.postback('456', 'cancel')]);
   assert.deepEqual(f.docs['app_data/shared_state'].teamData.tasks, {});
@@ -218,4 +219,124 @@ test('expired choices cannot register; explicit partner details register once', 
   await f.send([f.postback('partner', 'partner')]);
   assert.equal(f.docs['app_data/shared_state'].partnerItems.length, 1);
   assert.equal(f.docs['app_data/shared_state'].partnerItems[0].partnerName, '山下健装');
+});
+
+const replyActions = f => f.replies.at(-1).messages.at(-1).template.actions;
+const pressReply = (f, label, userId = 'U1') => {
+  const button = replyActions(f).find(action => action.label === label);
+  assert.ok(button, 'missing button ' + label);
+  return f.send([{ ...f.postback('unused', 'member', userId), postback: { data: button.data } }]);
+};
+
+test('poster is the sole assignee even when text names another member', async () => {
+  const f = fixture({ displayName: '高橋信次' });
+  await f.send([f.message('self', 'タスク\n日付：明日\n件名：点検\n担当：竹添')]);
+  await f.send([f.postback('self', 'member')]);
+  const task = f.docs['app_data/shared_state'].teamData.tasks['2026-10-20'].other[0];
+  assert.deepEqual(task.assigneeIds, ['other']);
+  assert.equal(task.ownerUid, 'other');
+});
+
+test('missing partner is asked, typo suggestions need confirmation, sender remains assignee', async () => {
+  const f = fixture();
+  await f.send([f.message('p1', 'タスク 山下健創が明日の12時来館')]);
+  await f.send([f.postback('p1', 'partner')]);
+  assert.match(f.replies.at(-1).messages[0].template.text, /パートナー名を入力/);
+  await f.send([f.message('answer-p1', '山下健創')]);
+  assert.match(f.replies.at(-1).messages[0].template.text, /この中のパートナー/);
+  assert.equal(f.docs['app_data/shared_state'].partnerItems, undefined);
+  const suggestion = replyActions(f).find(action => action.label === '山下健装');
+  await f.send([{ ...f.postback('unused', 'partner', 'U2'), postback: { data: suggestion.data } }]);
+  assert.equal(f.docs['app_data/shared_state'].partnerItems, undefined);
+  await pressReplyFromSaved(f, suggestion);
+  const item = f.docs['app_data/shared_state'].partnerItems[0];
+  assert.equal(item.partnerName, '山下健装');
+  assert.deepEqual(item.assigneeIds, ['admin']);
+  assert.equal(item.date, '2026-10-20');
+  assert.equal(item.time, '12:00');
+  await pressReplyFromSaved(f, suggestion);
+  assert.equal(f.docs['app_data/shared_state'].partnerItems.length, 1);
+});
+const pressReplyFromSaved = (f, button) => f.send([{ ...f.postback(), postback: { data: button.data } }]);
+
+test('unmatched LINE name chooses self once; missing date/time are completed without admin', async () => {
+  const f = fixture({ displayName: 'たけぞえみつたけ' });
+  await f.send([f.message('identity', 'タスク\n件名：点検\nパートナー：山下健装')]);
+  await f.send([f.postback('identity', 'partner')]);
+  assert.match(f.replies.at(-1).messages[0].text, /あなた自身/);
+  assert.doesNotMatch(f.replies.at(-1).messages[0].text, /閲覧者/);
+  await f.send([f.message('who', '高橋信次')]);
+  assert.match(f.replies.at(-1).messages[0].template.text, /高橋信次/);
+  await pressReply(f, '本人です');
+  assert.match(f.replies.at(-1).messages[0].template.text, /日付/);
+  await f.send([f.message('bad-date', '2026/02/30')]);
+  assert.match(f.replies.at(-1).messages[0].template.text, /日付/);
+  await f.send([f.message('good-date', '明日')]);
+  assert.match(f.replies.at(-1).messages[0].template.text, /開始時刻/);
+  await f.send([f.message('bad-time', '12:07')]);
+  assert.match(f.replies.at(-1).messages[0].template.text, /開始時刻/);
+  await f.send([f.message('good-time', '12:15')]);
+  assert.deepEqual(f.docs['app_data/shared_state'].partnerItems[0].assigneeIds, ['other']);
+  await f.send([f.message('next', 'タスク\n日付：明日\n件名：電球交換')]);
+  await f.send([f.postback('next', 'member')]);
+  assert.deepEqual(f.docs['app_data/shared_state'].teamData.tasks['2026-10-20'].other[0].assigneeIds, ['other']);
+});
+
+test('new partner is explicitly confirmed and remains confirmed through a missing time question', async () => {
+  const f = fixture();
+  await f.send([f.message('new-company', 'タスク\n日付：明日\n件名：設備点検\nパートナー：新しい会社')]);
+  await f.send([f.postback('new-company', 'partner')]);
+  await pressReply(f, '入力名で新規登録');
+  assert.match(f.replies.at(-1).messages[0].template.text, /開始時刻/);
+  await f.send([f.message('new-time', '13:00')]);
+  assert.equal(f.docs['app_data/shared_state'].partnerItems[0].partnerName, '新しい会社');
+  assert.ok(f.docs['app_data/shared_state'].partnerNames.includes('新しい会社'));
+});
+
+test('collecting registration refuses stale buttons, expired replies and unmentioned answers', async () => {
+  const f = fixture();
+  await f.send([f.message('stale', 'タスク\n日付：明日\n件名：点検\n時間：10:00')]);
+  await f.send([f.postback('stale', 'partner')]);
+  await f.send([f.message('typo', '山下健創')]);
+  const old = replyActions(f).find(action => action.label === '山下健装');
+  await f.send([f.message('new-answer', '別の会社')]);
+  await pressReplyFromSaved(f, old);
+  assert.match(f.replies.at(-1).messages[0].text, /古いボタン/);
+  const pending = f.docs[linePendingPath('line_' + hash('stale').slice(0, 40))];
+  assert.equal(pending.status, 'collecting');
+  const bare = f.message('without-mention', '山下健装');
+  delete bare.message.mention;
+  await f.send([bare]);
+  assert.equal(pending.status, 'collecting');
+  pending.expires = timestamp - 1;
+  await f.send([f.message('expired-answer', '山下健装')]);
+  assert.equal(f.docs['app_data/shared_state'].partnerItems, undefined);
+});
+
+test('registration works with no app admin account and profile unavailable uses self-selection', async () => {
+  const f = fixture({ profileUnavailable: true });
+  delete f.docs['app_data/shared_state'].users.admin;
+  await f.send([f.message('no-admin', 'タスク\n日付：明日\n件名：点検')]);
+  await f.send([f.postback('no-admin', 'member')]);
+  assert.match(f.replies.at(-1).messages[0].text, /高橋信次/);
+  await f.send([f.message('my-name', '高橋信次')]);
+  await pressReply(f, '本人です');
+  assert.deepEqual(f.docs['app_data/shared_state'].teamData.tasks['2026-10-20'].other[0].assigneeIds, ['other']);
+});
+
+test('registration questions and handoff numbers do not compete after switching modes', async () => {
+  const f = fixture();
+  f.docs['app_data/shared_state'].teamData.tasks = { '2026-10-20': { admin: [{ id: 'existing', subject: '点検', updates: [] }] } };
+  await f.send([f.message('incomplete', 'タスク\n件名：新規作業')]);
+  await f.send([f.postback('incomplete', 'member')]);
+  assert.match(f.replies.at(-1).messages[0].template.text, /日付/);
+  await f.send([f.message('handoff-switch', '申し送り 点検')]);
+  await f.send([f.message('pick-existing', '1')]);
+  assert.match(f.replies.at(-1).messages[0].template.text, /追記 内容/);
+  await f.send([f.message('handoff-body', '追記 確認しました')]);
+  assert.match(f.replies.at(-1).messages[0].template.text, /確認しました/);
+  await f.send([f.message('new-task-switch', 'タスク\n日付：明日\n件名：別の新規作業')]);
+  const note = f.message('stale-note', '追記 古い対象には保存しない');
+  await f.send([note]);
+  assert.equal(f.docs['app_data/shared_state'].teamData.tasks['2026-10-20'].admin[0].updates.length, 0);
 });

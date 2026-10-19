@@ -1,9 +1,9 @@
-import { createLineHandoffProcessor, registeredTaskCard } from './_lib/line-handoff.js';
+import { createLineHandoffProcessor } from './_lib/line-handoff.js';
 import { mentionedCommand } from './_lib/line-mention.js';
 import { Buffer } from 'node:buffer';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
-import { makeLineStore, lineConfigPath, linePendingPath } from './_lib/line-store.js';
-import { taskBody, extractLineTask, reviewReasons, lineTaskChanges } from '../src/lineTasks.mjs';
+import { makeLineStore, lineConfigPath } from './_lib/line-store.js';
+import { createLineRegistrationProcessor } from './_lib/line-registration.js';
 
 export const config = { api: { bodyParser: false } };
 export const hash = value => createHash('sha256').update(String(value)).digest('hex');
@@ -44,6 +44,7 @@ export function createLineHandler({ env = globalThis.process.env, makeStore = ma
         if (!response.ok && response.status !== 400) throw new Error('LINE reply failed');
       };
       const processHandoff = createLineHandoffProcessor({ store, reply, fetcher, env, now });
+      const processRegistration = createLineRegistrationProcessor({ store, reply, choices: taskChoices, fetcher, env, now });
       for (const incoming of body.events) {
         let event = incoming;
         if (event.source?.type !== 'group' || !event.source.groupId || !event.source.userId) continue;
@@ -52,7 +53,7 @@ export function createLineHandler({ env = globalThis.process.env, makeStore = ma
           if (text === null) continue;
           event = { ...event, message: { ...event.message, text } };
         }
-        const groupId = event.source.groupId, userId = event.source.userId;
+        const groupId = event.source.groupId;
         const pairing = event.type === 'message' && event.message?.type === 'text' && event.message.text.match(/^LINE連携\s+([a-f0-9]{32})\s*$/);
         if (pairing) {
           const connected = await store.transact([lineConfigPath], values => {
@@ -66,43 +67,11 @@ export function createLineHandler({ env = globalThis.process.env, makeStore = ma
         const connection = await store.read(lineConfigPath);
         if (!connection?.groupId || connection.groupId !== groupId) continue;
         if (event.type === 'message' && !event.message.text.trim()) {
-          await reply(event, 'メンションの後ろに、次の言葉を付けて送ってください。\n\n【追記】申し送りできるタスクの一覧を開きます。\n例：@管理課 タスク受付 追記\n\n【タスク＋内容】新しいタスクを登録します。\n例：@管理課 タスク受付 タスク\n日付：明日\n件名：電球交換\n担当：竹添\n\n【申し送り＋件名】既存タスクを検索します。\n例：@管理課 タスク受付 申し送り 217号室\n\n一覧を開いた後は、メンション＋番号で対象を選びます。\n例：@管理課 タスク受付 3\n\n対象を選んだ後は、メンション＋追記＋内容で申し送りを書けます。\n例：@管理課 タスク受付 追記 部品を発注しました。\n\n※「@」の候補から公式アカウントを選んでください。選択・確認ボタンはそのまま押せます。');
+          await reply(event, 'メンションの後ろに、次の言葉を付けて送ってください。\n\n【追記】申し送りできるタスクの一覧を開きます。\n例：@管理課 タスク受付 追記\n\n【タスク＋内容】新しいタスクを登録します。担当は投稿者です。不足項目はLINEで質問します。\n例：@管理課 タスク受付 タスク\n日付：明日\n件名：電球交換\n\n【申し送り＋件名】既存タスクを検索します。\n例：@管理課 タスク受付 申し送り 217号室\n\n一覧を開いた後は、メンション＋番号で対象を選びます。\n例：@管理課 タスク受付 3\n\n対象を選んだ後は、メンション＋追記＋内容で申し送りを書けます。\n例：@管理課 タスク受付 追記 部品を発注しました。\n\n※「@」の候補から公式アカウントを選んでください。選択・確認ボタンはそのまま押せます。');
           continue;
         }
+        if (await processRegistration(event)) continue;
         if (await processHandoff(event)) continue;
-        if (event.type === 'message' && event.message?.type === 'text') {
-          const text = event.message.text, content = taskBody(text);
-          if (content === null) continue;
-          if (!content || content.length > 5000) { await reply(event, '「タスク」の後に内容を入力してください。5000文字まで登録できます。'); continue; }
-          const id = 'line_' + hash(event.message.id).slice(0, 40), path = linePendingPath(id);
-          const pending = await store.transact([lineConfigPath, path], values => {
-            if (values[lineConfigPath]?.groupId !== groupId) return { result: null };
-            if (values[path]) return { result: values[path] };
-            const value = { id, groupId, userId, ownerUid: values[lineConfigPath].ownerUid, text, timestamp: event.timestamp, expires: now() + 86400000, status: 'choosing', createdAt: new Date(now()).toISOString() };
-            return { writes: [{ path, value }], result: value };
-          });
-          if (pending?.status === 'choosing' && pending.expires > now()) await reply(event, taskChoices(id, content));
-        }
-        if (event.type === 'postback') {
-          const match = String(event.postback?.data || '').match(/^lt:(line_[a-f0-9]{40}):(member|partner|cancel)$/);
-          if (!match) continue;
-          const [, id, kind] = match, path = linePendingPath(id);
-          const message = await store.transact([lineConfigPath, path, 'app_data/shared_state'], values => {
-            const current = values[path], state = values['app_data/shared_state'];
-            if (values[lineConfigPath]?.groupId !== groupId) return { result: '連携が変更されています。' };
-            if (!current || current.groupId !== groupId || current.userId !== userId) return { result: 'このボタンは投稿した本人だけが操作できます。' };
-            if (current.status !== 'choosing') return { result: current.status === 'registered' ? registeredTaskCard(current.id, current.kind, current.draft) : current.status === 'review' ? 'アプリの「LINEからの要確認」に保存済みです。' : 'キャンセル済みです。' };
-            if (current.expires < now()) return { result: '選択期限が切れました。「タスク」で始めて投稿し直してください。' };
-            if (kind === 'cancel') return { writes: [{ path, value: { ...current, status: 'cancelled' } }], result: 'タスクの登録をキャンセルしました。' };
-            if (!state) throw new Error('Missing shared data');
-            const draft = extractLineTask(current.text, current.timestamp, state.users || {}, state.partnerNames || []);
-            const reasons = reviewReasons(draft, kind, state.users || {});
-            if (reasons.length) return { writes: [{ path, value: { ...current, kind, draft, reasons, status: 'review' } }], result: '確認が必要です：' + reasons.join('・') + '\nアプリの設定 →「LINEタスク連携」で管理者が確認・登録できます。' };
-            const changes = lineTaskChanges(state, current, draft, kind, now());
-            return { writes: [{ path, value: { ...current, kind, draft, status: 'registered' } }, ...(Object.keys(changes).length ? [{ path: 'app_data/shared_state', value: changes, fields: Object.keys(changes) }] : [])], result: registeredTaskCard(current.id, kind, draft) };
-          });
-          await reply(event, message);
-        }
       }
       return res.status(200).json({ ok: true });
     } catch {
