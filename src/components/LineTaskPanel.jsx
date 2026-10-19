@@ -64,7 +64,7 @@ export default function LineTaskPanel({ users }) {
   return <section className="rounded-xl border border-green-200 bg-green-50 p-3 space-y-3">
     <button type="button" aria-expanded={open} onClick={() => setOpen(value => !value)} className="min-h-11 text-sm font-bold text-green-900">LINEタスク連携 {open ? '▲' : '▼'}</button>
     {open && <>
-      <p className="text-sm">グループで「タスク」で始まる文章を投稿し、表示されたメンバー／パートナーのボタンを投稿した本人が選ぶと登録します。申し送りは「申し送り 件名」で対象を選び、「追記 内容」を送り、確認ボタンで追加できます。画像はこの連携の対象外です。</p>
+      <p className="text-sm">グループで「タスク」で始まる文章を投稿し、表示されたメンバー／パートナーのボタンを投稿した本人が選ぶと登録します。「申し送り」だけで未終了タスク一覧を表示します。「次のページへ」で切り替え、「申し送り 件名」で絞り込めます。対象を選び、「追記 内容」を送り、確認ボタンで追加できます。画像はこの連携の対象外です。</p>
       {!connection ? <p className="text-sm">連携状態を確認中…</p> : !connection.authenticated ? <><p className="text-sm">管理者のGoogleログインを確認してください（日報保存と共通）。</p><GoogleLogin onSuccess={async response => { try { await reportAction('session', { credential: response.credential }, connection.csrf); await refresh(); } catch (error) { setMessage(error.message); } }} onError={() => setMessage('ログインを確認できませんでした。')}/></> : <>
         <p className="text-sm font-bold">{connection.connected ? 'LINEグループ連携済み' : 'LINEグループは未連携です'}</p>
         {!connection.ready && <p className="text-sm text-orange-800">VercelのProductionにLINE_CHANNEL_SECRETとLINE_CHANNEL_ACCESS_TOKENをSecretで設定してください。</p>}
