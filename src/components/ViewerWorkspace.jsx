@@ -1,3 +1,4 @@
+import DateInput from './DateInput';
 import { completionActorName } from '../taskCompletionActor.mjs';
 import { handoffUpdates, initialPartnerText } from '../handoffHistory.mjs';
 import { useState } from 'react';
@@ -17,7 +18,7 @@ export default function ViewerWorkspace({ tab, teamData, partnerItems, inventory
   const title = { daily: '日別タスク', partner: 'パートナータスク', completed: '終了履歴', inventory: '在庫一覧' }[tab] || '閲覧';
   return <main className="flex-1 overflow-y-auto bg-gray-50 p-3 pb-24 space-y-3">
     <h2 className="text-lg font-bold">{title}</h2><p className="rounded-lg bg-blue-50 p-2 text-sm text-blue-800">閲覧のみ：追加・編集・削除・終了操作はできません。</p>
-    {tab === 'daily' && <label className="block text-sm font-bold">対象日<input type="date" value={date} onChange={event => onDate(event.target.value)} className="ml-2 min-h-11 rounded-lg border bg-white px-2"/></label>}
+    {tab === 'daily' && <label className="block text-sm font-bold">対象日<DateInput value={date} onChange={event => onDate(event.target.value)} className="ml-2 min-h-11 rounded-lg border bg-white px-2"/></label>}
     <input aria-label="表示内容を検索" placeholder="検索" value={query} onChange={event => setQuery(event.target.value)} className="w-full min-h-11 rounded-lg border bg-white px-3"/>
     {tab === 'inventory' ? inventoryItems.filter(item => !query || [inventoryProductLabel(item), item.barcode, item.usageLocation].join(' ').includes(query)).map(item => <details key={item.id} className="rounded-xl border bg-white p-3"><summary className="cursor-pointer font-bold">{inventoryProductLabel(item)} ／ 在庫 {Number(item.stock || 0)}個</summary><p className="mt-2 text-sm">品番：{item.modelNumber || '未登録'} ／ 棚：{item.shelfNumber || '未登録'}</p><p className="text-sm">使用箇所：{item.usageLocation || '未登録'} ／ JAN：{item.barcode || '未登録'}</p>{item.imageUrl && <img src={item.imageUrl} alt={inventoryProductLabel(item)} className="mt-2 max-h-48 max-w-full object-contain"/>}</details>) : records.length ? records.map(item => <details key={item.recordKey} className={'rounded-xl border bg-white p-3 ' + (item.important ? 'border-2 border-red-500' : 'border-blue-100')}>
       <summary className="cursor-pointer space-y-1"><div className="text-xs text-gray-600">{item.taskDate?.replaceAll('-', '/')} {item.time || ''} <ImportantBadge important={item.important}/> <span className={item.completed ? 'text-green-700' : 'text-orange-700'}>{item.completed ? '終了済み' : '未終了'}</span></div><div className="font-bold">{item.partnerName ? item.partnerName + ' ／ ' : ''}{item.subject || item.text || '件名なし'}</div><div className="text-xs text-gray-600">担当：{names(item.assigneeIds)}</div></summary>
