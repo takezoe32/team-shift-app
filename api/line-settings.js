@@ -46,7 +46,7 @@ export function createLineSettingsHandler({ env = globalThis.process.env, config
         return res.status(200).json({ command: 'LINE連携 ' + code });
       }
       if (body.action === 'disconnect') {
-        await store.transact([lineConfigPath], values => ({ writes: [{ path: lineConfigPath, value: { ownerUid: values[lineConfigPath]?.ownerUid || '', status: 'disconnected', accessEpoch: randomBytes(16).toString('hex') } }] }));
+        await store.transact([lineConfigPath, 'app_data/shared_state'], values => ({ writes: [{ path: lineConfigPath, value: { ownerUid: values[lineConfigPath]?.ownerUid || '', status: 'disconnected', accessEpoch: randomBytes(16).toString('hex') } }, { path: 'app_data/shared_state', value: { lineLinkedMembers: {} }, fields: ['lineLinkedMembers'] }] }));
         return res.status(200).json({ done: true });
       }
       if (!['register', 'dismiss'].includes(body.action) || !/^line_[a-f0-9]{40}$/.test(body.id || '')) return res.status(400).json({ error: '操作を確認してください。' });
@@ -78,3 +78,4 @@ export function createLineSettingsHandler({ env = globalThis.process.env, config
   };
 }
 export default createLineSettingsHandler();
+

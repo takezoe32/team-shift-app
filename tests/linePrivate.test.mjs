@@ -130,6 +130,7 @@ test('personal code binds verified email once, expires, and supersedes an older 
   assert.equal(f.docs[privateMemberPath('U1')], undefined);
   await f.send(result.command);
   assert.equal(f.docs[privateMemberPath('U1')].appUid, 'owner');
+  assert.deepEqual(f.docs['app_data/shared_state'].lineLinkedMembers, { owner: 'owner@example.com' });
   assert.match(f.replies.at(-1).messages[0].text, /メンションは不要/);
   await f.send(result.command, 'U2');
   assert.equal(f.docs[privateMemberPath('U2')], undefined);
@@ -166,4 +167,12 @@ test('another enrolled user cannot save a private registration or reuse stale co
   const valid = f.replies.slice().reverse().find(reply => reply.messages.at(-1)?.template?.actions?.some(action => action.label === '登録')).messages.at(-1).template.actions.find(action => action.label === '登録');
   await f.send(valid);
   assert.deepEqual(f.docs['app_data/shared_state'].teamData.tasks, {});
+});
+
+test('existing linked members get a display marker on their next private operation', async () => {
+  const f = fixture();
+  assert.equal(f.docs['app_data/shared_state'].lineLinkedMembers, undefined);
+  await f.send('使い方');
+  assert.deepEqual(f.docs['app_data/shared_state'].lineLinkedMembers, { owner: 'owner@example.com' });
+  assert.deepEqual(f.docs['app_data/shared_state'].teamData, { tasks: {}, shifts: {} });
 });

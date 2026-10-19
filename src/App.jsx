@@ -1728,7 +1728,7 @@ summary={[[ '重要', newTaskVisibility !== 'private' && newTaskImportant ? '重
 };
 
 
-const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, currentUserUid, roleNames, updateRoleNames, roles, updateRoles, deleteUserCompletely, sortedUsers, userOrder, updateUserOrder, debugLogs }) => {
+const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, currentUserUid, roleNames, updateRoleNames, roles, updateRoles, deleteUserCompletely, sortedUsers, userOrder, updateUserOrder, debugLogs, lineLinkedMembers }) => {
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserRole, setNewUserRole] = useState((roles.staff ? 'staff' : Object.keys(roles).find(key => key !== 'viewer')) || 'viewer');
@@ -2187,6 +2187,7 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
                         <div>
                           <div className="flex items-center gap-1.5">
                             <span className="truncate">{u.name}</span>
+                            {u.role !== 'viewer' && u.email && lineLinkedMembers[u.id] === u.email.trim().toLowerCase() && <span title="LINE連携済み" className="shrink-0 rounded bg-green-100 px-1 text-[10px] font-bold text-green-700">LINE</span>}
                             {isMe && (
                               <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.2 rounded shrink-0 font-normal">あなた</span>
                             )}
@@ -3584,6 +3585,7 @@ export default function App() {
   const [roles, setRoles] = useState(INITIAL_ROLES);
   const [roleNames, setRoleNames] = useState(DEFAULT_ROLE_NAMES);
   const [users, setUsers] = useState({});
+  const [lineLinkedMembers, setLineLinkedMembers] = useState({});
   const [userOrder, setUserOrder] = useState([]);
   const [teamData, setTeamData] = useState({ shifts: {}, tasks: {} });
   const [partnerItems, setPartnerItems] = useState([]);
@@ -3856,6 +3858,7 @@ export default function App() {
         }
 
         setUsers(currentUsers);
+        setLineLinkedMembers(data.lineLinkedMembers || {});
         setUserOrder(currentUserOrder);
         if (data.teamData || needsCleanup) setTeamData({ shifts: currentShifts, tasks: currentTasks });
         setPartnerItems(currentPartnerItems);
@@ -3886,7 +3889,7 @@ export default function App() {
               setCurrentUser(restoredUser);
               currentUserRef.current = restoredUser;
               if (!loginRestoreCompletedRef.current) {
-                setActiveTab(localStorage.getItem('teamshift_skip_help_on_login') === 'true' ? 'calendar' : 'help');
+                setActiveTab(new URLSearchParams(window.location.search).has('line_link') ? 'help' : localStorage.getItem('teamshift_skip_help_on_login') === 'true' ? 'calendar' : 'help');
                 loginRestoreCompletedRef.current = true;
               }
               localStorage.setItem('google_user', JSON.stringify(restoredUser));
@@ -4013,7 +4016,8 @@ export default function App() {
 
     writeIdentity = { user: loggedInUser, roles };
     setCurrentUser(loggedInUser);
-    setActiveTab(localStorage.getItem('teamshift_skip_help_on_login') === 'true' ? 'calendar' : 'help');
+    void fetch('/api/line-login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'session', appUid: loggedInUser.id, credential: credentialResponse.credential }) }).catch(() => {});
+    setActiveTab(new URLSearchParams(window.location.search).has('line_link') ? 'help' : localStorage.getItem('teamshift_skip_help_on_login') === 'true' ? 'calendar' : 'help');
     currentUserRef.current = loggedInUser;
     lastDebugActionRef.current = 'login.success';
     void writeDebugLog({ level: 'INFO', event: 'login.success', user: loggedInUser, details: { matchedUserId: loggedInUser.id } });
@@ -4023,6 +4027,7 @@ export default function App() {
   const handleLogout = () => {
     if (!confirmDiscardEdits()) return;
     void endReportSession().catch(() => {});
+    void fetch('/api/line-login', { method: 'DELETE', headers: { 'Content-Type': 'application/json' } }).catch(() => {});
     googleLogout();
     setCurrentUser(null);
     currentUserRef.current = null;
@@ -4699,6 +4704,7 @@ export default function App() {
               />
             ) : (
               <SettingsView 
+                lineLinkedMembers={lineLinkedMembers}
                 currentUserUid={currentUser.id} 
                 debugLogs={debugLogs}
                 roleNames={roleNames} 
@@ -4752,3 +4758,4 @@ export default function App() {
     </GoogleOAuthProvider>
   );
 }
+
