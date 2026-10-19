@@ -19,6 +19,10 @@
     },
     "api/line-settings.js": {
       "maxDuration": 60
+    },
+    "api/line-login.js": {
+      "maxDuration": 60
     }
   }
 }
+

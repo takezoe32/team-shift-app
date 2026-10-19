@@ -57,6 +57,7 @@ test('personal linking code checks Google identity against app email and never i
   f.docs['app_data/shared_state'].users.u.role = 'viewer';
   assert.equal((await run('staff')).code, 400);
   await f.run({ action: 'disconnect' });
+  assert.deepEqual(f.docs['app_data/shared_state'].lineLinkedMembers, {});
   assert.equal((await run('owner', 'owner')).code, 400);
 });
 
