@@ -4,11 +4,11 @@ import { lineConfigPath, linePendingPath } from './line-store.js';
 import { taskBody, extractLineTask, reviewReasons, lineTaskChanges } from '../../src/lineTasks.mjs';
 import { eligibleLineMembers, matchingLineMember, partnerSuggestions } from '../../src/lineRegistration.mjs';
 import { registeredTaskCard } from './line-handoff.js';
+import { lineButtons, lineAction as action } from './line-ui.js';
 
 const hash = text => createHash('sha256').update(String(text)).digest('hex');
 const clip = (text, length) => { let result = ''; for (const character of String(text)) { if (result.length + character.length > length) break; result += character; } return result; };
-const card = (text, actions) => ({ type: 'template', altText: 'タスク登録の確認', template: { type: 'buttons', text: clip(text, 160), actions } });
-const action = (label, data) => ({ type: 'postback', label: clip(label, 20), data });
+const card = (text, actions) => lineButtons(text, actions, 'タスク登録の確認');
 const activePathFor = (group, user) => '_server_integrations/line_register_' + hash(group + ':' + user);
 const memberPathFor = (group, user) => '_server_integrations/line_member_' + hash(group + ':' + user);
 export const registrationForm = (kind, draft = {}) => '件名：' + (draft.subject || '') + '\n日付：' + (draft.date || '') + (kind === 'partner' ? '\n時間：' + (draft.time || '') + '\nパートナー：' + (draft.partnerName || '') : '') + '\n内容：' + (draft.description || '');

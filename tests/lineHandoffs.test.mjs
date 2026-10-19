@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { lineActions, lineText } from './helpers/lineCards.mjs';
 import { searchLineTasks, resolveLineTask, appendLineHandoff } from '../src/lineHandoffs.mjs';
 import { createLineHandoffProcessor, registeredTaskCard } from '../api/_lib/line-handoff.js';
 import { lineConfigPath, linePendingPath } from '../api/_lib/line-store.js';
@@ -53,13 +54,13 @@ function fixture() {
     const handled = await process(event);
     return { handled, event, reply: replies[replies.length - 1] };
   };
-  const actions = message => { const card = Array.isArray(message) ? message[1] : message; return card.type === 'flex' ? card.contents.body.contents.filter(item => item.type === 'button').map(item => item.action) : card.template.actions; };
+  const actions = lineActions;
   return { docs, replies, taskId, send, actions, advance: milliseconds => { time += milliseconds; } };
 }
 test('registered reply has a reusable add-handoff button', () => {
   const card = registeredTaskCard('line_' + 'a'.repeat(40), 'partner', { date: '2026-10-20', subject: '作業' });
-  assert.equal(card.template.actions[0].label, '申し送りを追加');
-  assert.match(card.template.actions[0].data, /^lh:start:/);
+  assert.equal(lineActions(card)[0].label, '申し送りを追加');
+  assert.match(lineActions(card)[0].data, /^lh:start:/);
 });
 test('direct start, text, confirm saves a note once and does not capture normal group conversation', async () => {
   const f = fixture();
@@ -168,7 +169,7 @@ test('paging wraps, back switches types, empty categories and expiry are safe', 
   result = await f.send('申し送り');
   shared.teamData.tasks = {};
   result = await f.send(f.actions(result.reply).find(a => a.label === 'メンバー'));
-  assert.match(result.reply.template.text, /ありません/);
+  assert.match(lineText(result.reply), /ありません/);
 });
 
 test('search uses vertical mixed results and orders today, overdue then upcoming in JST', async () => {
