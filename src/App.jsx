@@ -1,3 +1,4 @@
+import LineTaskPanel from './components/LineTaskPanel';
 import { handoffUpdates, initialPartnerText } from './handoffHistory.mjs';
 import HandoffEntry from './components/HandoffEntry';
 import { findLiveTask } from './handoffEdit.mjs';
@@ -1927,6 +1928,8 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
         </h2>
       </div>
       <div className="p-4 space-y-6 max-w-3xl mx-auto">
+        {String(users[currentUserUid]?.email || '').toLowerCase() === 'mitsutake.takezoe@plandosee.co.jp' && <LineTaskPanel users={sortedUsers}/>}
+
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
           <div className="flex justify-between items-center border-b pb-2 mb-4">
             <h3 className="font-bold text-gray-700 text-sm flex items-center">
