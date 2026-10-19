@@ -127,7 +127,7 @@ test('mention gate ignores unmentioned task, alias, numeric input and pairing wi
   assert.deepEqual(f.docs, before);
   assert.equal(f.replies.length, 0);
   await f.send([f.message('alias', '追記')]);
-  const choices = f.replies.at(-1).messages[0].template.actions;
+  const choices = f.replies.at(-1).messages[0].contents.body.contents.filter(item => item.type === 'button').map(item => item.action);
   assert.deepEqual(choices.map(a => a.label), ['メンバー', 'パートナー', 'キャンセル']);
   const pickKind = { ...f.postback(), postback: { data: choices[0].data } };
   await f.send([pickKind]);
@@ -340,3 +340,4 @@ test('registration questions and handoff numbers do not compete after switching 
   await f.send([note]);
   assert.equal(f.docs['app_data/shared_state'].teamData.tasks['2026-10-20'].admin[0].updates.length, 0);
 });
+
