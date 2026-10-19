@@ -1306,6 +1306,8 @@ const DailyDetailView = ({
   const [newAssigneeIds, setNewAssigneeIds] = useState(null);
   const [quickTaskOpen, setQuickTaskOpen] = useState(true);
   const [newTaskSubject, setNewTaskSubject] = useState('');
+  const [newTaskDate, setNewTaskDate] = useState(null);
+  const taskRegistrationDate = newTaskDate ?? selectedDate;
   const [newTaskImportant, setNewTaskImportant] = useState(false);
   const [newTaskText, setNewTaskText] = useState('');
   const [newTaskEndTime, setNewTaskEndTime] = useState('');
@@ -1330,7 +1332,7 @@ const DailyDetailView = ({
   const [isSavingPersonalMemo, setIsSavingPersonalMemo] = useState(false);
   const [isDeletingPersonalMemo, setIsDeletingPersonalMemo] = useState(false);
   // Keep the guard mounted in both the guided and detailed input forms.
-  const hasNewTaskDraft = !!(newTaskSubject.trim() || newTaskText.trim() || newTaskImportant || newTaskEndTime || newTaskProductId || newTaskProductQuantity !== '1' || newTaskVisibility !== 'public' || newTaskImages.length || newAssigneeIds !== null);
+  const hasNewTaskDraft = !!(newTaskDate !== null || newTaskSubject.trim() || newTaskText.trim() || newTaskImportant || newTaskEndTime || newTaskProductId || newTaskProductQuantity !== '1' || newTaskVisibility !== 'public' || newTaskImages.length || newAssigneeIds !== null);
   useEditGuard(hasNewTaskDraft || isUploading, isUploading);
 
   const currentUser = users[currentUserUid];
@@ -1473,6 +1475,7 @@ const DailyDetailView = ({
   };
 
   const handleAddTask = async () => {
+    if (!taskRegistrationDate) { alert('日付を選択してください。'); return; }
     if (newTaskVisibility === 'private' ? (!newTaskText.trim() && !newTaskImage) : !newTaskSubject.trim()) { alert(newTaskVisibility === 'private' ? '内容または画像を追加してください。' : 'どこで？どんな内容？を入力してください。'); return; }
     if (addTaskSavingRef.current) return;
     addTaskSavingRef.current = true;
@@ -1487,10 +1490,11 @@ const DailyDetailView = ({
       }
       const productQuantity = Number(newTaskProductQuantity);
       if (newTaskProductId && (!Number.isInteger(productQuantity) || productQuantity < 1)) { alert('使用数量は1以上の整数を入力してください。'); return; }
-      await addTask(selectedDate, selectedUserUid, newTaskText.trim(), imageUrl, imageName, imagePublicId, imageBytes, newTaskVisibility, newTaskVisibility === 'private' ? '' : newTaskSubject.trim(), newTaskVisibility === 'private' ? '' : newTaskEndTime, newTaskVisibility === 'private' ? '' : newTaskProductId, newTaskProductId ? productQuantity : 1, images, assignees, newTaskVisibility !== 'private' && newTaskImportant);
+      await addTask(taskRegistrationDate, selectedUserUid, newTaskText.trim(), imageUrl, imageName, imagePublicId, imageBytes, newTaskVisibility, newTaskVisibility === 'private' ? '' : newTaskSubject.trim(), newTaskVisibility === 'private' ? '' : newTaskEndTime, newTaskVisibility === 'private' ? '' : newTaskProductId, newTaskProductId ? productQuantity : 1, images, assignees, newTaskVisibility !== 'private' && newTaskImportant);
       setTaskUploadProgress({stage:'done'});
       setNewAssigneeIds(null);
       setNewTaskVisibility('public');
+      setNewTaskDate(null);
       setNewTaskSubject('');
       setNewTaskImportant(false);
       setNewTaskText('');
@@ -1560,17 +1564,18 @@ const DailyDetailView = ({
 {quickTaskOpen && <QuickEntry hasDraft={!!(newTaskImportant || newTaskSubject.trim() || newTaskText.trim() || newTaskEndTime || newTaskProductId || newTaskImages.length)} tasksContent={<div className="space-y-3">{[...unfinishedPastTasks, ...selectedDateActiveTasks].length ? [...unfinishedPastTasks, ...selectedDateActiveTasks].map(task => <DailyTaskItem key={`${task.taskDate}-${task.ownerUid}-${task.id}`} {...taskItemProps} task={task}/>) : <p className="rounded-xl bg-white border p-5">この担当者の未終了タスクはありません。</p>}</div>} tasksDescription={`${selectedDate} ／ ${users[selectedUserUid]?.name || ''} のタスクと過去の未終了タスクです。終わった作業の「タスクを終了」を押してください。`} title="タスクのかんたん入力" onClose={() => setQuickTaskOpen(false)} onSave={handleAddTask}
 steps={[
 {title:'何をしますか？何をしましたか？', content:<>
-<p>登録日：{selectedDate}</p>
+<p>登録日：{taskRegistrationDate || '日付を選択してください'}</p>
 <p>{newTaskVisibility === 'private' ? '自分だけの個人メモ' : 'みんなに公開するタスク'}</p>
 {newTaskVisibility !== 'private' && <ImportantToggle value={newTaskImportant} onChange={setNewTaskImportant} disabled={isUploading}/>}
 {newTaskVisibility !== 'private' && <label className="block font-bold">どこで？どんな内容？（必須）<input type="text" value={newTaskSubject} onChange={e => setNewTaskSubject(e.target.value)} placeholder="例：1階ロビーの電球交換" className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label>}
 <label className="block font-bold">{newTaskVisibility === 'private' ? '個人メモ（内容か写真が必要）' : '詳しい内容（任意）'}<textarea rows={4} value={newTaskText} onChange={e => setNewTaskText(e.target.value)} placeholder="例：1階ロビーの電球を交換する" className="w-full mt-2 border border-gray-300 rounded-xl p-3 text-base"/></label>
 {newTaskVisibility !== 'private' && <fieldset className="my-4"><legend className="font-bold text-base">担当者（複数選べます）</legend><p className="text-sm text-gray-500 my-2">担当する人の名前をすべて選んでください。</p><div className="flex flex-wrap gap-2">{sortedUsers.map(user => <label key={user.id} className={`flex items-center gap-2 min-h-12 px-3 border-2 rounded-xl text-base ${taskAssigneeIds.includes(user.id) ? 'bg-blue-50 border-blue-500' : 'border-gray-200'}`}><input type="checkbox" checked={taskAssigneeIds.includes(user.id)} onChange={e => setNewAssigneeIds(e.target.checked ? [...taskAssigneeIds, user.id] : taskAssigneeIds.filter(id => id !== user.id))}/>{user.name}</label>)}</div></fieldset>}
+<label className="block text-sm font-bold">日付<input type="date" aria-label="タスクの登録日" value={taskRegistrationDate} onChange={e => setNewTaskDate(e.target.value)} disabled={isUploading} required className="block w-full min-h-12 mt-1 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label>
 {newTaskVisibility !== 'private' && <QuarterHourTime label="終了予定時間" value={newTaskEndTime} onChange={setNewTaskEndTime} disabled={isUploading}/>}
 <ImagePicker files={newTaskImages} onChange={setNewTaskImages} disabled={isUploading}/>
-</>, validate:() => newTaskVisibility !== 'private' && !taskAssigneeIds.length ? '担当者を1人以上選んでください。' : newTaskVisibility !== 'private' && !newTaskSubject.trim() ? 'どこで？どんな内容？を入力してください。' : newTaskVisibility === 'private' && !newTaskText.trim() && !newTaskImage ? '個人メモか写真を追加してください。' : ''}
+</>, validate:() => !taskRegistrationDate ? '日付を選択してください。' : newTaskVisibility !== 'private' && !taskAssigneeIds.length ? '担当者を1人以上選んでください。' : newTaskVisibility !== 'private' && !newTaskSubject.trim() ? 'どこで？どんな内容？を入力してください。' : newTaskVisibility === 'private' && !newTaskText.trim() && !newTaskImage ? '個人メモか写真を追加してください。' : ''}
 ]}
-summary={[[ '重要', newTaskVisibility !== 'private' && newTaskImportant ? '重要' : 'なし' ], [ '登録日', selectedDate ], ['担当', newTaskVisibility === 'private' ? users[selectedUserUid]?.name : taskAssigneeIds.map(id => users[id]?.name).filter(Boolean).join('・')], ['公開範囲', newTaskVisibility === 'private' ? '自分だけの個人メモ' : 'みんなに公開'], ['どこで？どんな内容？', newTaskSubject], ['内容', newTaskText], ['終了予定', newTaskEndTime], ['使用する商品', newTaskProductId ? inventoryProductLabel(inventoryItems.find(item => item.id === newTaskProductId) || {}) + ' × ' + newTaskProductQuantity : 'なし'], ['写真・動画', newTaskImages.length + '件']]}
+summary={[[ '重要', newTaskVisibility !== 'private' && newTaskImportant ? '重要' : 'なし' ], [ '登録日', taskRegistrationDate ], ['担当', newTaskVisibility === 'private' ? users[selectedUserUid]?.name : taskAssigneeIds.map(id => users[id]?.name).filter(Boolean).join('・')], ['公開範囲', newTaskVisibility === 'private' ? '自分だけの個人メモ' : 'みんなに公開'], ['どこで？どんな内容？', newTaskSubject], ['内容', newTaskText], ['終了予定', newTaskEndTime], ['使用する商品', newTaskProductId ? inventoryProductLabel(inventoryItems.find(item => item.id === newTaskProductId) || {}) + ' × ' + newTaskProductQuantity : 'なし'], ['写真・動画', newTaskImages.length + '件']]}
 />}
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <span className="text-xs font-black text-gray-600">このタスクを</span>
@@ -1582,6 +1587,7 @@ summary={[[ '重要', newTaskVisibility !== 'private' && newTaskImportant ? '重
             <div className="space-y-2 mb-2">
               {newTaskVisibility !== 'private' && <ImportantToggle value={newTaskImportant} onChange={setNewTaskImportant} disabled={isUploading}/>}
               {newTaskVisibility !== 'private' && <label className="block text-sm font-bold">どこで？どんな内容？（必須）<input type="text" value={newTaskSubject} onChange={e=>setNewTaskSubject(e.target.value)} placeholder="例：1階ロビーの電球交換" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm" disabled={isUploading}/></label>}
+              <label className="block text-sm font-bold">日付<input type="date" aria-label="タスクの登録日" value={taskRegistrationDate} onChange={e => setNewTaskDate(e.target.value)} disabled={isUploading} required className="block w-full min-h-12 mt-1 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label>
               {newTaskVisibility !== 'private' && <label className="flex items-center gap-2 text-xs text-gray-600"><span className="font-bold">終了予定時刻</span><div className="flex items-center gap-1"><select aria-label="終了予定時刻の時" value={newTaskEndTime ? newTaskEndTime.split(':')[0] : ''} onChange={e=>setNewTaskEndTime(e.target.value ? e.target.value+':'+((newTaskEndTime||'').split(':')[1]||'00') : '')} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" disabled={isUploading}><option value="">時</option>{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(v=><option key={v} value={v}>{v}</option>)}</select><span>:</span><select aria-label="終了予定時刻の分" value={newTaskEndTime ? newTaskEndTime.split(':')[1] : ''} onChange={e=>setNewTaskEndTime(((newTaskEndTime||'').split(':')[0]||'00')+':'+e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" disabled={isUploading}><option value="">分</option>{['00','15','30','45'].map(v=><option key={v} value={v}>{v}</option>)}</select></div></label>}
               {newTaskVisibility !== 'private' && <div className="space-y-2"><label className="block text-xs text-gray-600"><span className="block font-bold mb-1">使用する商品（任意）</span><select value={newTaskProductId} onChange={e=>setNewTaskProductId(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white" disabled={isUploading}><option value="">商品を選択しない</option>{inventoryItems.map(item=><option key={item.id} value={item.id} disabled={Number(item.stock||0)<=0}>{item.kind ? item.kind + '：' : ''}{inventoryProductLabel(item)}{item.usageLocation ? '／使用箇所：' + item.usageLocation : ''}（在庫 {Number(item.stock||0)} 個）</option>)}</select></label><div className="flex gap-2"><button type="button" onClick={()=>setProductScannerOpen(true)} disabled={isUploading} className="min-h-10 px-3 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-bold inline-flex items-center gap-1"><Camera size={15}/>バーコード読取</button><label className="flex-1 text-xs text-gray-600 flex items-center gap-2">使用数量<input type="number" min="1" step="1" value={newTaskProductQuantity} onChange={e=>setNewTaskProductQuantity(e.target.value)} className="min-h-10 w-20 rounded-lg border border-gray-200 px-2 text-center text-sm"/></label></div>{productScanMessage && <p className="text-xs text-blue-700">{productScanMessage}</p>}</div>}
             </div>
