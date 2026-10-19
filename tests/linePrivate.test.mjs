@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { lineActions } from './helpers/lineCards.mjs';
 import { Readable } from 'node:stream';
 import { createHmac } from 'node:crypto';
 import { createLineHandler } from '../api/line-webhook.js';
@@ -36,7 +37,7 @@ function fixture({ inGroup = true, group = 'G1', displayName = '竹添三剛', l
     assert.equal(res.code, 200, JSON.stringify(res.body));
     return { event, messages: replies.at(-1)?.messages };
   };
-  const buttons = () => { const card = replies.at(-1).messages.at(-1); return card.type === 'flex' ? card.contents.body.contents.filter(item => item.type === 'button').map(item => item.action) : card.template.actions; };
+  const buttons = () => lineActions(replies.at(-1).messages.at(-1));
   const press = async label => { const button = buttons().find(action => action.label === label); assert.ok(button, label); return send(button); };
   return { docs, store, send, press, buttons, replies, requests };
 }
@@ -164,7 +165,7 @@ test('another enrolled user cannot save a private registration or reuse stale co
   assert.deepEqual(f.docs['app_data/shared_state'].teamData.tasks, {});
   const pending = Object.entries(f.docs).find(([path, value]) => path.startsWith('_server_integrations/line_task_') && value.draft?.subject === '別の点検');
   pending[1].expires = timestamp - 1;
-  const valid = f.replies.slice().reverse().find(reply => reply.messages.at(-1)?.template?.actions?.some(action => action.label === '登録')).messages.at(-1).template.actions.find(action => action.label === '登録');
+  const valid = lineActions(f.replies.slice().reverse().find(reply => lineActions(reply.messages.at(-1)).some(action => action.label === '登録')).messages.at(-1)).find(action => action.label === '登録');
   await f.send(valid);
   assert.deepEqual(f.docs['app_data/shared_state'].teamData.tasks, {});
 });

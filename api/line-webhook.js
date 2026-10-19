@@ -5,6 +5,7 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { makeLineStore, lineConfigPath } from './_lib/line-store.js';
 import { createLineRegistrationProcessor } from './_lib/line-registration.js';
 import { authorizePrivateLine, privateHelp } from './_lib/line-private.js';
+import { lineButtons, lineAction } from './_lib/line-ui.js';
 
 export const config = { api: { bodyParser: false } };
 export const hash = value => createHash('sha256').update(String(value)).digest('hex');
@@ -15,10 +16,7 @@ export function validSignature(raw, signature, secret) {
   return expected.length === supplied.length && timingSafeEqual(expected, supplied);
 }
 export function taskChoices(id, body) {
-  return { type: 'template', altText: 'タスクの種類を選んでください（投稿した本人が操作してください）', template: {
-    type: 'buttons', text: '投稿した本人が種類を選んでください。\n' + [...body].slice(0, 80).join(''),
-    actions: [['member', 'メンバータスク'], ['partner', 'パートナータスク'], ['cancel', 'キャンセル']].map(([kind, label]) => ({ type: 'postback', label, data: 'lt:' + id + ':' + kind }))
-  } };
+  return lineButtons('投稿した本人が種類を選んでください。\n' + [...body].slice(0, 80).join(''), [['member', 'メンバータスク'], ['partner', 'パートナータスク'], ['cancel', 'キャンセル']].map(([kind, label]) => lineAction(label, 'lt:' + id + ':' + kind)), 'タスクの種類を選んでください（投稿した本人が操作してください）');
 }
 export function createLineHandler({ env = globalThis.process.env, makeStore = makeLineStore, fetcher = fetch, now = Date.now } = {}) {
   return async (req, res) => {

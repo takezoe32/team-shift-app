@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { lineActions, lineText } from './helpers/lineCards.mjs';
 import { Readable } from 'node:stream';
 import { createHmac } from 'node:crypto';
 import { extractLineTask, taskBody, reviewReasons, lineTaskChanges } from '../src/lineTasks.mjs';
@@ -63,8 +64,8 @@ test('signature covers exact raw bytes, including Japanese and newlines', () => 
   assert.equal(validSignature(raw, sig, 'wrong'), false);
   assert.equal(validSignature(raw, '', 'secret'), false);
   const choices = taskChoices('line_' + 'a'.repeat(40), 'work');
-  assert.equal(choices.template.type, 'buttons');
-  assert.deepEqual(choices.template.actions.map(action => action.label), ['メンバータスク', 'パートナータスク', 'キャンセル']);
+  assert.equal(choices.type, 'flex');
+  assert.deepEqual(lineActions(choices).map(action => action.label), ['メンバータスク', 'パートナータスク', 'キャンセル']);
 });
 
 function fixture({ displayName = '竹添三剛', profileUnavailable = false } = {}) {
@@ -105,9 +106,9 @@ test('handoff vertical list replies send two valid LINE messages in one request'
   assert.equal(response.messages.length, 2);
   assert.equal(response.messages[0].type, 'text');
   assert.match(response.messages[0].text, /1｜2026-10-20/);
-  assert.equal(response.messages[1].template.type, 'buttons');
+  assert.equal(response.messages[1].type, 'flex');
   assert.equal((await f.send([f.message('number', '1')])).code, 200);
-  assert.match(f.replies.at(-1).messages[0].template.text, /追記 内容/);
+  assert.match(lineText(f.replies.at(-1).messages[0]), /追記 内容/);
 });
 
 test('mention gate ignores unmentioned task, alias, numeric input and pairing without writes or replies', async () => {
@@ -142,8 +143,8 @@ test('mention gate ignores unmentioned task, alias, numeric input and pairing wi
   delete bareNote.message.mention;
   await f.send([bareNote]);
   await f.send([f.message('note', '追記 メンションあり')]);
-  assert.match(f.replies.at(-1).messages[0].template.text, /メンションあり/);
-  assert.doesNotMatch(f.replies.at(-1).messages[0].template.text, /メンションなし/);
+  assert.match(lineText(f.replies.at(-1).messages[0]), /メンションあり/);
+  assert.doesNotMatch(lineText(f.replies.at(-1).messages[0]), /メンションなし/);
 });
 
 test('mention alone returns help without changing a task or active handoff session', async () => {
@@ -192,7 +193,7 @@ test('missing partner name is asked in LINE, and cancellation never creates a ta
   const id = 'line_' + hash('123').slice(0, 40);
   assert.equal(f.docs[linePendingPath(id)].status, 'collecting');
   assert.equal(f.docs[linePendingPath(id)].step, 'partner');
-  assert.match(f.replies.at(-1).messages[0].template.text, /パートナー名を入力/);
+  assert.match(lineText(f.replies.at(-1).messages[0]), /パートナー名を入力/);
   await f.send([f.message('456')]);
   await f.send([f.postback('456', 'cancel')]);
   assert.deepEqual(f.docs['app_data/shared_state'].teamData.tasks, {});
@@ -221,7 +222,7 @@ test('expired choices cannot register; explicit partner details register once', 
   assert.equal(f.docs['app_data/shared_state'].partnerItems[0].partnerName, '山下健装');
 });
 
-const replyActions = f => f.replies.at(-1).messages.at(-1).template.actions;
+const replyActions = f => lineActions(f.replies.at(-1).messages.at(-1));
 const pressReply = (f, label, userId = 'U1') => {
   const button = replyActions(f).find(action => action.label === label);
   assert.ok(button, 'missing button ' + label);
@@ -241,9 +242,9 @@ test('missing partner is asked, typo suggestions need confirmation, sender remai
   const f = fixture();
   await f.send([f.message('p1', 'タスク 山下健創が明日の12時来館')]);
   await f.send([f.postback('p1', 'partner')]);
-  assert.match(f.replies.at(-1).messages[0].template.text, /パートナー名を入力/);
+  assert.match(lineText(f.replies.at(-1).messages[0]), /パートナー名を入力/);
   await f.send([f.message('answer-p1', '山下健創')]);
-  assert.match(f.replies.at(-1).messages[0].template.text, /この中のパートナー/);
+  assert.match(lineText(f.replies.at(-1).messages[0]), /この中のパートナー/);
   assert.equal(f.docs['app_data/shared_state'].partnerItems, undefined);
   const suggestion = replyActions(f).find(action => action.label === '山下健装');
   await f.send([{ ...f.postback('unused', 'partner', 'U2'), postback: { data: suggestion.data } }]);
@@ -266,15 +267,15 @@ test('unmatched LINE name chooses self once; missing date/time are completed wit
   assert.match(f.replies.at(-1).messages[0].text, /あなた自身/);
   assert.doesNotMatch(f.replies.at(-1).messages[0].text, /閲覧者/);
   await f.send([f.message('who', '高橋信次')]);
-  assert.match(f.replies.at(-1).messages[0].template.text, /高橋信次/);
+  assert.match(lineText(f.replies.at(-1).messages[0]), /高橋信次/);
   await pressReply(f, '本人です');
-  assert.match(f.replies.at(-1).messages[0].template.text, /日付/);
+  assert.match(lineText(f.replies.at(-1).messages[0]), /日付/);
   await f.send([f.message('bad-date', '2026/02/30')]);
-  assert.match(f.replies.at(-1).messages[0].template.text, /日付/);
+  assert.match(lineText(f.replies.at(-1).messages[0]), /日付/);
   await f.send([f.message('good-date', '明日')]);
-  assert.match(f.replies.at(-1).messages[0].template.text, /開始時刻/);
+  assert.match(lineText(f.replies.at(-1).messages[0]), /開始時刻/);
   await f.send([f.message('bad-time', '12:07')]);
-  assert.match(f.replies.at(-1).messages[0].template.text, /開始時刻/);
+  assert.match(lineText(f.replies.at(-1).messages[0]), /開始時刻/);
   await f.send([f.message('good-time', '12:15')]);
   assert.deepEqual(f.docs['app_data/shared_state'].partnerItems[0].assigneeIds, ['other']);
   await f.send([f.message('next', 'タスク\n日付：明日\n件名：電球交換')]);
@@ -287,7 +288,7 @@ test('new partner is explicitly confirmed and remains confirmed through a missin
   await f.send([f.message('new-company', 'タスク\n日付：明日\n件名：設備点検\nパートナー：新しい会社')]);
   await f.send([f.postback('new-company', 'partner')]);
   await pressReply(f, '入力名で新規登録');
-  assert.match(f.replies.at(-1).messages[0].template.text, /開始時刻/);
+  assert.match(lineText(f.replies.at(-1).messages[0]), /開始時刻/);
   await f.send([f.message('new-time', '13:00')]);
   assert.equal(f.docs['app_data/shared_state'].partnerItems[0].partnerName, '新しい会社');
   assert.ok(f.docs['app_data/shared_state'].partnerNames.includes('新しい会社'));
@@ -329,12 +330,12 @@ test('registration questions and handoff numbers do not compete after switching 
   f.docs['app_data/shared_state'].teamData.tasks = { '2026-10-20': { admin: [{ id: 'existing', subject: '点検', updates: [] }] } };
   await f.send([f.message('incomplete', 'タスク\n件名：新規作業')]);
   await f.send([f.postback('incomplete', 'member')]);
-  assert.match(f.replies.at(-1).messages[0].template.text, /日付/);
+  assert.match(lineText(f.replies.at(-1).messages[0]), /日付/);
   await f.send([f.message('handoff-switch', '申し送り 点検')]);
   await f.send([f.message('pick-existing', '1')]);
-  assert.match(f.replies.at(-1).messages[0].template.text, /追記 内容/);
+  assert.match(lineText(f.replies.at(-1).messages[0]), /追記 内容/);
   await f.send([f.message('handoff-body', '追記 確認しました')]);
-  assert.match(f.replies.at(-1).messages[0].template.text, /確認しました/);
+  assert.match(lineText(f.replies.at(-1).messages[0]), /確認しました/);
   await f.send([f.message('new-task-switch', 'タスク\n日付：明日\n件名：別の新規作業')]);
   const note = f.message('stale-note', '追記 古い対象には保存しない');
   await f.send([note]);

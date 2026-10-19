@@ -2,20 +2,13 @@ import { lineAccess, lineProfileUrl, isPrivateLine } from './line-context.js';
 import { createHash } from 'node:crypto';
 import { lineConfigPath, linePendingPath } from './line-store.js';
 import { lineTaskTargets, searchLineTasks, resolveLineTask, describeLineTask, appendLineHandoff } from '../../src/lineHandoffs.mjs';
+import { lineButtons as buttons, lineAction as action } from './line-ui.js';
 const digest = value => createHash('sha256').update(value).digest('hex');
 const clip = (value, limit) => { let result = ''; for (const character of String(value)) { if (result.length + character.length > limit) break; result += character; } return result; };
-const buttons = (text, actions, altText = 'タスクの申し送り') => ({ type: 'template', altText, template: { type: 'buttons', text: clip(text, 160), actions } });
-const action = (label, data) => ({ type: 'postback', label: clip(label, 20), data, displayText: '「' + clip(label, 20) + '」を選択' });
 const PAGE_SIZE = 10;
-const kindCard = session => ({ type: 'flex', altText: '追記するタスクを選択：メンバー／パートナー／キャンセル', contents: {
-  type: 'bubble', body: { type: 'box', layout: 'vertical', spacing: 'md', contents: [
-    { type: 'text', text: '申し送り・追記', weight: 'bold', size: 'lg', color: '#1F2937' },
-    { type: 'text', text: '追加するタスクの種類を押してください。', wrap: true, size: 'sm', color: '#4B5563' },
-    { type: 'button', style: 'primary', color: '#2563EB', height: 'md', action: action('メンバー', 'lh:kind:' + session.nonce + ':member') },
-    { type: 'button', style: 'primary', color: '#7C3AED', height: 'md', action: action('パートナー', 'lh:kind:' + session.nonce + ':partner') },
-    { type: 'button', style: 'secondary', height: 'md', action: action('キャンセル', 'lh:cancel:' + session.nonce) }
-  ] }
-} });
+const kindCard = session => buttons('追加するタスクの種類を押してください。', [
+  action('メンバー', 'lh:kind:' + session.nonce + ':member'), action('パートナー', 'lh:kind:' + session.nonce + ':partner'), action('キャンセル', 'lh:cancel:' + session.nonce)
+], '追記するタスクを選択：メンバー／パートナー／キャンセル', '申し送り・追記');
 const orderedTargets = (targets, now) => {
   const today = new Date(now + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const rank = target => target.completed ? 4 : !target.date ? 3 : target.date === today ? 0 : target.date < today ? 1 : 2;
