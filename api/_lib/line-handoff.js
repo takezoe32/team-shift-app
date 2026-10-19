@@ -5,14 +5,17 @@ const digest = value => createHash('sha256').update(value).digest('hex');
 const clip = (value, limit) => { let result = ''; for (const character of String(value)) { if (result.length + character.length > limit) break; result += character; } return result; };
 const buttons = (text, actions, altText = 'タスクの申し送り') => ({ type: 'template', altText, template: { type: 'buttons', text: clip(text, 160), actions } });
 const action = (label, data) => ({ type: 'postback', label: clip(label, 20), data });
+const PAGE_SIZE = 10;
 const selectionCard = session => {
-  const page = session.page || 0, offset = page * 2, targets = session.targets.slice(offset, offset + 2);
-  const pages = Math.ceil(session.targets.length / 2);
-  return buttons('対象を選択（' + (page + 1) + '/' + pages + 'ページ・' + session.targets.length + '件）\n' + targets.map((target, index) => (offset + index + 1) + '：' + clip(describeLineTask(target).replaceAll('\n', ' '), 42)).join('\n') + '\n「申し送り 件名」で絞り込み可', [
-    ...targets.map((target, index) => action((offset + index + 1) + '：' + target.subject, 'lh:choose:' + session.nonce + ':' + (offset + index))),
-    ...(pages > 1 ? [action(page + 1 === pages ? '最初のページへ' : '次のページへ', 'lh:page:' + session.nonce + ':' + ((page + 1) % pages))] : []),
-    action('キャンセル', 'lh:cancel:' + session.nonce)
-  ]);
+  const page = session.page || 0, offset = page * PAGE_SIZE, targets = session.targets.slice(offset, offset + PAGE_SIZE);
+  const pages = Math.ceil(session.targets.length / PAGE_SIZE);
+  return { type: 'template', altText: '申し送りの対象を選択（' + (page + 1) + '/' + pages + 'ページ・' + session.targets.length + '件）。横に送って選んでください。「申し送り 件名」で絞り込めます。', template: { type: 'carousel', columns: targets.map((target, index) => ({
+    title: clip((offset + index + 1) + '：' + target.subject, 40),
+    text: clip((target.kind === 'member' ? 'メンバー' : 'パートナー') + (target.completed ? '・終了済み' : '') + '\n' + target.date + (target.time ? ' ' + target.time : '') + '\n' + (target.partnerName || '対象タスクを選んでください'), 60),
+    actions: [action('このタスクを選ぶ', 'lh:choose:' + session.nonce + ':' + (offset + index)),
+      ...(pages > 1 ? [action(page + 1 === pages ? '最初の10件へ' : '次の10件', 'lh:page:' + session.nonce + ':' + ((page + 1) % pages))] : []),
+      action('キャンセル', 'lh:cancel:' + session.nonce)]
+  })) } };
 };
 export function registeredTaskCard(id, kind, draft) {
   return buttons((kind === 'member' ? 'メンバータスク' : 'パートナータスク') + 'に登録しました。\n' + draft.date + (draft.time ? ' ' + draft.time : '') + '\n' + draft.subject, [
@@ -79,7 +82,7 @@ export function createLineHandoffProcessor({ store, reply, fetcher = fetch, env,
         if (current.status === 'cancelled') return finish('キャンセル済みです。');
         if (operation === 'cancel') return finish('申し送りをキャンセルしました。', [sessionWrite({ ...current, status: 'cancelled' })]);
         if (operation === 'page') {
-          if (current.status !== 'selecting' || index === undefined || Number(index) >= Math.ceil((current.targets?.length || 0) / 2)) return finish('最新の案内から対象を選んでください。');
+          if (current.status !== 'selecting' || index === undefined || Number(index) >= Math.ceil((current.targets?.length || 0) / PAGE_SIZE)) return finish('最新の案内から対象を選んでください。');
           const next = { ...current, page: Number(index) };
           return finish(selectionCard(next), [sessionWrite(next)]);
         }
