@@ -29,8 +29,8 @@ export function createLineSettingsHandler({ env = globalThis.process.env, config
         const code = randomBytes(16).toString('hex');
         await store.transact([lineConfigPath, 'app_data/shared_state'], values => {
           const state = values['app_data/shared_state'] || {};
-          const owner = Object.entries(state.users || {}).find(([, user]) => String(user.email || '').toLowerCase() === session.email);
-          if (!owner || owner[1].role === 'viewer' || Number(state.roles?.[owner[1].role]?.level || 0) < 40) throw new Error('管理者の登録情報を確認してください。');
+          const owner = Object.entries(state.users || {}).find(([, user]) => String(user.email || '').trim().toLowerCase() === session.email);
+          if (!owner || owner[1].role === 'viewer' || Number((state.roles || { admin: { level: 40 } })[owner[1].role]?.level || 0) < 40) throw new Error('管理者の登録情報を確認してください。');
           return { writes: [{ path: lineConfigPath, value: { ...(values[lineConfigPath] || {}), ownerUid: owner[0], pairHash: hash(code), pairExpires: now() + 600000 } }] };
         });
         return res.status(200).json({ command: 'LINE連携 ' + code });

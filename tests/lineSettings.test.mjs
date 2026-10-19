@@ -10,7 +10,7 @@ const now = Date.parse('2026-10-19T00:00:00Z');
 const users = { owner: { email: 'owner@example.com', name: '管理者', role: 'admin' }, u: { name: '担当', role: 'staff' } };
 function fixture() {
   const id = 'line_' + 'a'.repeat(40), path = linePendingPath(id);
-  const docs = { 'app_data/shared_state': { users, roles: { admin: { level: 40 } }, teamData: { tasks: {} } }, [path]: { id, ownerUid: 'owner', status: 'review', kind: 'member', text: 'タスク 作業', draft: { text: '作業' } } };
+  const docs = { 'app_data/shared_state': { users: structuredClone(users), roles: { admin: { level: 40 } }, teamData: { tasks: {} } }, [path]: { id, ownerUid: 'owner', status: 'review', kind: 'member', text: 'タスク 作業', draft: { text: '作業' } } };
   const store = { ensurePrivate: async () => {}, read: async path => docs[path], inbox: async () => [docs[path]], transact: async (paths, plan) => { const out = plan(Object.fromEntries(paths.map(path => [path, structuredClone(docs[path] || null)]))); for (const write of out.writes || []) docs[write.path] = write.fields ? { ...docs[write.path], ...write.value } : write.value; return out.result; } };
   const handler = createLineSettingsHandler({ env: { LINE_CHANNEL_SECRET: 'secret', LINE_CHANNEL_ACCESS_TOKEN: 'token' }, configure: () => config, makeStore: () => store, now: () => now });
   const run = async (body, authenticated = true, csrf = true) => {
@@ -77,5 +77,21 @@ test('LINE storage rejects publicly readable integration records', async () => {
   for (const status of [200, 404]) {
     const store = makeLineStore(env, async () => ({ status }), () => ({}));
     await assert.rejects(store.ensurePrivate(), /Firestore/);
+  }
+});
+
+test('legacy app defaults recognize admin when roles have not been persisted', async () => {
+  const f = fixture();
+  delete f.docs['app_data/shared_state'].roles;
+  assert.equal((await f.run({ action: 'pair' })).code, 200);
+  assert.equal(f.docs[lineConfigPath].ownerUid, 'owner');
+});
+test('explicit demotion and viewer users cannot generate pairing codes', async () => {
+  for (const role of ['admin', 'viewer', 'staff']) {
+    const f = fixture();
+    f.docs['app_data/shared_state'].users.owner.role = role;
+    f.docs['app_data/shared_state'].roles = { admin: { level: 10 }, viewer: { level: 100 }, staff: { level: 10 } };
+    assert.equal((await f.run({ action: 'pair' })).code, 400);
+    assert.equal(f.docs[lineConfigPath], undefined);
   }
 });
