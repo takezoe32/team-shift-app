@@ -1,3 +1,4 @@
+import { japanToday } from '../japanTime.mjs';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { dateLabel, monthDays } from '../dateInput.mjs';
@@ -14,8 +15,7 @@ export default function DateInput({ value = '', onChange, disabled, required, mi
   const choose = date => { onChange?.({ target: { value: date, name: props.name }, currentTarget: { value: date } }); close(); };
   const open = () => {
     if (disabled || input.current?.matches(':disabled')) return;
-    const today = new Date();
-    const parts = (value || `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`).split('-');
+    const parts = (value || japanToday()).split('-');
     setMonth([Number(parts[0]), Number(parts[1])]);
   };
   const move = offset => { const next = new Date(month[0], month[1] - 1 + offset, 1); setMonth([next.getFullYear(), next.getMonth() + 1]); };
