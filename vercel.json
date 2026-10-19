@@ -1,5 +1,10 @@
 {
-  "crons": [{ "path": "/api/daily-report-cron", "schedule": "0 15 * * *" }],
+  "crons": [
+    {
+      "path": "/api/daily-report-cron",
+      "schedule": "0 15 * * *"
+    }
+  ],
   "functions": {
     "api/daily-report-cron.js": {
       "includeFiles": "public/templates/daily-report.xlsx",
@@ -8,6 +13,12 @@
     "api/daily-report.js": {
       "includeFiles": "public/templates/daily-report.xlsx",
       "maxDuration": 300
+    },
+    "api/line-webhook.js": {
+      "maxDuration": 60
+    },
+    "api/line-settings.js": {
+      "maxDuration": 60
     }
   }
 }
