@@ -53,7 +53,7 @@ function fixture() {
     const handled = await process(event);
     return { handled, event, reply: replies[replies.length - 1] };
   };
-  const actions = message => message.template.actions;
+  const actions = message => message.template.actions || message.template.columns[0].actions;
   return { docs, replies, taskId, send, actions, advance: milliseconds => { time += milliseconds; } };
 }
 test('registered reply has a reusable add-handoff button', () => {
@@ -127,28 +127,31 @@ test('cross-group commands do not save notes; large searches paginate', async ()
   const tasks = f.docs['app_data/shared_state'].teamData.tasks['2026-10-20'].owner;
   for (let index = 0; index < 4; index++) tasks.push({ id: 'task-' + index, subject: '217号室 追加' + index });
   const result = await f.send('申し送り 217号室');
-  assert.equal(f.actions(result.reply).length, 4);
-  assert.match(result.reply.template.text, /1\/3ページ/);
+  assert.equal(result.reply.template.type, 'carousel');
+  assert.equal(result.reply.template.columns.length, 6);
+  assert.match(result.reply.altText, /1\/1ページ/);
 });
 
 test('bare command lists unfinished public tasks and later pages select the correct task', async () => {
   const f = fixture(), shared = f.docs['app_data/shared_state'];
   const tasks = shared.teamData.tasks['2026-10-20'].owner;
   tasks.push({ id: 'done', subject: '終了タスク', completed: true });
-  for (let index = 0; index < 5; index++) tasks.push({ id: 'extra-' + index, subject: '追加タスク' + index, updates: [] });
+  for (let index = 0; index < 15; index++) tasks.push({ id: 'extra-' + index, subject: '追加タスク' + index, updates: [] });
   let result = await f.send('申し送り');
-  assert.match(result.reply.template.text, /7件/);
+  assert.match(result.reply.altText, /17件/);
+  assert.equal(result.reply.template.columns.length, 10);
+  assert.ok(result.reply.template.columns.every(column => column.actions.length === 3 && column.title.length <= 40 && column.text.length <= 60));
   const page = f.actions(result.reply).find(action => action.data.startsWith('lh:page:'));
   const other = await f.send(page, 'U2');
   assert.equal(typeof other.reply, 'string');
   result = await f.send(page);
-  assert.match(result.reply.template.text, /2\/4ページ/);
+  assert.match(result.reply.altText, /2\/2ページ/);
   const pick = f.actions(result.reply)[0];
   await f.send(pick);
   const preview = await f.send('追記 ページから追加');
   await f.send(f.actions(preview.reply)[0]);
   assert.equal(shared.teamData.tasks['2026-10-20'].owner[0].updates.length, 0);
-  const saved = f.docs['app_data/shared_state'].teamData.tasks['2026-10-20'].owner.find(task => task.id === 'extra-1');
+  const saved = f.docs['app_data/shared_state'].teamData.tasks['2026-10-20'].owner.find(task => task.id === 'extra-9');
   assert.equal(saved.updates[0].text, 'ページから追加');
   const late = await f.send(page);
   assert.match(late.reply, /古いボタン/);
@@ -157,15 +160,15 @@ test('bare command lists unfinished public tasks and later pages select the corr
 test('list handles empty tasks, wraps pages and rejects invalid or expired paging', async () => {
   const f = fixture();
   const tasks = f.docs['app_data/shared_state'].teamData.tasks['2026-10-20'].owner;
-  tasks.push({ id: 'extra', subject: '追加' });
+  for (let index = 0; index < 9; index++) tasks.push({ id: 'extra-' + index, subject: '追加' });
   let result = await f.send('申し送り');
   let page = f.actions(result.reply).find(action => action.data.startsWith('lh:page:'));
   result = await f.send(page);
-  assert.match(result.reply.template.text, /2\/2ページ/);
+  assert.match(result.reply.altText, /2\/2ページ/);
   page = f.actions(result.reply).find(action => action.data.startsWith('lh:page:'));
-  assert.equal(page.label, '最初のページへ');
+  assert.equal(page.label, '最初の10件へ');
   result = await f.send(page);
-  assert.match(result.reply.template.text, /1\/2ページ/);
+  assert.match(result.reply.altText, /1\/2ページ/);
   const invalid = { data: page.data.replace(/:[0-9]+$/, ':999999') };
   assert.match((await f.send(invalid)).reply, /最新の案内/);
   f.advance(1800001);
