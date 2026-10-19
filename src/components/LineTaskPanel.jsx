@@ -1,3 +1,4 @@
+import DateInput from './DateInput';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { GoogleLogin } from '@react-oauth/google';
 import { reportAction } from '../dailyReportApi.mjs';
@@ -29,7 +30,7 @@ function ReviewTask({ item, users, csrf, onSaved }) {
     <p className="whitespace-pre-wrap break-words text-sm text-gray-700">{item.text}</p>
     <label className="block text-xs font-bold">種類<select value={kind} onChange={event => setKind(event.target.value)} disabled={busy} className="mt-1 block min-h-11 w-full rounded-lg border px-2"><option value="member">メンバータスク</option><option value="partner">パートナータスク</option></select></label>
     <label className="block text-xs font-bold">件名<input value={draft.subject} maxLength={120} onChange={event => update('subject', event.target.value)} disabled={busy} className="mt-1 min-h-11 w-full rounded-lg border px-2"/></label>
-    <label className="block text-xs font-bold">対象日<input type="date" value={draft.date} onChange={event => update('date', event.target.value)} disabled={busy} className="mt-1 block min-h-11 w-full rounded-lg border px-2"/></label>
+    <label className="block text-xs font-bold">対象日<DateInput value={draft.date} onChange={event => update('date', event.target.value)} disabled={busy} className="mt-1 block min-h-11 w-full rounded-lg border px-2"/></label>
     {kind === 'partner' && <><label className="block text-xs font-bold">パートナー名<input value={draft.partnerName} maxLength={120} onChange={event => update('partnerName', event.target.value)} disabled={busy} className="mt-1 min-h-11 w-full rounded-lg border px-2"/></label><QuarterHourTime label="開始時刻" required value={draft.time} onChange={value => update('time', value)} disabled={busy}/></>}
     <AssigneePicker users={users.filter(user => user.role !== 'viewer')} value={draft.assigneeIds} onChange={value => update('assigneeIds', value)} disabled={busy}/>
     <div className="flex gap-2"><button type="button" disabled={busy} onClick={() => void act('dismiss')} className="min-h-11 flex-1 rounded-lg border text-sm font-bold">登録を取り消す</button><button type="button" disabled={busy} onClick={() => void act('register')} className="min-h-11 flex-1 rounded-lg bg-blue-600 text-sm font-bold text-white">{busy ? '処理中…' : '確認して登録'}</button></div>

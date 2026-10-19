@@ -1,3 +1,4 @@
+import DateInput from './DateInput';
 import { useRef, useState } from 'react';
 import QuarterHourTime from './QuarterHourTime';
 import { useEditGuard, confirmEditDiscard } from '../editGuard';
@@ -24,7 +25,7 @@ export default function PartnerScheduleEditor({ item, onSave, disabled }) {
   return <div className="w-full border-t border-gray-100 pt-3 mt-2">
     {!open ? <button type="button" disabled={disabled} onClick={() => { setSchedule({ date: item.date || '', time: item.time || '', endTime: item.endTime || '' }); setError(''); setOpen(true); }} className="min-h-12 w-full rounded-xl border border-blue-300 bg-blue-50 text-blue-700 font-bold">日程を変更する</button> : <fieldset disabled={saving || disabled} className="bg-blue-50 border border-blue-200 p-3 rounded-xl space-y-4">
       <legend className="font-bold">日程変更：{item.subject || item.partnerName}</legend>
-      <label className="block font-bold">日付<input autoFocus type="date" value={schedule.date} onChange={e => change('date', e.target.value)} className="w-full min-h-12 rounded-xl border border-gray-300 p-3 bg-white mt-2"/></label>
+      <label className="block font-bold">日付<DateInput autoFocus value={schedule.date} onChange={e => change('date', e.target.value)} className="w-full min-h-12 rounded-xl border border-gray-300 p-3 bg-white mt-2"/></label>
       <QuarterHourTime label="開始時間" required value={schedule.time} onChange={value => change('time', value)}/>
       <QuarterHourTime label="終了予定" value={schedule.endTime} onChange={value => change('endTime', value)}/>
       {error && <p role="alert" className="text-red-700">{error}</p>}

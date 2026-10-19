@@ -1,3 +1,4 @@
+import DateInput from './DateInput';
 import DailyReportPreview from './DailyReportPreview';
 import { useEffect, useRef, useState } from 'react';
 import { GoogleLogin, useGoogleLogin } from '@react-oauth/google';
@@ -98,7 +99,7 @@ export default function DailyReportPanel() {
       <div className="rounded-lg bg-white p-3 text-xs space-y-2">
         {!connection ? <p>Google Driveの連携状態を確認しています…</p> : !connection.ready ? <p>自動認証の初回サーバー設定が完了していません。管理者による設定が必要です。</p> : !connection.authenticated ? <><p>日報保存用のGoogleログインを一度確認してください。</p><GoogleLogin onSuccess={confirmLogin} onError={() => setMessage('Googleログインを確認できませんでした。')}/></> : connection.connected ? <p>Google Drive連携済み：保存時のGoogle承認は不要です。</p> : connection.admin ? <><p>初回のみGoogle Driveと連携してください。以後は自動で認証を更新します。</p><button type="button" disabled={busy} onClick={startConnect} className="min-h-10 rounded-lg bg-blue-700 px-3 font-bold text-white disabled:opacity-50">Google Driveを連携する（初回・再連携）</button></> : <p>管理者によるGoogle Driveの初回連携をお待ちください。</p>}
       </div>
-      <label className="block text-xs font-bold">対象日（当日分もプレビューできます・日本時間）<input type="date" disabled={busy} value={date} onChange={e => { if (!confirmEditDiscard(Object.keys(fields).length > 0, busy)) return; setDate(e.target.value); setFields({}); setResult(null); setMessage(''); }} className="mt-1 block min-h-11 w-full rounded-lg border px-2 text-sm"/></label>
+      <label className="block text-xs font-bold">対象日（当日分もプレビューできます・日本時間）<DateInput disabled={busy} value={date} onChange={e => { if (!confirmEditDiscard(Object.keys(fields).length > 0, busy)) return; setDate(e.target.value); setFields({}); setResult(null); setMessage(''); }} className="mt-1 block min-h-11 w-full rounded-lg border px-2 text-sm"/></label>
       <p className="text-xs text-gray-600">月ごとのファイルに、日別シートで保存します。出勤者は当日のシフトから苗字、来館業者は当日に終了したパートナータスクのパートナー名・件名・担当者の苗字、連絡引継事項は「終了していないタスク（件数）」を表示し、クリックすると同じシート下部に題名一覧を開きます。営繕作業・業務は実際の終了時刻を最も近い15分に丸め、「終了時刻｜件名 （品番） 担当者の苗字」の並びで記載し、題名未設定の旧タスクは本文の先頭1行を使います。画像・動画は専用の月別フォルダにまとめ、同じシートの右側から開けるようにします。再作成時も自動入力欄を更新します。天候は気象庁の福岡地方の予報を自動入力し、手入力で修正できます。予報がない日や取得できない場合は保存済みの天候を残します。塩素投入数・備考は入力した項目だけ更新します。個人メモは含めません。</p>
       <div className="grid gap-2 sm:grid-cols-2">{field('weather', '天候')}{field('chlorine', '塩素投入数')}{field('remarks', '備考', true)}</div>
       <p className="text-xs text-gray-600">{weatherMessage?.date === date ? weatherMessage.text : '天気予報を取得中…'} <a href={forecast?.date === date ? forecast.sourceUrl : WEATHER_SOURCE_URL} target="_blank" rel="noopener noreferrer" className="text-blue-800 underline">出典：気象庁</a></p>
@@ -111,6 +112,3 @@ export default function DailyReportPanel() {
     {result?.url && <a href={result.url} target="_blank" rel="noopener noreferrer" className="block min-h-10 text-sm font-bold text-blue-800 underline">保存した日報を開く</a>}
   </section>;
 }
-
-
-
