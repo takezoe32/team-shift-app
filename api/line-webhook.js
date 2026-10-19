@@ -49,10 +49,11 @@ export function createLineHandler({ env = globalThis.process.env, makeStore = ma
         const privateChat = event.source?.type === 'user';
         if (!event.source?.userId || (!privateChat && (event.source.type !== 'group' || !event.source.groupId))) continue;
         if (privateChat) {
-          if (!['message', 'postback', 'follow'].includes(event.type) || (event.type === 'message' && event.message?.type !== 'text')) continue;
+          if (!['message', 'postback', 'follow'].includes(event.type) || (event.type === 'message' && !['text', 'image', 'video'].includes(event.message?.type))) continue;
           const authorized = await authorizePrivateLine({ event, store, fetcher, env, now });
-          if (!authorized) { await reply(event, '初回はアプリの「使い方」→「LINEから登録」→「自分のLINEを連携する」で本人用のコードを発行し、この個別トークに送ってください。\n例：連携 コード\nアプリに登録されたメールアドレスとLINEを結び付けます。コードは他の人に渡さないでください。'); continue; }
+          if (!authorized) { await reply(event, '初回はアプリの「使い方」→「LINEから登録」→「LINEと連携する」から本人確認してください。\nアプリに登録されたメールアドレスと、ご本人のLINEを結び付けます。LINE名が違っても大丈夫です。\nボタンが準備中の場合は管理者の初回設定が必要です。'); continue; }
           event = { ...event, privateAuthorized: true, privateAppUid: authorized.appUid, source: { ...event.source, groupId: 'private:' + event.source.userId } };
+          if (event.type === 'message' && ['image', 'video'].includes(event.message.type)) { await processHandoff(event); continue; }
           const text = event.message?.text?.trim() || '';
           if (event.type === 'follow' || (event.type === 'message' && (!text || /^(使い方|ヘルプ|開始|連携(?:\s+[a-f0-9]{32})?)$/.test(text)))) { await reply(event, privateHelp); continue; }
         } else if (event.type === 'message') {
@@ -79,6 +80,7 @@ export function createLineHandler({ env = globalThis.process.env, makeStore = ma
           await reply(event, 'メンションの後ろに、次の言葉を付けて送ってください。\n\n【追記】申し送りできるタスクの一覧を開きます。\n例：@管理課 タスク受付 追記\n\n【タスク＋内容】新しいタスクを登録します。担当は投稿者です。不足項目はLINEで質問します。\n例：@管理課 タスク受付 タスク\n日付：明日\n件名：電球交換\n\n【申し送り＋件名】既存タスクを検索します。\n例：@管理課 タスク受付 申し送り 217号室\n\n一覧を開いた後は、メンション＋番号で対象を選びます。\n例：@管理課 タスク受付 3\n\n対象を選んだ後は、メンション＋追記＋内容で申し送りを書けます。\n例：@管理課 タスク受付 追記 部品を発注しました。\n\n※「@」の候補から公式アカウントを選んでください。選択・確認ボタンはそのまま押せます。');
           continue;
         }
+        if (event.type === 'postback' && String(event.postback?.data || '').startsWith('lm:')) { await processHandoff(event); continue; }
         if (await processRegistration(event)) continue;
         if (await processHandoff(event)) continue;
       }

@@ -23,7 +23,8 @@ export const describeLineTask = target => (target.kind === 'member' ? 'メンバ
 export function appendLineHandoff(state, reference, note) {
   const target = resolveLineTask(state, reference);
   if (!target) throw new Error('タスクが削除されています。対象を探し直してください。');
-  if (!note.text?.trim() || note.text.length > 5000 || note.kind !== 'handoff') throw new Error('申し送りは1〜5000文字で入力してください。');
+  const hasMedia = Array.isArray(note.images) && note.images.length > 0 && note.images.length <= 6 && note.images.every(image => { try { return new URL(image.imageUrl).protocol === 'https:' && new URL(image.imageUrl).hostname === 'res.cloudinary.com'; } catch { return false; } });
+  if ((!note.text?.trim() && !hasMedia) || (note.text || '').length > 5000 || note.kind !== 'handoff') throw new Error('申し送りは5000文字以内、または画像・動画を添付してください。');
   if (target.kind === 'member') {
     const owners = state.teamData.tasks[target.date], list = owners[target.ownerUid];
     const current = list.find(task => task.id === target.id);
@@ -35,3 +36,4 @@ export function appendLineHandoff(state, reference, note) {
   const updates = current.updates?.length ? current.updates : current.content ? [{ id: 'legacy_' + current.id, kind: 'initial', text: current.content, authorUid: current.createdByUid || '', authorName: current.createdByName || '登録時の内容', createdAt: current.createdAt || null }] : [];
   return { partnerItems: state.partnerItems.map(item => item.id === target.id ? { ...item, updates: [...updates, note] } : item) };
 }
+

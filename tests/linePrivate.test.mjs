@@ -115,10 +115,10 @@ test('unknown friends cannot see tasks, members or buttons without a valid priva
   const f = fixture({ inGroup: false, linked: false });
   const before = structuredClone(f.docs);
   await f.send('タスク');
-  assert.match(f.replies.at(-1).messages[0].text, /本人用のコード/);
+  assert.match(f.replies.at(-1).messages[0].text, /LINEと連携する/);
   assert.deepEqual(f.docs, before);
   await f.send({ data: 'lh:start:line_' + 'a'.repeat(40) });
-  assert.match(f.replies.at(-1).messages[0].text, /本人用のコード/);
+  assert.match(f.replies.at(-1).messages[0].text, /LINEと連携する/);
   assert.deepEqual(f.docs, before);
 });
 
@@ -142,14 +142,14 @@ test('personal code binds verified email once, expires, and supersedes an older 
   await f.send(replacement.command, 'U2');
   assert.equal(f.docs[privateMemberPath('U2')].appUid, 'owner');
   await f.send('タスク', 'U1');
-  assert.match(f.replies.at(-1).messages[0].text, /本人用のコード/);
+  assert.match(f.replies.at(-1).messages[0].text, /LINEと連携する/);
   f.docs['app_data/shared_state'].users.owner.role = 'viewer';
   await f.send('タスク', 'U2');
-  assert.match(f.replies.at(-1).messages[0].text, /本人用のコード/);
+  assert.match(f.replies.at(-1).messages[0].text, /LINEと連携する/);
   f.docs['app_data/shared_state'].users.owner.role = 'admin';
   f.docs[lineConfigPath].accessEpoch = 'new-epoch';
   await f.send('タスク', 'U2');
-  assert.match(f.replies.at(-1).messages[0].text, /本人用のコード/);
+  assert.match(f.replies.at(-1).messages[0].text, /LINEと連携する/);
 });
 
 test('another enrolled user cannot save a private registration or reuse stale confirmation', async () => {

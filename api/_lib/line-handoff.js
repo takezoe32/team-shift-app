@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { lineConfigPath, linePendingPath } from './line-store.js';
 import { lineTaskTargets, searchLineTasks, resolveLineTask, describeLineTask, appendLineHandoff } from '../../src/lineHandoffs.mjs';
 import { lineButtons as buttons, lineAction as action } from './line-ui.js';
+import { createLineMediaProcessor, mediaImages, mediaPending, mediaSummary } from './line-media.js';
 const digest = value => createHash('sha256').update(value).digest('hex');
 const clip = (value, limit) => { let result = ''; for (const character of String(value)) { if (result.length + character.length > limit) break; result += character; } return result; };
 const PAGE_SIZE = 10;
@@ -31,21 +32,33 @@ export function registeredTaskCard(id, kind, draft) {
 }
 const prompt = target => '「@管理課 タスク受付 追記 内容」と送ってください。\n対象：' + clip(describeLineTask(target), 80);
 const confirmCard = session => {
-  const card = buttons('このタスクに追加しますか？\n' + clip(describeLineTask(session.target), 50) + '\n申し送り：' + clip(session.text, 75), [
-  action('このタスクに追加', 'lh:save:' + session.nonce), action('キャンセル', 'lh:cancel:' + session.nonce)
+  const pending = mediaPending(session), attachment = session.attachments?.find(item => item.status !== 'ready');
+  const card = buttons((pending ? '添付の受信完了後に追加できます。' : 'このタスクに追加しますか？') + '\n' + clip(describeLineTask(session.target), 50) + '\n申し送り：' + clip(session.text || '（添付のみ）', 40) + '\n' + mediaSummary(session), [
+  ...(!pending && (session.text || mediaImages(session).length) ? [action('このタスクに追加', 'lh:save:' + session.nonce)] : []),
+  ...(attachment ? [action('添付を再試行', 'lm:retry:' + attachment.id), action('この添付を除く', 'lm:remove:' + attachment.id)] : []),
+  ...(session.attachments || []).filter(item => item.status === 'ready').map((item, index) => action((item.type === 'video' ? '動画' : '画像') + (index + 1) + 'を除く', 'lm:remove:' + item.id)),
+  action('キャンセル', 'lh:cancel:' + session.nonce)
   ]);
-  return session.privateChat ? [{ type: 'text', text: '対象：' + clip(describeLineTask(session.target), 1000) }, { type: 'text', text: session.text }, card] : card;
+  return session.privateChat ? [{ type: 'text', text: '対象：' + clip(describeLineTask(session.target), 1000) + '\n' + mediaSummary(session) + '\nまだ保存されていません。画像・動画を続けて送れます。最後に「このタスクに追加」を押してください。最新の状態は「確認」と送って開けます。' }, ...(session.text ? [{ type: 'text', text: session.text }] : []), card] : card;
 };
 export function createLineHandoffProcessor({ store, reply, fetcher = fetch, env, now = Date.now }) {
+  const processMedia = createLineMediaProcessor({ store, reply, fetcher, env, now, confirmCard });
   return async event => {
+    if (await processMedia(event)) return true;
     const text = event.type === 'message' && event.message?.type === 'text' ? event.message.text.normalize('NFKC').trim() : '';
     const search = text === '追記' ? ['', ''] : text.match(/^申し送り(?:[\s:]|$)([\s\S]*)/);
     const addition = text.match(isPrivateLine(event) ? /^(?:追記|内容)(?:[\s:]|$)([\s\S]*)/ : /^追記(?:[\s:]|$)([\s\S]*)/);
     const number = text.match(/^[0-9]{1,6}$/);
+    const review = isPrivateLine(event) && text === '確認';
     const data = event.type === 'postback' ? String(event.postback?.data || '') : '';
     const start = data.match(/^lh:start:(line_[a-f0-9]{40})$/);
     const command = data.match(/^lh:(choose|page|save|cancel|kind|back):([a-f0-9]{24})(?::([0-9]{1,6}|member|partner))?$/);
-    if (!search && !addition && !start && !command && !number) return false;
+    let freeText = false;
+    if (!review && !search && !addition && !start && !command && !number && text && isPrivateLine(event) && !/^(タスク|連携|使い方|ヘルプ|開始)(?:[\s:]|$)/.test(text)) {
+      const current = await store.read('_server_integrations/line_handoff_' + digest(event.source.groupId + ':' + event.source.userId));
+      freeText = current?.expires > now() && ['awaiting', 'confirming'].includes(current.status);
+    }
+    if (!review && !search && !addition && !start && !command && !number && !freeText) return false;
     const groupId = event.source.groupId, userId = event.source.userId;
     const sessionPath = '_server_integrations/line_handoff_' + digest(groupId + ':' + userId);
     const eventId = event.webhookEventId || (event.message?.id ? 'message:' + event.message.id : JSON.stringify([event.timestamp, groupId, userId, data]));
@@ -68,8 +81,8 @@ export function createLineHandoffProcessor({ store, reply, fetcher = fetch, env,
       const finish = (message, writes = []) => { const response = isPrivateLine(event) && typeof message === 'string' ? message.replaceAll('「@管理課 タスク受付 ', '「') : message; return { writes: [...writes, { path: receiptPath, value: { reply: response, createdAt: new Date(now()).toISOString() } }], result: response }; };
       const sessionWrite = value => ({ path: sessionPath, value });
       const begin = target => {
-        const session = { nonce, groupId, userId, privateChat: isPrivateLine(event), status: 'awaiting', target, expires: now() + 1800000 };
-        const response = session.privateChat ? [{ type: 'text', text: '対象：' + clip(describeLineTask(target), 1000) + '\n下のフォーマットをコピーし、内容を記入して送ってください。' }, { type: 'text', text: '内容：' }, buttons('記入後に確認画面を表示します。まだ保存されません。', [action('キャンセル', 'lh:cancel:' + nonce)])] : buttons(prompt(target), [action('キャンセル', 'lh:cancel:' + nonce)]);
+        const session = { nonce, draftId: nonce, groupId, userId, ...(isPrivateLine(event) ? { appUid: event.privateAppUid } : {}), privateChat: isPrivateLine(event), status: 'awaiting', target, attachments: [], expires: now() + 1800000 };
+        const response = session.privateChat ? [{ type: 'text', text: '対象：' + clip(describeLineTask(target), 1000) + '\n文章・画像・動画を送ってください。画像のみ・動画のみも使えます。画像5枚（各10MB）・動画1本（30秒・25MB以内）まで。最後に確認して追加します。返信が届かない場合は「確認」と送ってください。' }, { type: 'text', text: '内容：' }, buttons('送信後に確認画面を表示します。まだ保存されません。', [action('キャンセル', 'lh:cancel:' + nonce)])] : buttons(prompt(target), [action('キャンセル', 'lh:cancel:' + nonce)]);
         return finish(response, [sessionWrite(session)]);
       };
       if (start) {
@@ -88,6 +101,8 @@ export function createLineHandoffProcessor({ store, reply, fetcher = fetch, env,
       }
       if (number && (!current || current.status !== 'selecting' || current.expires < now())) return { result: null };
       if (!current || current.groupId !== groupId || current.userId !== userId || current.expires < now()) return finish('申し送りの入力が見つからないか、30分の期限が切れています。「@管理課 タスク受付 申し送り 件名」で対象を選び直してください。');
+      if (isPrivateLine(event) && current.appUid && current.appUid !== event.privateAppUid) return finish('連携するメンバーが変更されています。「追記」から選び直してください。');
+      if (review) return finish(['awaiting', 'confirming'].includes(current.status) ? confirmCard(current) : '先に「追記」で対象を選んでください。');
       if (number) {
         const index = Number(number[0]) - 1, offset = (current.page || 0) * PAGE_SIZE;
         if (index < offset || index >= offset + PAGE_SIZE || !current.targets[index]) return finish('今表示している一覧の番号を送ってください。');
@@ -123,10 +138,11 @@ export function createLineHandoffProcessor({ store, reply, fetcher = fetch, env,
           if (!target) return finish('タスクが削除されています。「@管理課 タスク受付 申し送り 件名」で探し直してください。');
           return begin(target);
         }
-        if (current.status !== 'confirming' || !current.text) return finish('先に「@管理課 タスク受付 追記 内容」の形で申し送りを送ってください。');
+        if (mediaPending(current)) return finish('添付の受信が完了していません。最新の案内から再試行するか、不要な添付を除いてください。');
+        if (current.status !== 'confirming' || (!current.text && !mediaImages(current).length)) return finish('先に「@管理課 タスク受付 追記 内容」の形で申し送りを送ってください。');
         const target = resolveLineTask(state, current.target);
         if (!target) return finish('タスクが削除されています。申し送りは保存していません。対象を選び直してください。');
-        const note = { id: 'line_note_' + current.nonce, text: current.text, kind: 'handoff', source: 'line', authorUid: 'line_' + digest(userId).slice(0, 24), authorName: 'LINE：' + authorName, createdAt: new Date(now()).toISOString() };
+        const note = { id: 'line_note_' + current.nonce, text: current.text || '', ...(mediaImages(current).length ? { images: mediaImages(current) } : {}), kind: 'handoff', source: 'line', authorUid: 'line_' + digest(userId).slice(0, 24), authorName: 'LINE：' + authorName, createdAt: new Date(now()).toISOString() };
         const changes = appendLineHandoff(state, target, note);
         return finish('申し送りを追加しました。\n' + describeLineTask(target), [
           sessionWrite({ ...current, status: 'saved' }),
@@ -134,7 +150,7 @@ export function createLineHandoffProcessor({ store, reply, fetcher = fetch, env,
         ]);
       }
       if (!['awaiting', 'confirming'].includes(current.status)) return finish('先に「@管理課 タスク受付 申し送り 件名」で対象を選んでください。');
-      const content = addition[1].trim();
+      const content = freeText ? text : addition[1].trim();
       if (!content || content.length > 5000) return finish('「追記」の後に申し送りを書いてください。5000文字まで入力できます。');
       const target = resolveLineTask(state, current.target);
       if (!target) return finish('タスクが削除されています。「@管理課 タスク受付 申し送り 件名」で探し直してください。');
