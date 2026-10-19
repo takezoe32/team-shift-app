@@ -18,8 +18,8 @@ const selectionCard = session => {
   const page = session.page || 0, offset = page * PAGE_SIZE, targets = session.targets.slice(offset, offset + PAGE_SIZE);
   const pages = Math.ceil(session.targets.length / PAGE_SIZE);
   const heading = (session.kind === 'member' ? 'メンバータスク' : session.kind === 'partner' ? 'パートナータスク' : '検索結果') + '（' + (offset + 1) + '〜' + (offset + targets.length) + '件／全' + session.targets.length + '件・' + (page + 1) + '/' + pages + 'ページ）';
-  return [{ type: 'text', text: heading + '\n\n' + targets.map((target, index) => (offset + index + 1) + '｜' + (target.date || '日付未設定') + (target.time ? ' ' + target.time : '') + (target.completed ? '（終了済み）' : '') + '\n' + clip((target.partnerName ? target.partnerName + '｜' : target.kind === 'member' ? 'メンバー｜' : 'パートナー｜') + target.subject, 250)).join('\n\n') + '\n\n対象の番号だけを送ってください。例：' + (offset + 1) + '\n「申し送り 件名」で絞り込めます。' },
-    buttons('表示した一覧の番号を送ってください。', [
+  return [{ type: 'text', text: heading + '\n\n' + targets.map((target, index) => (offset + index + 1) + '｜' + (target.date || '日付未設定') + (target.time ? ' ' + target.time : '') + (target.completed ? '（終了済み）' : '') + '\n' + clip((target.partnerName ? target.partnerName + '｜' : target.kind === 'member' ? 'メンバー｜' : 'パートナー｜') + target.subject, 250)).join('\n\n') + '\n\n公式アカウントをメンションして番号を送ってください。例：@管理課 タスク受付 ' + (offset + 1) + '\n「@管理課 タスク受付 申し送り 件名」で絞り込めます。' },
+    buttons('公式アカウントをメンションして、一覧の番号を送ってください。例：@管理課 タスク受付 1', [
       ...(pages > 1 ? [action(page + 1 === pages ? '最初の10件へ' : '次の10件', 'lh:page:' + session.nonce + ':' + ((page + 1) % pages))] : []),
       action('種類選択に戻る', 'lh:back:' + session.nonce), action('キャンセル', 'lh:cancel:' + session.nonce)
     ])];
@@ -29,14 +29,14 @@ export function registeredTaskCard(id, kind, draft) {
     action('申し送りを追加', 'lh:start:' + id)
   ], 'タスクを登録しました。申し送りを追加できます。');
 }
-const prompt = target => '「追記 内容」と送ってください。例：追記 部品を発注しました\n対象：' + clip(describeLineTask(target), 90);
+const prompt = target => '「@管理課 タスク受付 追記 内容」と送ってください。\n対象：' + clip(describeLineTask(target), 80);
 const confirmCard = session => buttons('このタスクに追加しますか？\n' + clip(describeLineTask(session.target), 50) + '\n申し送り：' + clip(session.text, 75), [
   action('このタスクに追加', 'lh:save:' + session.nonce), action('キャンセル', 'lh:cancel:' + session.nonce)
 ]);
 export function createLineHandoffProcessor({ store, reply, fetcher = fetch, env, now = Date.now }) {
   return async event => {
     const text = event.type === 'message' && event.message?.type === 'text' ? event.message.text.normalize('NFKC').trim() : '';
-    const search = text.match(/^申し送り(?:[\s:]|$)([\s\S]*)/);
+    const search = text === '追記' ? ['', ''] : text.match(/^申し送り(?:[\s:]|$)([\s\S]*)/);
     const addition = text.match(/^追記(?:[\s:]|$)([\s\S]*)/);
     const number = text.match(/^[0-9]{1,6}$/);
     const data = event.type === 'postback' ? String(event.postback?.data || '') : '';
@@ -70,9 +70,9 @@ export function createLineHandoffProcessor({ store, reply, fetcher = fetch, env,
       };
       if (start) {
         const pending = values[linePendingPath(start[1])];
-        if (!pending || pending.status !== 'registered' || pending.groupId !== groupId) return finish('このタスクを開けません。「申し送り 件名」で探してください。');
+        if (!pending || pending.status !== 'registered' || pending.groupId !== groupId) return finish('このタスクを開けません。「@管理課 タスク受付 申し送り 件名」で探してください。');
         const target = resolveLineTask(state, { id: pending.id, ownerUid: pending.ownerUid, kind: pending.kind });
-        if (!target) return finish('タスクが削除されています。「申し送り 件名」で探し直してください。');
+        if (!target) return finish('タスクが削除されています。「@管理課 タスク受付 申し送り 件名」で探し直してください。');
         return begin(target);
       }
       if (search) {
@@ -83,18 +83,18 @@ export function createLineHandoffProcessor({ store, reply, fetcher = fetch, env,
         return finish(query ? selectionCard(session) : kindCard(session), [sessionWrite(session)]);
       }
       if (number && (!current || current.status !== 'selecting' || current.expires < now())) return { result: null };
-      if (!current || current.groupId !== groupId || current.userId !== userId || current.expires < now()) return finish('申し送りの入力が見つからないか、30分の期限が切れています。「申し送り 件名」で対象を選び直してください。');
+      if (!current || current.groupId !== groupId || current.userId !== userId || current.expires < now()) return finish('申し送りの入力が見つからないか、30分の期限が切れています。「@管理課 タスク受付 申し送り 件名」で対象を選び直してください。');
       if (number) {
         const index = Number(number[0]) - 1, offset = (current.page || 0) * PAGE_SIZE;
         if (index < offset || index >= offset + PAGE_SIZE || !current.targets[index]) return finish('今表示している一覧の番号を送ってください。');
         const target = resolveLineTask(state, current.targets[index]);
-        if (!target) return finish('タスクが削除されています。「申し送り」から選び直してください。');
+        if (!target) return finish('タスクが削除されています。「@管理課 タスク受付 追記」から選び直してください。');
         return begin(target);
       }
       if (command) {
         const [, operation, suppliedNonce, index] = command;
         if (suppliedNonce !== current.nonce) return finish('このボタンは入力した本人だけが使えます。古いボタンの場合は、最新の案内から操作してください。');
-        if (current.status === 'saved') return finish('この申し送りは追加済みです。新しい内容は「申し送り 件名」から追加してください。');
+        if (current.status === 'saved') return finish('この申し送りは追加済みです。新しい内容は「@管理課 タスク受付 申し送り 件名」から追加してください。');
         if (current.status === 'cancelled') return finish('キャンセル済みです。');
         if (operation === 'cancel') return finish('申し送りをキャンセルしました。', [sessionWrite({ ...current, status: 'cancelled' })]);
         if (operation === 'back') {
@@ -116,10 +116,10 @@ export function createLineHandoffProcessor({ store, reply, fetcher = fetch, env,
         if (operation === 'choose') {
           if (current.status !== 'selecting' || !current.targets?.[Number(index)] || index === undefined) return finish('最新の案内から対象を選んでください。');
           const target = resolveLineTask(state, current.targets[Number(index)]);
-          if (!target) return finish('タスクが削除されています。「申し送り 件名」で探し直してください。');
+          if (!target) return finish('タスクが削除されています。「@管理課 タスク受付 申し送り 件名」で探し直してください。');
           return finish(buttons(prompt(target), [action('キャンセル', 'lh:cancel:' + current.nonce)]), [sessionWrite({ ...current, status: 'awaiting', target })]);
         }
-        if (current.status !== 'confirming' || !current.text) return finish('先に「追記 内容」の形で申し送りを送ってください。');
+        if (current.status !== 'confirming' || !current.text) return finish('先に「@管理課 タスク受付 追記 内容」の形で申し送りを送ってください。');
         const target = resolveLineTask(state, current.target);
         if (!target) return finish('タスクが削除されています。申し送りは保存していません。対象を選び直してください。');
         const note = { id: 'line_note_' + current.nonce, text: current.text, kind: 'handoff', source: 'line', authorUid: 'line_' + digest(userId).slice(0, 24), authorName: 'LINE：' + authorName, createdAt: new Date(now()).toISOString() };
@@ -129,11 +129,11 @@ export function createLineHandoffProcessor({ store, reply, fetcher = fetch, env,
           ...(Object.keys(changes).length ? [{ path: 'app_data/shared_state', value: changes, fields: Object.keys(changes) }] : [])
         ]);
       }
-      if (!['awaiting', 'confirming'].includes(current.status)) return finish('先に「申し送り 件名」で対象を選んでください。');
+      if (!['awaiting', 'confirming'].includes(current.status)) return finish('先に「@管理課 タスク受付 申し送り 件名」で対象を選んでください。');
       const content = addition[1].trim();
       if (!content || content.length > 5000) return finish('「追記」の後に申し送りを書いてください。5000文字まで入力できます。');
       const target = resolveLineTask(state, current.target);
-      if (!target) return finish('タスクが削除されています。「申し送り 件名」で探し直してください。');
+      if (!target) return finish('タスクが削除されています。「@管理課 タスク受付 申し送り 件名」で探し直してください。');
       // Each replacement text invalidates the previous confirmation button.
       const next = { ...current, target, nonce, text: content, status: 'confirming', expires: now() + 1800000 };
       return finish(confirmCard(next), [sessionWrite(next)]);
