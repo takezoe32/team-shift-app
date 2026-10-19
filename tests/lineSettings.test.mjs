@@ -7,12 +7,12 @@ import { signSession, decodeFields } from '../api/_lib/report-auth.js';
 const secret = Buffer.alloc(32, 1).toString('base64');
 const config = { ready: true, secret, allowed: ['owner@example.com'], admins: ['owner@example.com'] };
 const now = Date.parse('2026-10-19T00:00:00Z');
-const users = { owner: { email: 'owner@example.com', name: '管理者', role: 'admin' }, u: { name: '担当', role: 'staff' } };
+const users = { owner: { email: 'owner@example.com', name: '管理者', role: 'admin' }, u: { email: 'staff@example.com', name: '担当', role: 'staff' } };
 function fixture() {
   const id = 'line_' + 'a'.repeat(40), path = linePendingPath(id);
   const docs = { 'app_data/shared_state': { users: structuredClone(users), roles: { admin: { level: 40 } }, teamData: { tasks: {} } }, [path]: { id, ownerUid: 'owner', status: 'review', kind: 'member', text: 'タスク 作業', draft: { text: '作業' } } };
   const store = { ensurePrivate: async () => {}, read: async path => docs[path], inbox: async () => [docs[path]], transact: async (paths, plan) => { const out = plan(Object.fromEntries(paths.map(path => [path, structuredClone(docs[path] || null)]))); for (const write of out.writes || []) docs[write.path] = write.fields ? { ...docs[write.path], ...write.value } : write.value; return out.result; } };
-  const handler = createLineSettingsHandler({ env: { LINE_CHANNEL_SECRET: 'secret', LINE_CHANNEL_ACCESS_TOKEN: 'token' }, configure: () => config, makeStore: () => store, now: () => now });
+  const handler = createLineSettingsHandler({ env: { LINE_CHANNEL_SECRET: 'secret', LINE_CHANNEL_ACCESS_TOKEN: 'token' }, configure: () => config, makeStore: () => store, verifyGoogle: async credential => { if (credential === 'owner') return 'owner@example.com'; if (credential === 'staff') return 'staff@example.com'; if (credential === 'outsider') return 'outsider@example.com'; throw new Error('本人確認に失敗しました。'); }, now: () => now });
   const run = async (body, authenticated = true, csrf = true) => {
     const req = { method: body ? 'POST' : 'GET', body, headers: { origin: 'https://team-shift-app.vercel.app', 'content-type': 'application/json', cookie: (authenticated ? '__Host-teamshift_report_session=' + signSession('owner@example.com', secret) + '; ' : '') + '__Host-teamshift_report_csrf=csrf', 'x-report-csrf': csrf ? 'csrf' : 'bad' } };
     const res = { code: 200, setHeader() {}, status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; }, end() { return this; } };
@@ -37,6 +37,29 @@ test('pair command expires in ten minutes and stores a hash, not the command', a
   assert.equal(f.docs[lineConfigPath].ownerUid, 'owner');
   assert.equal(JSON.stringify(f.docs[lineConfigPath]).includes(result.body.command.slice(7)), false);
 });
+
+test('personal linking code checks Google identity against app email and never issues a team invite', async () => {
+  const f = fixture();
+  const run = (credential, appUid = 'u') => f.run({ action: 'accountLink', credential, appUid }, false, false);
+  assert.equal((await run('invalid')).code, 400);
+  assert.equal((await run('outsider')).code, 400);
+  assert.equal((await run('staff', 'owner')).code, 400);
+  const result = await run('staff');
+  assert.equal(result.code, 200);
+  assert.match(result.body.command, /^連携 [a-f0-9]{32}$/);
+  assert.equal(result.body.expiresInMinutes, 10);
+  const issued = Object.values(f.docs).find(value => value.appUid === 'u' && value.expires);
+  assert.equal(issued.email, 'staff@example.com');
+  assert.equal(issued.expires, now + 600000);
+  assert.equal(issued.used, false);
+  assert.equal(JSON.stringify(f.docs).includes(result.body.command.split(' ')[1]), false);
+  assert.equal((await f.run({ action: 'privateInvite' })).code, 400);
+  f.docs['app_data/shared_state'].users.u.role = 'viewer';
+  assert.equal((await run('staff')).code, 400);
+  await f.run({ action: 'disconnect' });
+  assert.equal((await run('owner', 'owner')).code, 400);
+});
+
 test('review validates assignees and dates then registers at most once', async () => {
   const f = fixture();
   const invalid = await f.run({ action: 'register', id: f.id, kind: 'member', draft: { date: '2026-02-30' } });

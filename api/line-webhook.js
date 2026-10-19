@@ -4,6 +4,7 @@ import { Buffer } from 'node:buffer';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { makeLineStore, lineConfigPath } from './_lib/line-store.js';
 import { createLineRegistrationProcessor } from './_lib/line-registration.js';
+import { authorizePrivateLine, privateHelp } from './_lib/line-private.js';
 
 export const config = { api: { bodyParser: false } };
 export const hash = value => createHash('sha256').update(String(value)).digest('hex');
@@ -47,25 +48,35 @@ export function createLineHandler({ env = globalThis.process.env, makeStore = ma
       const processRegistration = createLineRegistrationProcessor({ store, reply, choices: taskChoices, fetcher, env, now });
       for (const incoming of body.events) {
         let event = incoming;
-        if (event.source?.type !== 'group' || !event.source.groupId || !event.source.userId) continue;
-        if (event.type === 'message') {
+        const privateChat = event.source?.type === 'user';
+        if (!event.source?.userId || (!privateChat && (event.source.type !== 'group' || !event.source.groupId))) continue;
+        if (privateChat) {
+          if (!['message', 'postback', 'follow'].includes(event.type) || (event.type === 'message' && event.message?.type !== 'text')) continue;
+          const authorized = await authorizePrivateLine({ event, store, fetcher, env, now });
+          if (!authorized) { await reply(event, '初回はアプリの「使い方」→「LINEから登録」→「自分のLINEを連携する」で本人用のコードを発行し、この個別トークに送ってください。\n例：連携 コード\nアプリに登録されたメールアドレスとLINEを結び付けます。コードは他の人に渡さないでください。'); continue; }
+          event = { ...event, privateAuthorized: true, privateAppUid: authorized.appUid, source: { ...event.source, groupId: 'private:' + event.source.userId } };
+          const text = event.message?.text?.trim() || '';
+          if (event.type === 'follow' || (event.type === 'message' && (!text || /^(使い方|ヘルプ|開始|連携(?:\s+[a-f0-9]{32})?)$/.test(text)))) { await reply(event, privateHelp); continue; }
+        } else if (event.type === 'message') {
           const text = mentionedCommand(event.message, body.destination);
           if (text === null) continue;
           event = { ...event, message: { ...event.message, text } };
         }
         const groupId = event.source.groupId;
-        const pairing = event.type === 'message' && event.message?.type === 'text' && event.message.text.match(/^LINE連携\s+([a-f0-9]{32})\s*$/);
+        const pairing = !privateChat && event.type === 'message' && event.message?.type === 'text' && event.message.text.match(/^LINE連携\s+([a-f0-9]{32})\s*$/);
         if (pairing) {
           const connected = await store.transact([lineConfigPath], values => {
             const current = values[lineConfigPath] || {};
             if (!current.pairHash || current.pairHash !== hash(pairing[1]) || current.pairExpires < now()) return { result: false };
-            return { writes: [{ path: lineConfigPath, value: { ownerUid: current.ownerUid, groupId, linkedAt: new Date(now()).toISOString(), status: 'connected' } }], result: true };
+            const value = { ...current, ownerUid: current.ownerUid, groupId, linkedAt: new Date(now()).toISOString(), status: 'connected' };
+            delete value.pairHash; delete value.pairExpires;
+            return { writes: [{ path: lineConfigPath, value }], result: true };
           });
           if (connected) await reply(event, 'このグループを管理課アプリと連携しました。公式アカウントをメンションし「タスク 内容」で登録、「追記」で申し送り一覧を開けます。');
           continue;
         }
         const connection = await store.read(lineConfigPath);
-        if (!connection?.groupId || connection.groupId !== groupId) continue;
+        if (!privateChat && (!connection?.groupId || connection.groupId !== groupId)) continue;
         if (event.type === 'message' && !event.message.text.trim()) {
           await reply(event, 'メンションの後ろに、次の言葉を付けて送ってください。\n\n【追記】申し送りできるタスクの一覧を開きます。\n例：@管理課 タスク受付 追記\n\n【タスク＋内容】新しいタスクを登録します。担当は投稿者です。不足項目はLINEで質問します。\n例：@管理課 タスク受付 タスク\n日付：明日\n件名：電球交換\n\n【申し送り＋件名】既存タスクを検索します。\n例：@管理課 タスク受付 申し送り 217号室\n\n一覧を開いた後は、メンション＋番号で対象を選びます。\n例：@管理課 タスク受付 3\n\n対象を選んだ後は、メンション＋追記＋内容で申し送りを書けます。\n例：@管理課 タスク受付 追記 部品を発注しました。\n\n※「@」の候補から公式アカウントを選んでください。選択・確認ボタンはそのまま押せます。');
           continue;
