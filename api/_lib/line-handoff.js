@@ -1,10 +1,19 @@
 import { createHash } from 'node:crypto';
 import { lineConfigPath, linePendingPath } from './line-store.js';
-import { searchLineTasks, resolveLineTask, describeLineTask, appendLineHandoff } from '../../src/lineHandoffs.mjs';
+import { lineTaskTargets, searchLineTasks, resolveLineTask, describeLineTask, appendLineHandoff } from '../../src/lineHandoffs.mjs';
 const digest = value => createHash('sha256').update(value).digest('hex');
 const clip = (value, limit) => { let result = ''; for (const character of String(value)) { if (result.length + character.length > limit) break; result += character; } return result; };
 const buttons = (text, actions, altText = 'タスクの申し送り') => ({ type: 'template', altText, template: { type: 'buttons', text: clip(text, 160), actions } });
 const action = (label, data) => ({ type: 'postback', label: clip(label, 20), data });
+const selectionCard = session => {
+  const page = session.page || 0, offset = page * 2, targets = session.targets.slice(offset, offset + 2);
+  const pages = Math.ceil(session.targets.length / 2);
+  return buttons('対象を選択（' + (page + 1) + '/' + pages + 'ページ・' + session.targets.length + '件）\n' + targets.map((target, index) => (offset + index + 1) + '：' + clip(describeLineTask(target).replaceAll('\n', ' '), 42)).join('\n') + '\n「申し送り 件名」で絞り込み可', [
+    ...targets.map((target, index) => action((offset + index + 1) + '：' + target.subject, 'lh:choose:' + session.nonce + ':' + (offset + index))),
+    ...(pages > 1 ? [action(page + 1 === pages ? '最初のページへ' : '次のページへ', 'lh:page:' + session.nonce + ':' + ((page + 1) % pages))] : []),
+    action('キャンセル', 'lh:cancel:' + session.nonce)
+  ]);
+};
 export function registeredTaskCard(id, kind, draft) {
   return buttons((kind === 'member' ? 'メンバータスク' : 'パートナータスク') + 'に登録しました。\n' + draft.date + (draft.time ? ' ' + draft.time : '') + '\n' + draft.subject, [
     action('申し送りを追加', 'lh:start:' + id)
@@ -21,7 +30,7 @@ export function createLineHandoffProcessor({ store, reply, fetcher = fetch, env,
     const addition = text.match(/^追記(?:[\s:]|$)([\s\S]*)/);
     const data = event.type === 'postback' ? String(event.postback?.data || '') : '';
     const start = data.match(/^lh:start:(line_[a-f0-9]{40})$/);
-    const command = data.match(/^lh:(choose|save|cancel):([a-f0-9]{24})(?::([0-2]))?$/);
+    const command = data.match(/^lh:(choose|page|save|cancel):([a-f0-9]{24})(?::([0-9]{1,6}))?$/);
     if (!search && !addition && !start && !command) return false;
     const groupId = event.source.groupId, userId = event.source.userId;
     const sessionPath = '_server_integrations/line_handoff_' + digest(groupId + ':' + userId);
@@ -57,14 +66,10 @@ export function createLineHandoffProcessor({ store, reply, fetcher = fetch, env,
       }
       if (search) {
         const query = search[1].trim();
-        if (!query) return finish('「申し送り 件名」と送ってください。例：申し送り 217号室');
-        const targets = searchLineTasks(state, query);
+        const targets = query ? searchLineTasks(state, query) : lineTaskTargets(state).filter(target => !target.completed).sort((a, b) => b.date.localeCompare(a.date));
         if (!targets.length) return finish('該当するタスクがありません。件名の一部やパートナー名で探してください。');
-        if (targets.length > 3) return finish('候補が' + targets.length + '件あります。日付やパートナー名も入れて絞ってください。例：申し送り 217号室 2026-10-20');
-        const session = { nonce, groupId, userId, status: 'selecting', targets, expires: now() + 1800000 };
-        return finish(buttons('投稿した本人が対象を選んでください。\n' + targets.map((target, index) => (index + 1) + '：' + clip(describeLineTask(target).replaceAll('\n', ' '), 36)).join('\n'), [
-          ...targets.map((target, index) => action((index + 1) + '：' + target.subject, 'lh:choose:' + nonce + ':' + index)), action('キャンセル', 'lh:cancel:' + nonce)
-        ]), [sessionWrite(session)]);
+        const session = { nonce, groupId, userId, status: 'selecting', targets, page: 0, expires: now() + 1800000 };
+        return finish(selectionCard(session), [sessionWrite(session)]);
       }
       if (!current || current.groupId !== groupId || current.userId !== userId || current.expires < now()) return finish('申し送りの入力が見つからないか、30分の期限が切れています。「申し送り 件名」で対象を選び直してください。');
       if (command) {
@@ -73,6 +78,11 @@ export function createLineHandoffProcessor({ store, reply, fetcher = fetch, env,
         if (current.status === 'saved') return finish('この申し送りは追加済みです。新しい内容は「申し送り 件名」から追加してください。');
         if (current.status === 'cancelled') return finish('キャンセル済みです。');
         if (operation === 'cancel') return finish('申し送りをキャンセルしました。', [sessionWrite({ ...current, status: 'cancelled' })]);
+        if (operation === 'page') {
+          if (current.status !== 'selecting' || index === undefined || Number(index) >= Math.ceil((current.targets?.length || 0) / 2)) return finish('最新の案内から対象を選んでください。');
+          const next = { ...current, page: Number(index) };
+          return finish(selectionCard(next), [sessionWrite(next)]);
+        }
         if (operation === 'choose') {
           if (current.status !== 'selecting' || !current.targets?.[Number(index)] || index === undefined) return finish('最新の案内から対象を選んでください。');
           const target = resolveLineTask(state, current.targets[Number(index)]);
