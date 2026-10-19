@@ -96,6 +96,19 @@ function fixture() {
   const postback = (id = '123', kind = 'member', userId = 'U1') => ({ type: 'postback', timestamp, replyToken: 'reply2', source: { type: 'group', groupId: 'G1', userId }, postback: { data: 'lt:line_' + hash(id).slice(0, 40) + ':' + kind } });
   return { docs, replies, send, message, postback };
 }
+
+test('handoff vertical list replies send two valid LINE messages in one request', async () => {
+  const f = fixture();
+  f.docs['app_data/shared_state'].teamData.tasks = { '2026-10-20': { admin: [{ id: 'task', subject: '防水調査', updates: [] }] } };
+  assert.equal((await f.send([f.message('search', '申し送り 防水')])).code, 200);
+  const response = f.replies.at(-1);
+  assert.equal(response.messages.length, 2);
+  assert.equal(response.messages[0].type, 'text');
+  assert.match(response.messages[0].text, /1｜2026-10-20/);
+  assert.equal(response.messages[1].template.type, 'buttons');
+  assert.equal((await f.send([f.message('number', '1')])).code, 200);
+  assert.match(f.replies.at(-1).messages[0].template.text, /追記 内容/);
+});
 test('unsigned, unrelated and unlinked messages do not create records', async () => {
   const f = fixture();
   assert.equal((await f.send([f.message()], false)).code, 401);
