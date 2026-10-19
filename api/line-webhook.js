@@ -1,4 +1,5 @@
 import { createLineHandoffProcessor, registeredTaskCard } from './_lib/line-handoff.js';
+import { mentionedCommand } from './_lib/line-mention.js';
 import { Buffer } from 'node:buffer';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { makeLineStore, lineConfigPath, linePendingPath } from './_lib/line-store.js';
@@ -43,8 +44,14 @@ export function createLineHandler({ env = globalThis.process.env, makeStore = ma
         if (!response.ok && response.status !== 400) throw new Error('LINE reply failed');
       };
       const processHandoff = createLineHandoffProcessor({ store, reply, fetcher, env, now });
-      for (const event of body.events) {
+      for (const incoming of body.events) {
+        let event = incoming;
         if (event.source?.type !== 'group' || !event.source.groupId || !event.source.userId) continue;
+        if (event.type === 'message') {
+          const text = mentionedCommand(event.message, body.destination);
+          if (text === null) continue;
+          event = { ...event, message: { ...event.message, text } };
+        }
         const groupId = event.source.groupId, userId = event.source.userId;
         const pairing = event.type === 'message' && event.message?.type === 'text' && event.message.text.match(/^LINE連携\s+([a-f0-9]{32})\s*$/);
         if (pairing) {
@@ -53,11 +60,15 @@ export function createLineHandler({ env = globalThis.process.env, makeStore = ma
             if (!current.pairHash || current.pairHash !== hash(pairing[1]) || current.pairExpires < now()) return { result: false };
             return { writes: [{ path: lineConfigPath, value: { ownerUid: current.ownerUid, groupId, linkedAt: new Date(now()).toISOString(), status: 'connected' } }], result: true };
           });
-          if (connected) await reply(event, 'このグループを管理課アプリと連携しました。「タスク」で始まる文章を投稿すると、種類を選ぶボタンが表示されます。');
+          if (connected) await reply(event, 'このグループを管理課アプリと連携しました。公式アカウントをメンションし「タスク 内容」で登録、「追記」で申し送り一覧を開けます。');
           continue;
         }
         const connection = await store.read(lineConfigPath);
         if (!connection?.groupId || connection.groupId !== groupId) continue;
+        if (event.type === 'message' && !event.message.text.trim()) {
+          await reply(event, 'メンションの後ろに、次の言葉を付けて送ってください。\n\n【追記】申し送りできるタスクの一覧を開きます。\n例：@管理課 タスク受付 追記\n\n【タスク＋内容】新しいタスクを登録します。\n例：@管理課 タスク受付 タスク\n日付：明日\n件名：電球交換\n担当：竹添\n\n【申し送り＋件名】既存タスクを検索します。\n例：@管理課 タスク受付 申し送り 217号室\n\n一覧を開いた後は、メンション＋番号で対象を選びます。\n例：@管理課 タスク受付 3\n\n対象を選んだ後は、メンション＋追記＋内容で申し送りを書けます。\n例：@管理課 タスク受付 追記 部品を発注しました。\n\n※「@」の候補から公式アカウントを選んでください。選択・確認ボタンはそのまま押せます。');
+          continue;
+        }
         if (await processHandoff(event)) continue;
         if (event.type === 'message' && event.message?.type === 'text') {
           const text = event.message.text, content = taskBody(text);

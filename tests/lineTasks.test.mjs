@@ -92,7 +92,7 @@ function fixture() {
     await handler(req, res);
     return res;
   };
-  const message = (id = '123', value = text, groupId = 'G1') => ({ type: 'message', timestamp, replyToken: 'reply', source: { type: 'group', groupId, userId: 'U1' }, message: { type: 'text', id, text: value } });
+  const message = (id = '123', value = text, groupId = 'G1') => ({ type: 'message', timestamp, replyToken: 'reply', source: { type: 'group', groupId, userId: 'U1' }, message: { type: 'text', id, text: '@管理課 タスク受付 ' + value, mention: { mentionees: [{ type: 'user', isSelf: true, index: 0, length: '@管理課 タスク受付'.length }] } } });
   const postback = (id = '123', kind = 'member', userId = 'U1') => ({ type: 'postback', timestamp, replyToken: 'reply2', source: { type: 'group', groupId: 'G1', userId }, postback: { data: 'lt:line_' + hash(id).slice(0, 40) + ':' + kind } });
   return { docs, replies, send, message, postback };
 }
@@ -108,6 +108,62 @@ test('handoff vertical list replies send two valid LINE messages in one request'
   assert.equal(response.messages[1].template.type, 'buttons');
   assert.equal((await f.send([f.message('number', '1')])).code, 200);
   assert.match(f.replies.at(-1).messages[0].template.text, /追記 内容/);
+});
+
+test('mention gate ignores unmentioned task, alias, numeric input and pairing without writes or replies', async () => {
+  const f = fixture();
+  f.docs['app_data/shared_state'].teamData.tasks = { '2026-10-20': { admin: [{ id: 'task', subject: '点検', updates: [] }] } };
+  const before = structuredClone(f.docs);
+  const events = ['タスク\n日付：明日\n件名：点検', '追記', '申し送り', '1', 'LINE連携 ' + 'a'.repeat(32)].map((value, i) => {
+    const event = f.message('ignored-' + i, value);
+    delete event.message.mention;
+    return event;
+  });
+  const other = f.message('other', '追記');
+  other.message.mention.mentionees[0].isSelf = false;
+  const all = f.message('all', '追記');
+  all.message.mention.mentionees[0].type = 'all';
+  await f.send([...events, other, all]);
+  assert.deepEqual(f.docs, before);
+  assert.equal(f.replies.length, 0);
+  await f.send([f.message('alias', '追記')]);
+  const choices = f.replies.at(-1).messages[0].template.actions;
+  assert.deepEqual(choices.map(a => a.label), ['メンバー', 'パートナー', 'キャンセル']);
+  const pickKind = { ...f.postback(), postback: { data: choices[0].data } };
+  await f.send([pickKind]);
+  assert.equal(f.replies.at(-1).messages[0].type, 'text');
+  const bareNumber = f.message('bare-number', '1');
+  delete bareNumber.message.mention;
+  const count = f.replies.length;
+  await f.send([bareNumber]);
+  assert.equal(f.replies.length, count);
+  await f.send([f.message('pick', '1')]);
+  const bareNote = f.message('bare-note', '追記 メンションなし');
+  delete bareNote.message.mention;
+  await f.send([bareNote]);
+  await f.send([f.message('note', '追記 メンションあり')]);
+  assert.match(f.replies.at(-1).messages[0].template.text, /メンションあり/);
+  assert.doesNotMatch(f.replies.at(-1).messages[0].template.text, /メンションなし/);
+});
+
+test('mention alone returns help without changing a task or active handoff session', async () => {
+  const f = fixture();
+  f.docs['app_data/shared_state'].teamData.tasks = { '2026-10-20': { admin: [{ id: 'task', subject: '点検', updates: [] }] } };
+  await f.send([f.message('open', '追記')]);
+  const before = structuredClone(f.docs);
+  for (const content of ['', '　', '\n  ']) {
+    const response = await f.send([f.message('help-' + content, content)]);
+    assert.equal(response.code, 200);
+    const help = f.replies.at(-1).messages[0];
+    assert.equal(help.type, 'text');
+    for (const keyword of ['【追記】', '【タスク＋内容】', '【申し送り＋件名】', '受付 3', '追記 部品']) assert.ok(help.text.includes(keyword));
+    assert.deepEqual(f.docs, before);
+  }
+  const unmentioned = f.message('plain-help', '');
+  delete unmentioned.message.mention;
+  const count = f.replies.length;
+  await f.send([unmentioned]);
+  assert.equal(f.replies.length, count);
 });
 test('unsigned, unrelated and unlinked messages do not create records', async () => {
   const f = fixture();
