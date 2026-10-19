@@ -38,7 +38,7 @@ export function createLineHandler({ env = globalThis.process.env, makeStore = ma
       await store.ensurePrivate();
       const reply = async (event, message) => {
         if (!event.replyToken) return;
-        const response = await fetcher('https://api.line.me/v2/bot/message/reply', { method: 'POST', headers: { Authorization: 'Bearer ' + env.LINE_CHANNEL_ACCESS_TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify({ replyToken: event.replyToken, messages: [typeof message === 'string' ? { type: 'text', text: message } : message] }), signal: AbortSignal.timeout(10000) });
+        const response = await fetcher('https://api.line.me/v2/bot/message/reply', { method: 'POST', headers: { Authorization: 'Bearer ' + env.LINE_CHANNEL_ACCESS_TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify({ replyToken: event.replyToken, messages: Array.isArray(message) ? message : [typeof message === 'string' ? { type: 'text', text: message } : message] }), signal: AbortSignal.timeout(10000) });
         // Expired/already-used reply tokens cannot be retried successfully.
         if (!response.ok && response.status !== 400) throw new Error('LINE reply failed');
       };

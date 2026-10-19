@@ -53,7 +53,7 @@ function fixture() {
     const handled = await process(event);
     return { handled, event, reply: replies[replies.length - 1] };
   };
-  const actions = message => message.template.actions || message.template.columns[0].actions;
+  const actions = message => (Array.isArray(message) ? message[1] : message).template.actions;
   return { docs, replies, taskId, send, actions, advance: milliseconds => { time += milliseconds; } };
 }
 test('registered reply has a reusable add-handoff button', () => {
@@ -79,7 +79,7 @@ test('direct start, text, confirm saves a note once and does not capture normal 
 test('search choices and confirmation are isolated by actor; old confirmation cannot save replacement text', async () => {
   const f = fixture();
   const result = await f.send('申し送り 217号室');
-  const pick = f.actions(result.reply)[0];
+  const pick = '1';
   await f.send(pick, 'U2');
   assert.equal(f.docs['app_data/shared_state'].teamData.tasks['2026-10-20'].owner[0].updates.length, 0);
   await f.send(pick);
@@ -113,66 +113,92 @@ test('cancel, expiry and deleted task do not save notes', async () => {
 test('redelivered search does not overwrite newer confirmation session', async () => {
   const f = fixture();
   const search = await f.send('申し送り 山下健装');
-  await f.send(f.actions(search.reply)[0]);
+  await f.send('1');
   const preview = await f.send('追記 保存する本文');
   await f.send(null, 'U1', search.event);
   await f.send(f.actions(preview.reply)[0]);
   assert.equal(f.docs['app_data/shared_state'].partnerItems[0].updates[1].text, '保存する本文');
 });
-test('cross-group commands do not save notes; large searches paginate', async () => {
-  const f = fixture();
-  const fake = { webhookEventId: 'other-group', timestamp: Date.now(), source: { groupId: 'G2', userId: 'U1' }, type: 'postback', postback: { data: 'lh:start:' + f.taskId } };
-  await f.send(null, 'U1', fake);
-  assert.equal(f.docs['app_data/shared_state'].partnerItems[0].updates, undefined);
-  const tasks = f.docs['app_data/shared_state'].teamData.tasks['2026-10-20'].owner;
-  for (let index = 0; index < 4; index++) tasks.push({ id: 'task-' + index, subject: '217号室 追加' + index });
-  const result = await f.send('申し送り 217号室');
-  assert.equal(result.reply.template.type, 'carousel');
-  assert.equal(result.reply.template.columns.length, 6);
-  assert.match(result.reply.altText, /1\/1ページ/);
-});
-
-test('bare command lists unfinished public tasks and later pages select the correct task', async () => {
+test('vertical lists show ten tasks, select by number and preserve actor isolation', async () => {
   const f = fixture(), shared = f.docs['app_data/shared_state'];
   const tasks = shared.teamData.tasks['2026-10-20'].owner;
   tasks.push({ id: 'done', subject: '終了タスク', completed: true });
   for (let index = 0; index < 15; index++) tasks.push({ id: 'extra-' + index, subject: '追加タスク' + index, updates: [] });
+  assert.equal((await f.send('123')).handled, false);
   let result = await f.send('申し送り');
-  assert.match(result.reply.altText, /17件/);
-  assert.equal(result.reply.template.columns.length, 10);
-  assert.ok(result.reply.template.columns.every(column => column.actions.length === 3 && column.title.length <= 40 && column.text.length <= 60));
-  const page = f.actions(result.reply).find(action => action.data.startsWith('lh:page:'));
-  const other = await f.send(page, 'U2');
-  assert.equal(typeof other.reply, 'string');
+  const member = f.actions(result.reply).find(a => a.label === 'メンバー');
+  assert.equal((await f.send('1', 'U2')).handled, false);
+  result = await f.send(member);
+  assert.match(result.reply[0].text, /1〜10件／全16件/);
+  assert.equal(result.reply[0].text.includes('個人メモ'), false);
+  assert.equal(result.reply[0].text.includes('終了タスク'), false);
+  const page = f.actions(result.reply).find(a => a.label === '次の10件');
+  assert.match((await f.send(page, 'U2')).reply, /入力/);
   result = await f.send(page);
-  assert.match(result.reply.altText, /2\/2ページ/);
-  const pick = f.actions(result.reply)[0];
-  await f.send(pick);
+  assert.match(result.reply[0].text, /11〜16件／全16件/);
+  assert.match((await f.send('1')).reply, /今表示/);
+  assert.match((await f.send('999999')).reply, /今表示/);
+  await f.send('１１');
   const preview = await f.send('追記 ページから追加');
   await f.send(f.actions(preview.reply)[0]);
-  assert.equal(shared.teamData.tasks['2026-10-20'].owner[0].updates.length, 0);
   const saved = f.docs['app_data/shared_state'].teamData.tasks['2026-10-20'].owner.find(task => task.id === 'extra-9');
   assert.equal(saved.updates[0].text, 'ページから追加');
-  const late = await f.send(page);
-  assert.match(late.reply, /古いボタン/);
+  assert.equal((await f.send('11')).handled, false);
 });
 
-test('list handles empty tasks, wraps pages and rejects invalid or expired paging', async () => {
-  const f = fixture();
-  const tasks = f.docs['app_data/shared_state'].teamData.tasks['2026-10-20'].owner;
-  for (let index = 0; index < 9; index++) tasks.push({ id: 'extra-' + index, subject: '追加' });
+test('paging wraps, back switches types, empty categories and expiry are safe', async () => {
+  const f = fixture(), shared = f.docs['app_data/shared_state'];
+  for (let index = 0; index < 10; index++) shared.partnerItems.push({ id: 'p' + index, subject: '追加', date: '2026-10-20' });
   let result = await f.send('申し送り');
-  let page = f.actions(result.reply).find(action => action.data.startsWith('lh:page:'));
+  result = await f.send(f.actions(result.reply).find(a => a.label === 'パートナー'));
+  let page = f.actions(result.reply).find(a => a.label === '次の10件');
   result = await f.send(page);
-  assert.match(result.reply.altText, /2\/2ページ/);
-  page = f.actions(result.reply).find(action => action.data.startsWith('lh:page:'));
-  assert.equal(page.label, '最初の10件へ');
+  assert.match(result.reply[0].text, /11〜11件／全11件/);
+  page = f.actions(result.reply).find(a => a.label === '最初の10件へ');
   result = await f.send(page);
-  assert.match(result.reply.altText, /1\/2ページ/);
-  const invalid = { data: page.data.replace(/:[0-9]+$/, ':999999') };
-  assert.match((await f.send(invalid)).reply, /最新の案内/);
+  assert.match(result.reply[0].text, /1〜10件／全11件/);
+  assert.match((await f.send({ data: page.data.replace(/:[0-9]+$/, ':999999') })).reply, /最新の案内/);
+  result = await f.send(f.actions(result.reply).find(a => a.label === '種類選択に戻る'));
+  result = await f.send(f.actions(result.reply).find(a => a.label === 'メンバー'));
+  assert.match(result.reply[0].text, /メンバータスク/);
+  assert.match(result.reply[0].text, /全1件/);
   f.advance(1800001);
+  assert.equal((await f.send('1')).handled, false);
   assert.match((await f.send(page)).reply, /期限/);
-  f.docs['app_data/shared_state'] = { teamData: { tasks: {} }, partnerItems: [] };
+  result = await f.send('申し送り');
+  shared.teamData.tasks = {};
+  result = await f.send(f.actions(result.reply).find(a => a.label === 'メンバー'));
+  assert.match(result.reply.template.text, /ありません/);
+});
+
+test('search uses vertical mixed results and orders today, overdue then upcoming in JST', async () => {
+  const f = fixture(), shared = f.docs['app_data/shared_state'];
+  shared.partnerItems.push(
+    { id: 'future', subject: '調査', date: '2026-10-21' },
+    { id: 'old', subject: '調査', date: '2026-10-18' },
+    { id: 'yesterday', subject: '調査', date: '2026-10-19' }
+  );
+  const result = await f.send('申し送り 調査');
+  const text = result.reply[0].text;
+  assert.ok(text.indexOf('2026-10-20') < text.indexOf('2026-10-19'));
+  assert.ok(text.indexOf('2026-10-19') < text.indexOf('2026-10-18'));
+  assert.ok(text.indexOf('2026-10-18') < text.indexOf('2026-10-21'));
+  await f.send('5');
+  shared.partnerItems = shared.partnerItems.filter(p => p.id !== 'future');
+  const preview = await f.send('追記 削除されたタスク');
+  assert.match(preview.reply, /削除/);
+  shared.teamData.tasks = {};
+  shared.partnerItems = [];
   assert.match((await f.send('申し送り')).reply, /ありません/);
+});
+
+test('long vertical entries stay within text limit and cancelled selection ignores numbers', async () => {
+  const f = fixture(), shared = f.docs['app_data/shared_state'];
+  shared.partnerItems = Array.from({ length: 10 }, (_, i) => ({ id: 'long' + i, subject: 'あ'.repeat(2000), partnerName: 'い'.repeat(200), date: '2026-10-20' }));
+  let result = await f.send('申し送り あ');
+  assert.ok(result.reply[0].text.length <= 5000);
+  assert.equal(result.reply.length, 2);
+  result = await f.send(f.actions(result.reply).find(a => a.label === 'キャンセル'));
+  assert.match(result.reply, /キャンセル/);
+  assert.equal((await f.send('1')).handled, false);
 });
