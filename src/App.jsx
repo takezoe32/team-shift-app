@@ -638,6 +638,7 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
   const [editingCell, setEditingCell] = useState(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importText, setImportText] = useState('');
+  useEditGuard(showImportModal && !!importText.trim());
   const isAdmin = checkIsAdmin(currentUser, roles);
   const monthKey = `${year}_${String(month + 1).padStart(2, '0')}`;
   const monthLogs = Array.isArray(shiftLogs?.[monthKey])
@@ -1327,6 +1328,9 @@ const DailyDetailView = ({
   const [personalMemoEditImage, setPersonalMemoEditImage] = useState(null);
   const [isSavingPersonalMemo, setIsSavingPersonalMemo] = useState(false);
   const [isDeletingPersonalMemo, setIsDeletingPersonalMemo] = useState(false);
+  // Keep the guard mounted in both the guided and detailed input forms.
+  const hasNewTaskDraft = !!(newTaskSubject.trim() || newTaskText.trim() || newTaskImportant || newTaskEndTime || newTaskProductId || newTaskProductQuantity !== '1' || newTaskVisibility !== 'public' || newTaskImages.length || newAssigneeIds !== null);
+  useEditGuard(hasNewTaskDraft || isUploading, isUploading);
 
   const currentUser = users[currentUserUid];
   const isAdmin = !!currentUser && !!roles[currentUser.role] && (roles[currentUser.role].level || 0) >= 40;
@@ -1745,6 +1749,7 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
   const [showAddShiftForm, setShowAddShiftForm] = useState(false);
   const [newShiftLabel, setNewShiftLabel] = useState('');
   const [newShiftColor, setNewShiftColor] = useState(COLOR_PRESETS[0]);
+  useEditGuard(!!editingUserId || (showAddForm && !!(newUserName.trim() || newUserEmail.trim() || !newUserShiftEligible || newUserRole !== ((roles.staff ? 'staff' : Object.keys(roles).find(key => key !== 'viewer')) || 'viewer'))) || (showAddRoleForm && !!(newRoleName.trim() || newRoleLevel !== 10)) || (showAddShiftForm && !!(newShiftLabel.trim() || newShiftColor !== COLOR_PRESETS[0])));
 
   const moveUserOrder = (index, direction) => {
     const newOrderedList = [...sortedUsers];
@@ -2310,7 +2315,9 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
   const partnerFormRef = useRef(null);
   const deletingPartnerRef = useRef(false);
   const [deletingPartnerId, setDeletingPartnerId] = useState(null);
-  useEditGuard(!!editingItemId || !!editingPartnerName, isSaving);
+  const [savedPartnerDate, setSavedPartnerDate] = useState(date);
+  const hasPartnerDraft = !!(editingItemId || editingPartnerName || newPartnerName.trim() || partnerName || subject.trim() || content.trim() || partnerImportant || partnerAssignees.length || timeHour || timeMinute || endTime || newPartnerImages.length || date !== savedPartnerDate);
+  useEditGuard(hasPartnerDraft || isSaving || isAddingName, isSaving || isAddingName);
   const revealPartnerForm = () => requestAnimationFrame(() => {
     partnerFormRef.current?.scrollIntoView({ block: 'start', behavior: 'instant' });
     partnerFormRef.current?.focus({ preventScroll: true });
@@ -2401,6 +2408,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
         });
         await debugLog?.('INFO', action + '.success', { itemId: newItemId });
       }
+      setSavedPartnerDate(date);
       setPartnerUploadProgress({stage:'done'});
       setContent('');
       setSubject(''); setPartnerImportant(false);
@@ -2514,7 +2522,7 @@ summary={[[ '重要', partnerImportant ? '重要' : 'なし' ], [ 'パートナ�
               <span className="text-[10px] font-bold text-blue-700">パートナー予定を編集中</span>
               <button type="button" onClick={() => {
                 if (!confirmEditDiscard(true, isSaving)) return;
-                setEditingItemId(null); setPartnerName(''); setSubject(''); setPartnerImportant(false); setPartnerAssignees([]); setDate(formatDate(new Date())); setTimeHour(''); setTimeMinute(''); setEndTime(''); setContent(''); setNewPartnerImages([]);
+                setEditingItemId(null); setPartnerName(''); setSubject(''); setPartnerImportant(false); setPartnerAssignees([]); setSavedPartnerDate(formatDate(new Date())); setDate(formatDate(new Date())); setTimeHour(''); setTimeMinute(''); setEndTime(''); setContent(''); setNewPartnerImages([]);
               }} className="text-[10px] font-bold text-gray-500 hover:text-gray-800">キャンセル</button>
             </div>
           )}
@@ -3068,7 +3076,8 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
   const [stockDrafts, setStockDrafts] = useState({});
   const [uploadingImageId, setUploadingImageId] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
-  useEditGuard(editingId !== null, isSaving);
+  const hasInventoryDraft = !!(newKind || newName || newManufacturer || newModelNumber || newProductPhoto || selectedYahooImage || newDiscontinued || newReplacementId || newReplacementNote || newShelfNumber || newUsageLocation || newBarcode || newMinStock !== '2' || newStock || (scannedStockItemId && (scanQuantity !== '1' || scanDirection !== 'in')) || Object.entries(stockDrafts).some(([id, value]) => { const item = inventoryItems.find(item => item.id === id); return item && value !== String(Math.max(0, Number(item.stock) || 0)); }));
+  useEditGuard(editingId !== null || hasInventoryDraft || isSaving, isSaving);
 
   const handleAdd = async () => {
     if (isSaving || registrationSaveRef.current) return;
