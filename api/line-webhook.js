@@ -1,3 +1,4 @@
+import { createLineHandoffProcessor, registeredTaskCard } from './_lib/line-handoff.js';
 import { Buffer } from 'node:buffer';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { makeLineStore, lineConfigPath, linePendingPath } from './_lib/line-store.js';
@@ -41,6 +42,7 @@ export function createLineHandler({ env = globalThis.process.env, makeStore = ma
         // Expired/already-used reply tokens cannot be retried successfully.
         if (!response.ok && response.status !== 400) throw new Error('LINE reply failed');
       };
+      const processHandoff = createLineHandoffProcessor({ store, reply, fetcher, env, now });
       for (const event of body.events) {
         if (event.source?.type !== 'group' || !event.source.groupId || !event.source.userId) continue;
         const groupId = event.source.groupId, userId = event.source.userId;
@@ -56,6 +58,7 @@ export function createLineHandler({ env = globalThis.process.env, makeStore = ma
         }
         const connection = await store.read(lineConfigPath);
         if (!connection?.groupId || connection.groupId !== groupId) continue;
+        if (await processHandoff(event)) continue;
         if (event.type === 'message' && event.message?.type === 'text') {
           const text = event.message.text, content = taskBody(text);
           if (content === null) continue;
@@ -77,7 +80,7 @@ export function createLineHandler({ env = globalThis.process.env, makeStore = ma
             const current = values[path], state = values['app_data/shared_state'];
             if (values[lineConfigPath]?.groupId !== groupId) return { result: '連携が変更されています。' };
             if (!current || current.groupId !== groupId || current.userId !== userId) return { result: 'このボタンは投稿した本人だけが操作できます。' };
-            if (current.status !== 'choosing') return { result: current.status === 'registered' ? 'このタスクは登録済みです。' : current.status === 'review' ? 'アプリの「LINEからの要確認」に保存済みです。' : 'キャンセル済みです。' };
+            if (current.status !== 'choosing') return { result: current.status === 'registered' ? registeredTaskCard(current.id, current.kind, current.draft) : current.status === 'review' ? 'アプリの「LINEからの要確認」に保存済みです。' : 'キャンセル済みです。' };
             if (current.expires < now()) return { result: '選択期限が切れました。「タスク」で始めて投稿し直してください。' };
             if (kind === 'cancel') return { writes: [{ path, value: { ...current, status: 'cancelled' } }], result: 'タスクの登録をキャンセルしました。' };
             if (!state) throw new Error('Missing shared data');
@@ -85,7 +88,7 @@ export function createLineHandler({ env = globalThis.process.env, makeStore = ma
             const reasons = reviewReasons(draft, kind, state.users || {});
             if (reasons.length) return { writes: [{ path, value: { ...current, kind, draft, reasons, status: 'review' } }], result: '確認が必要です：' + reasons.join('・') + '\nアプリの設定 →「LINEタスク連携」で管理者が確認・登録できます。' };
             const changes = lineTaskChanges(state, current, draft, kind, now());
-            return { writes: [{ path, value: { ...current, kind, draft, status: 'registered' } }, ...(Object.keys(changes).length ? [{ path: 'app_data/shared_state', value: changes, fields: Object.keys(changes) }] : [])], result: (kind === 'member' ? 'メンバータスク' : 'パートナータスク') + 'に登録しました。\n' + draft.date + (draft.time ? ' ' + draft.time : '') + '\n' + draft.subject };
+            return { writes: [{ path, value: { ...current, kind, draft, status: 'registered' } }, ...(Object.keys(changes).length ? [{ path: 'app_data/shared_state', value: changes, fields: Object.keys(changes) }] : [])], result: registeredTaskCard(current.id, kind, draft) };
           });
           await reply(event, message);
         }
