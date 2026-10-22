@@ -14,7 +14,7 @@ function Note({ children }) {
 export default function HelpView({ currentUser }) {
   const [skip, setSkip] = useState(() => localStorage.getItem('teamshift_skip_help_on_login') === 'true');
   const isReportOwner = String(currentUser?.email || '').trim().toLowerCase() === 'mitsutake.takezoe@plandosee.co.jp';
-  const topics = [['calendar', '予定を見る'], ['daily', '日別タスクを登録'], ['finish', 'タスクを終了'], ['partner', 'パートナーを登録'], ['schedule', '日程を変更'], ['handoff', '申し送りを追加'], ['history', '終了履歴を見る'], ['line', 'LINEから登録'], ['other', 'シフト・在庫・個人メモ']];
+  const topics = [['calendar', '予定を見る'], ['daily', '日別タスクを登録'], ['finish', 'タスクを終了'], ['period', '期間のある作業'], ['partner', 'パートナーを登録'], ['schedule', '日程を変更'], ['handoff', '申し送りを追加'], ['history', '終了履歴を見る'], ['line', 'LINEから登録'], ['other', 'シフト・在庫・個人メモ']];
   return <div className="flex-1 overflow-y-auto bg-slate-50 pb-24 text-gray-800">
     <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-5">
       <header className="rounded-2xl bg-blue-600 text-white p-6 space-y-4">
@@ -33,13 +33,18 @@ export default function HelpView({ currentUser }) {
       <Section id="help-daily" title="日別タスクを登録する">
         <p>下の「日別タスク」を押すと、最初にかんたん入力が開きます。</p>
         <Steps items={['「＋ 新しく登録」を押し、表示されている登録日を確認します。', '「どこで？どんな内容？」に作業を書きます。例：「1階ロビーの電球交換」。この項目は必須です。', '詳しい内容は、必要なときだけ入力します。写真・動画や終了予定時間も任意です。', '担当する人の名前をすべて選びます。複数選べます。', '「次へ」で確認画面を開き、「この内容で登録する」を押します。直すときは「戻る」を押します。']}/>
-        <Note>登録日を変えるときは「詳しく入力する」を押し、上部の「◀」「▶」で日付を選びます。その後「かんたん入力（タスク）」で戻れます。通常入力でも、詳しい内容は任意です。</Note>
+        <Note>日付は入力欄のカレンダーで選択できます。複数日にわたる作業は「作業期間の終了日」も指定します。詳しい内容は任意です。</Note>
         <div className="rounded-xl border border-gray-200 p-4 space-y-2"><p className="font-bold">入力の例</p><p>どこで？どんな内容？：1階ロビーの電球交換</p><p>詳しい内容：空欄でもかまいません</p><p>担当者：竹添・高橋など、作業する人を選択</p></div>
       </Section>
 
       <Section id="help-finish" title="作業が終わったら「終了」を押す">
         <Steps items={['日別タスクまたはパートナーの、かんたん画面を開きます。', '上の「✓ タスクを終了」を押します。登録直後も、この一覧が表示されます。', '終わった作業を確認して、緑色の「終了」を押します。まだ終わっていない作業は押しません。']}/>
         <Note>日別タスクは、担当者として選ばれた人も終了できます。過去の日別タスクでは、追加の終了確認が出ます。カレンダーの詳細から終了するときも、対象を確認して操作してください。</Note>
+      </Section>
+
+      <Section id="help-period" title="何日かにわたる作業を登録する">
+        <Steps items={['メンバー・パートナータスクの入力時に、開始日となる日付と「作業期間の終了日」を指定します。登録済みのタスクは詳細の「作業期間を設定」でも指定できます。','作業した日の終わりに「本日の申し送り」を入力し、「本日の作業終了」を押します。同じ日に重複して登録することはできません。','翌日も同じタスクを開き、作業と申し送りを続けます。追加の申し送りは編集からも残せます。','すべての作業が終わったら「期間全体を終了」を押します。終了日が過ぎても自動では終了しません。']}/>
+        <Note>日報の作成・更新時に「件名／〇月〇日 作業終了／担当者」を記載します。本日の作業終了は、日本時間で当日が作業期間内のときに登録できます。</Note>
       </Section>
 
       <Section id="help-partner" title="パートナータスクを登録する">
