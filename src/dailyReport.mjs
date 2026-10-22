@@ -32,25 +32,28 @@ export function collectDailyReport(source, date) {
     .map(([uid]) => reportSurname(users[uid]));
   const add = (task, type, ownerUid, key, scheduledDate) => {
     if (!task || task.visibility === 'private') return;
+    const dailyRecord = task.dailyWork?.[date];
+    scheduledDate = task.periodStartDate || scheduledDate;
     const completedDate = tokyoDate(task.completedAt);
-    if (task.completed && !completedDate) { unknownDates++; return; }
-    const finished = task.completed && completedDate === date;
+    if (task.completed && !completedDate && !dailyRecord) { unknownDates++; return; }
+    const finished = !!dailyRecord || (task.completed && completedDate === date);
     // Recreating an older report includes tasks completed after that day's end.
-    const pending = (!task.completed || completedDate > date) && scheduledDate && scheduledDate <= date && (!tokyoDate(task.createdAt) || tokyoDate(task.createdAt) <= date);
+    const pending = (!task.completed || completedDate > date) && (!task.periodStartDate || task.periodStartDate <= date) && scheduledDate && scheduledDate <= date && (!tokyoDate(task.createdAt) || tokyoDate(task.createdAt) <= date);
     if (!finished && !pending) return;
-    const ids = type === 'partner' ? partnerAssigneeIds(task) : (task.assigneeIds?.length ? task.assigneeIds : [ownerUid]);
+    const ids = dailyRecord?.assigneeIds?.length ? dailyRecord.assigneeIds : type === 'partner' ? partnerAssigneeIds(task) : (task.assigneeIds?.length ? task.assigneeIds : [ownerUid]);
     const subject = String(task.subject || (type === 'partner' ? task.partnerName : '') || '').trim();
     const body = String(task.text || task.content || '').trim();
     const updates = (Array.isArray(task.updates) ? task.updates : []).filter(update => !tokyoDate(update.createdAt) || tokyoDate(update.createdAt) <= date);
     const notes = updates.map(update => String(update.text || '').trim());
     const description = [...new Set([subject, body, ...notes, task.productName ? `${task.productName} × ${task.inventoryQuantity || 1}個` : ''].filter(Boolean))].join('／');
-    const title = String(task.subject || '').trim() || body.split(/\r?\n/)[0] || (type === 'partner' ? String(task.partnerName || '').trim() : '') || '題名なし';
+    const title = String(dailyRecord?.subject || task.subject || '').trim() || body.split(/\r?\n/)[0] || (type === 'partner' ? String(task.partnerName || '').trim() : '') || '題名なし';
     const productModelNumber = String(task.productModelNumber || (source.inventoryItems || []).find(item => item.id === task.productId)?.modelNumber || '').trim();
-    const entry = { key, productModelNumber, text: (type === 'partner' ? `【パートナー${task.partnerName ? '：' + task.partnerName : ''}】` : '') + (description || '内容なし'), names: [...new Set(ids.map(id => users[id] ? reportSurname(users[id]) : '担当者不明'))].join('・') || '未割り当て', completedAt: task.completedAt, scheduledDate };
+    const entry = { key, productModelNumber, text: (type === 'partner' ? `【パートナー${task.partnerName ? '：' + task.partnerName : ''}】` : '') + (description || '内容なし'), names: [...new Set(ids.map(id => users[id] ? reportSurname(users[id]) : '担当者不明'))].join('・') || '未割り当て', completedAt: dailyRecord?.completedAt || task.completedAt, scheduledDate };
+    const workSuffix = dailyRecord ? `　${Number(date.slice(5,7))}月${Number(date.slice(8))}日 作業終了` : '';
     if (finished) (type === 'partner' ? visitors : entries).push(type === 'partner'
-      ? { ...entry, text: `【${String(task.partnerName || '').trim() || 'パートナー未設定'}】${String(task.subject || '').trim() || '件名未設定'}（${entry.names}）` }
-      : { ...entry, text: title });
-    else handoff.push({ ...entry, text: title });
+      ? { ...entry, text: `【${String(dailyRecord?.partnerName || task.partnerName || '').trim() || 'パートナー未設定'}】${dailyRecord ? title : String(task.subject || '').trim() || '件名未設定'}${workSuffix}（${entry.names}）` }
+      : { ...entry, text: title + workSuffix });
+    if (pending && (!finished || dailyRecord)) handoff.push({ ...entry, text: title });
     for (const attachment of [...getTaskImages(task), ...updates.flatMap(getTaskImages)]) {
       if (!media.some(item => item.imageUrl === attachment.imageUrl && item.taskKey === key)) media.push({ ...attachment, task: title, taskKey: key, names: entry.names });
     }
