@@ -19,3 +19,15 @@ test('invalid dates, missing task and destination conflicts reject',()=>{
  assert.throws(()=>planTaskEdit(data(),source,'u','missing',{targetDate:target}),/削除または移動/);
  const state=data();state.tasks[target].u.push(task);assert.throws(()=>planTaskEdit(state,source,'u','a',{targetDate:target}),/同じタスク/);
 });
+
+test('editing task details and adding a handoff keeps their contents separate after rescheduling',()=>{
+ const note={id:'handoff-new',kind:'handoff',text:'今回の追記',authorName:'投稿者'};
+ const p=planTaskEdit(data(),source,'u','a',{targetDate:target,subject:'新しい件名',text:'修正した詳しい内容',endTime:'15:30',updates:[note]});
+ const moved=p.teamData.tasks[target].u.find(item=>item.id==='a');
+ assert.equal(moved.subject,'新しい件名');assert.equal(moved.text,'修正した詳しい内容');assert.equal(moved.endTime,'15:30');
+ assert.deepEqual(moved.updates,[{id:'latest'},note]);assert.equal(moved.imageUrl,'photo');assert.deepEqual(moved.assigneeIds,['u','v']);
+});
+test('editing details alone does not add a handoff or replace existing history',()=>{
+ const p=planTaskEdit(data(),source,'u','a',{subject:'変更した件名',text:'本文の訂正'});
+ assert.deepEqual(p.teamData.tasks[source].u[0].updates,[{id:'latest'}]);
+});
