@@ -46,6 +46,6 @@ export function applyReceiptNames(rows,shop,readings={},memory={}) {
   const reading=readings[row.code],originalName=row.name;
   const japaneseName=reading?.chosenName || originalName;
   const remembered=memory[receiptNameKey(shop,row.code)]?.name;
-  return {...row,name:remembered||japaneseName,originalName,japaneseName,nameSource:remembered?'memory':japaneseName!==originalName?'japanese':'ocr',nameImage:reading?.image || '',japaneseCandidate:reading?.candidate || '',nameConfidence:reading?.confidence || 0};
+  return {...row,name:remembered||japaneseName,originalName,japaneseName,nameSource:remembered?'memory':japaneseName!==originalName?'japanese':'ocr',nameImage:reading?.image || '',japaneseCandidate:reading?.candidate || '',nameConfidence:reading?.confidence || 0,nameAlternatives:reading?.alternatives || []};
  });
 }
