@@ -2,7 +2,8 @@ const PREFIX='receipt-product-names:v1:';
 const LIMIT=300;
 export function receiptNameKey(shop,code) {
  const value=String(code||'').trim();
- if(!['ナフコ','コーナン','その他'].includes(shop))return '';
+ if(!['ナフコ','コーナン','建デポ','その他'].includes(shop))return '';
+ if(shop==='建デポ' && /^\d{13}$/.test(value))return shop+':'+value;
  if(shop==='ナフコ' && /^\d{8}$/.test(value))return shop+':'+value;
  if(!/^\d{13}$/.test(value))return '';
  const sum=[...value.slice(0,12)].reduce((n,c,index)=>n+Number(c)*(index%2?3:1),0);

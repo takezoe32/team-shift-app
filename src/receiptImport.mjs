@@ -1,3 +1,4 @@
+import { parseKendepoReceipt } from './receiptTax.mjs';
 const validDate = value => /^\d{4}-\d{2}-\d{2}$/.test(value || '') && Number.isFinite(Date.parse(value + 'T12:00:00Z')) && new Date(value + 'T12:00:00Z').toISOString().slice(0,10) === value;
 export function receiptAmount(value) {
   const text = String(value ?? '').trim().normalize('NFKC').replace(/[,円￥¥\s]/g,'');
@@ -18,7 +19,8 @@ export function parseReceiptText(raw) {
   const text=String(raw || '').normalize('NFKC');
   const match=text.match(/(20\d{2})\s*[年/.-]\s*(\d{1,2})\s*[月/.-]\s*(\d{1,2})/);
   const date=match ? `${match[1]}-${match[2].padStart(2,'0')}-${match[3].padStart(2,'0')}` : '';
-  const shop=/ナフコ|NAFCO/i.test(text)?'ナフコ':/コー?ニ?ナン/.test(text)?'コーナン':'その他';
+  const shop=/建デ[ポボ]/.test(text)?'建デポ':/ナフコ|NAFCO/i.test(text)?'ナフコ':/コー?ニ?ナン/.test(text)?'コーナン':'その他';
+  if(shop==='建デポ')return {...parseKendepoReceipt(text),date:validDate(date)?date:'',shop};
   const lines=text.split(/\r?\n/).map(s=>s.replace(/^[|_「]+\s*/,'').trim()).filter(Boolean);
   const structured=/\bJAN\s*[0-9O]{8}/i.test(text) || (shop==='ナフコ' && /^\s*[^\p{L}\d]*\d{2}\s+\p{L}/mu.test(text));
   const rows=[],warnings=[];let pending=null,total='',subtotal='',stopped=false;

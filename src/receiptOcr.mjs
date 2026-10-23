@@ -1,3 +1,4 @@
+import { receiptTaxAllocationError } from './receiptTax.mjs';
 import { receiptNameRegions, selectReceiptNameCandidates } from './receiptNameOcr.mjs';
 import { parseReceiptText, receiptSummary } from './receiptImport.mjs';
 import { prepareReceiptCanvas } from './receiptImage.mjs';
@@ -12,8 +13,8 @@ export function receiptFocusRectangle(tsv,width,height) {
     const line=groups.get(key);line.text+=c.slice(11).join('');line.top=Math.min(line.top,top);line.bottom=Math.max(line.bottom,bottom);
   }
   const lines=[...groups.values()].sort((a,b)=>a.top-b.top);
-  const start=lines.find(l=>/株式会社|ナフコ|コーナン/.test(l.text));
-  const end=lines.find(l=>/^(?:税込)?合計|^小計金額/.test(l.text) && !/ポイント/.test(l.text));
+  const start=lines.find(l=>/株式会社|ナフコ|コーナン|建デ[ポボ]/.test(l.text));
+  const end=lines.find(l=>/^(?:税込)?合計|^小計金額|^消費税等?外税/.test(l.text) && !/ポイント/.test(l.text));
   if(!start || !end || end.top<=start.top)return null;
   const top=Math.max(0,start.top-45),bottom=Math.min(height,end.bottom+Math.round(width*.3));
   if(bottom-top<height*.2 || bottom-top>height*.95)return null;
@@ -22,6 +23,7 @@ export function receiptFocusRectangle(tsv,width,height) {
 export function selectReceiptReading(readings) {
   const score=reading=>{
     const p=parseReceiptText(reading.text),s=receiptSummary(p.rows,p.total);
+    if(p.taxInfo)return p.rows.filter(r=>r.netAmount!=='').length*13+(p.date?4:0)+(p.total?4:0)+(!receiptTaxAllocationError(p.rows,p.taxInfo,p.total)?50:0);
     return p.rows.filter(r=>r.amount!=='').length*10+p.rows.filter(r=>r.code).length*3+(p.date?4:0)+(p.total?4:0)+(s.total!==null && s.difference===0?30:0)-p.rows.filter(r=>r.amount==='').length*12;
   };
   return readings.reduce((best,reading)=>score(reading)>=score(best)?reading:best);
@@ -83,8 +85,35 @@ export async function recognizeReceiptImage(worker,image,bounds,{alive=()=>true,
     }
     readings.push({...first,text:correctedLines.join('\n')});
   }
+  if(/建デ[ポボ]/.test(first.text)){
+    onStage('税抜金額・消費税・支払額の数字を再確認しています…');
+    await worker.reinitialize('eng');
+    await worker.setParameters({tessedit_pageseg_mode:'7',tessedit_char_whitelist:'0123456789,.',preserve_interword_spaces:'1'});
+    const lines=new Map();
+    for(const entry of String(first.tsv||'').split(/\r?\n/)){
+      const c=entry.split('\t');if(c[0]!=='5'||!c[11]?.trim())continue;
+      const key=c.slice(1,5).join('-');if(!lines.has(key))lines.set(key,[]);
+      lines.get(key).push({text:c[11],left:+c[6],top:+c[7],right:+c[6]+ +c[8],bottom:+c[7]+ +c[9]});
+    }
+    const corrected=first.text.split(/\r?\n/);let cursor=0;
+    for(const words of [...lines.values()].slice(0,50)){
+      if(!alive())return null;
+      const joined=words.map(w=>w.text).join('').replace(/\s/g,'');
+      if(!/[¥￥\\]\d[\d,.]*[)]?$/.test(joined))continue;
+      const currencyIndex=words.findIndex(w=>w.left>coarse.width*.53 && /[¥￥\\]/.test(w.text));
+      const price=(currencyIndex>=0?words.slice(currencyIndex):[]).filter(w=>w.left>coarse.width*.53);if(!price.length)continue;
+      const crop={left:bounds.left+(Math.min(...price.map(w=>w.left))-3)/ratio,right:bounds.left+(Math.max(...price.map(w=>w.right))+3)/ratio,top:bounds.top+(Math.min(...price.map(w=>w.top))-3)/ratio,bottom:bounds.top+(Math.max(...price.map(w=>w.bottom))+3)/ratio};
+      const canvas=prepareReceiptCanvas(image,crop,makeCanvas);
+      const {data}=await worker.recognize(canvas);if(!alive())return null;
+      const digits=String(data.text||'').trim();if(!/^\d+(?:[,.]\d{3})*$/.test(digits))continue;
+      const index=corrected.findIndex((line,i)=>i>=cursor && line.replace(/\s/g,'')===joined);
+      if(index>=0){corrected[index]=corrected[index].replace(/[¥￥\\]\s*\d[\d,. ]*[)]?$/, '¥'+digits);cursor=index+1;}
+    }
+    readings.push({...first,text:corrected.join('\n')});
+  }
   const selected=selectReceiptReading(readings);
-  const regions=receiptNameRegions(first.tsv,coarse.width,coarse.height).slice(0,25);
+  const isKendepo=/建デ[ポボ]/.test(selected.text);
+  const regions=isKendepo?[]:receiptNameRegions(first.tsv,coarse.width,coarse.height).slice(0,25);
   const nameReadings={};
   if(regions.length){
     onStage('商品名を日本語優先で読み直しています…');
@@ -129,6 +158,16 @@ export async function recognizeReceiptImage(worker,image,bounds,{alive=()=>true,
         }
         nameReadings[item.code]={...nameReadings[item.code],...selectReceiptNameCandidates(item.original,item.attempts)};
       }
+    }
+  }
+  if(isKendepo){
+    const parsed=parseReceiptText(selected.text);
+    for(const row of parsed.rows){
+      const alternatives=[...new Set(readings.flatMap(reading=>parseReceiptText(reading.text).rows.filter(candidate=>candidate.code===row.code && candidate.name).map(candidate=>candidate.name)))].filter(name=>name!==row.name).map(text=>({text,confidence:50}));
+      // Keep whole-pass names as selectable alternatives; never let a noisy
+      // rereading silently replace a readable specification or model number.
+      const usable=alternatives.find(candidate=>/^[\p{Script=Han}\p{Script=Katakana}\p{Script=Hiragana}]{2,}$/u.test(candidate.text));
+      nameReadings[row.code]={chosenName:(!row.name || row.name.length<2)&&usable?usable.text:row.name,alternatives};
     }
   }
   return {...selected,nameReadings};
