@@ -38,3 +38,17 @@ test('spreadsheet formula markers are neutralized in every user-entered text col
  const values=receiptTsv(unsafe,[{name:' =IMPORTXML("x")\nnext',amount:'100',unit:'@1',note:'\t=1'}]).split('\t');
  assert.equal(values.length,9);for(const index of [0,2,3,4,6,7,8])assert.equal(values[index].startsWith("'"),true);assert.equal(values[5],'100');
 });
+
+test('multiline store receipts attach SKU, quantity and unit price without treating codes as amounts',()=>{
+ const parsed=parseReceiptText('ナフコ\n2026年9月10日\n01 作業用品 A型\n12345678 ￥500\n! 01 工具\n87654321 単価 120\n3点 ￥360\n合計 ￥860\n10%内消費税額 ￥78\nポイント残高 12345');
+ assert.equal(parsed.rows.length,2);assert.equal(parsed.rows[0].amount,'500');assert.equal(parsed.rows[1].amount,'360');assert.equal(parsed.rows[1].unit,'120');assert.equal(parsed.rows[1].quantity,'3');assert.equal(parsed.total,'860');
+ const cells=receiptTsv({...form,total:'860'},parsed.rows).split('\n').map(line=>line.split('\t'));assert.match(cells[1][4],/数量：3/);assert.equal(cells[1][6],'120');
+});
+test('JAN receipts link standalone item amounts, normalize thousands separators and stop before payment details',()=>{
+ const parsed=parseReceiptText('コーナン\n2026/09/10\n#002 JAN4900000000001\n工具 A-50\n1.200内\n§ #002 JAN4900000000002\n補修用品\n300内\n小計金額 ￥1,500\n内税小計 2 ￥1,500\nクレジット\nカード番号 12345678');
+ assert.equal(parsed.rows.length,2);assert.deepEqual(parsed.rows.map(r=>r.amount),['1200','300']);assert.equal(parsed.total,'1500');assert.equal(parsed.rows[0].name,'工具 A-50');assert.equal(parsed.warnings.length,1);
+});
+test('unreadable item prices stay blank and do not disappear or get filled from totals',()=>{
+ const parsed=parseReceiptText('ナフコ\n2026/09/10\n01 商品\n12345678 ￥o98\n01 別商品\n87654321 ￥200\n合計 ￥798');
+ assert.equal(parsed.rows.length,2);assert.equal(parsed.rows[0].amount,'');assert.equal(parsed.rows[1].amount,'200');assert.match(receiptValidation({...form,total:'798'},parsed.rows,true),/税込金額/);
+});
