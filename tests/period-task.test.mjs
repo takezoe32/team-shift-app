@@ -54,3 +54,18 @@ test('partner daily work preserves old initial content and appears in visitors e
  assert.match(report.visitors[0].text,/山下健装.*217号室.*10月22日 作業終了.*竹添/);
  assert.equal(calendarDayData(nextDay,{},state.partnerItems).partners.length,1);
 });
+
+test('active periods remain today through the final day, and become overdue the following Japan day', async()=>{
+ const {taskDisplayDay,isTaskPast}=await import('../src/periodTask.mjs');
+ const {isPartnerOverdue}=await import('../src/partnerOverdue.mjs');
+ const item={...task,date:day,time:'09:00',endTime:'10:00'};
+ for(const today of [day,nextDay,'2026-10-24']){
+  assert.equal(taskDisplayDay(item,day,today),today);
+  assert.equal(isTaskPast(item,day,today),false);
+  assert.equal(isPartnerOverdue(item,Date.parse(today+'T23:59:59+09:00')),false);
+ }
+ assert.equal(isTaskPast(item,day,'2026-10-25'),true);
+ assert.equal(isPartnerOverdue(item,Date.parse('2026-10-25T00:00:00+09:00')),true);
+ assert.equal(taskDisplayDay(item,day,'2026-10-21'),day);
+ assert.equal(isTaskPast({...item,completed:true},day,'2026-10-25'),false);
+});

@@ -1,3 +1,4 @@
+import { isPeriodTask, taskOnDay } from '../periodTask.mjs';
 import { ImportantBadge } from './ImportantToggle';
 import { useEffect, useRef } from 'react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -19,7 +20,8 @@ export default function CalendarDayPanel({ date, today, teamData, partnerItems, 
     value.setUTCDate(value.getUTCDate() + days);
     onDateChange(new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Tokyo' }).format(value));
   };
-  const status = item => <span className={'shrink-0 rounded-full px-2 py-1 text-xs font-bold ' + (item.completed ? 'bg-green-100 text-green-800' : date <= today ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800')}>{item.completed ? '終了済み' : date <= today ? '未終了' : '予定'}</span>;
+  const isOngoing = item => !item.completed && isPeriodTask(item) && taskOnDay(item, item.date || item.taskDate, today);
+  const status = item => <span className={'shrink-0 rounded-full px-2 py-1 text-xs font-bold ' + (item.completed ? 'bg-green-100 text-green-800' : isOngoing(item) ? 'bg-blue-100 text-blue-800' : date <= today ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800')}>{item.completed ? '終了済み' : isOngoing(item) ? '今日・期間中' : date <= today ? '未終了' : '予定'}</span>;
   const row = (item, partner) => <button type="button" key={partner ? item.id : item.ownerUid + ':' + item.id} onClick={() => partner ? onPartner(item) : onTask(item)} className={"w-full rounded-xl border bg-white p-3 text-left active:bg-blue-50 " + (item.important === true ? "border-2 border-red-500" : "border-gray-200 hover:border-blue-400")}>
     <div className="flex items-center justify-between gap-2">{partner ? <span className="text-sm font-bold text-purple-700">{date.replaceAll('-', '/')} {item.time || '時刻未設定'} <ImportantBadge important={item.important}/> {item.partnerName || 'パートナー未設定'}</span> : <span className="text-xs text-gray-500">対象日 {date.replaceAll('-', '/')} <ImportantBadge important={item.important}/><br/>終了予定 {item.endTime || '未設定'}</span>}{status(item)}</div>
     <div className="mt-2 break-words whitespace-pre-wrap text-base font-bold text-gray-900">{item.subject || (partner ? item.content : item.text) || '件名なし'}</div>
