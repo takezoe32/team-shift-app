@@ -69,3 +69,17 @@ test('active periods remain today through the final day, and become overdue the 
  assert.equal(taskDisplayDay(item,day,'2026-10-21'),day);
  assert.equal(isTaskPast({...item,completed:true},day,'2026-10-25'),false);
 });
+
+test('daily-finished member and partner tasks hide only for the recorded day without ending the task',async()=>{
+ const {isDailyWorkFinished}=await import('../src/periodTask.mjs');
+ for(const item of [task,{...task,partnerName:'試験パートナー',date:day}]){
+  const saved={...item,...periodTaskChanges(item,{action:'daily',note:'本日の作業記録'},actor,day,'u',now)};
+  assert.equal(isDailyWorkFinished(saved,day),true);
+  assert.equal(isDailyWorkFinished(saved,nextDay),false);
+  assert.equal(!!saved.completed,false);
+  assert.equal(taskOnDay(saved,day,nextDay),true);
+  assert.ok(saved.updates.some(update=>update.workDate===day));
+ }
+ assert.equal(isDailyWorkFinished({...task,dailyWork:{[nextDay]:{actorName:'翌日の記録'}}},day),false);
+ assert.equal(isDailyWorkFinished({dailyWork:{[day]:{}}},day),false);
+});
