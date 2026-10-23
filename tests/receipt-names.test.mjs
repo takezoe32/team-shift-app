@@ -42,3 +42,27 @@ test('readable Japanese names are not automatically replaced by a different rere
  assert.equal(chooseReceiptName('作業道具','作業適具',85),'作業道具');
  assert.equal(chooseReceiptName('補修テープ A-80','補修テープ A-890',95),'補修テープ A-80');
 });
+import {selectReceiptNameCandidates} from '../src/receiptNameOcr.mjs';
+test('two segmentation modes can correct a small Japanese spelling error but cannot silently change specifications',()=>{
+ const fixed=selectReceiptNameCandidates('工具の符刃 7寸目',[
+ {text:'工具の替刃 7寸目',confidence:72,mode:'7',language:'jpn'},
+ {text:'「工具の替刃 7寸目',confidence:85,mode:'13',language:'jpn'}]);
+ assert.equal(fixed.chosenName,'工具の替刃 7寸目');
+ const spec=selectReceiptNameCandidates('研磨用資材 が360',[
+ {text:'研磨用資材 #60',confidence:80,mode:'7',language:'jpn'},
+ {text:'研磨用資材 #60',confidence:85,mode:'13',language:'jpn'}]);
+ assert.equal(spec.chosenName,'研磨用資材 が360');assert.equal(spec.candidate,'研磨用資材 #60');
+});
+test('low-confidence Japanese text can offer a Latin rereading without requiring invented Japanese characters',()=>{
+ const result=selectReceiptNameCandidates('ABCxnoziの混ISRTO',[
+ {text:'ABC 1.5m BK',confidence:60,mode:'7',language:'eng'}]);
+ assert.equal(result.chosenName,'ABC 1.5m BK');assert.equal(result.alternatives.length,1);
+});
+test('SKU-name crop excludes department numbers and stops before the following code row',()=>{
+ const make=(line,word,x,y,w,h,text)=>['5','1','1','1',line,word,x,y,w,h,90,text].join('\t');
+ const regions=receiptNameRegions([
+ make(1,1,20,100,30,25,'01'),make(1,2,90,100,260,42,'作業用品'),
+ make(2,1,90,137,120,25,'12345678'),make(2,2,400,137,60,25,'￥200')
+ ].join('\n'),600,1000);
+ assert.equal(regions.length,1);assert.ok(regions[0].left>=78);assert.ok(regions[0].bottom<=135);
+});

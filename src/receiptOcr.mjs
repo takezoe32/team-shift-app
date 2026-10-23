@@ -1,4 +1,4 @@
-import { receiptNameRegions, chooseReceiptName } from './receiptNameOcr.mjs';
+import { receiptNameRegions, selectReceiptNameCandidates } from './receiptNameOcr.mjs';
 import { parseReceiptText, receiptSummary } from './receiptImport.mjs';
 import { prepareReceiptCanvas } from './receiptImage.mjs';
 /** Derive a second OCR pass from detected text positions, with no store-specific coordinates. */
@@ -91,14 +91,44 @@ export async function recognizeReceiptImage(worker,image,bounds,{alive=()=>true,
     await worker.reinitialize('jpn');if(!alive())return null;
     await worker.setParameters({tessedit_pageseg_mode:'7',tessedit_char_whitelist:'',preserve_interword_spaces:'1'});
     const parsed=parseReceiptText(selected.text);
+    const latinRetries=[];
     for(const region of regions){
       if(!alive())return null;
       const row=parsed.rows.find(row=>row.code===region.code);if(!row)continue;
       const crop={left:bounds.left+region.left/ratio,right:bounds.left+region.right/ratio,top:bounds.top+region.top/ratio,bottom:bounds.top+region.bottom/ratio};
-      const nameCanvas=prepareReceiptCanvas(image,crop,makeCanvas);
-      const {data}=await worker.recognize(nameCanvas);if(!alive())return null;
-      const text=String(data.text||'').trim().replace(region.stripDepartment?/^[0-9][0-9lI][\s_]+/:/^$/,'');
-      nameReadings[region.code]={chosenName:chooseReceiptName(row.name,text,data.confidence),candidate:text,confidence:data.confidence,image:nameCanvas.toDataURL('image/jpeg',.85)};
+      const enhanced=prepareReceiptCanvas(image,crop,makeCanvas),attempts=[];
+      const read=async(canvas,mode,version)=>{
+        await worker.setParameters({tessedit_pageseg_mode:mode,tessedit_char_whitelist:''});
+        const {data}=await worker.recognize(canvas);if(!alive())return;
+        attempts.push({text:String(data.text||'').trim(),confidence:data.confidence,mode,version,language:'jpn'});
+      };
+      await read(enhanced,'7','enhanced');if(!alive())return null;
+      if(region.stripDepartment){
+        await read(enhanced,'13','enhanced');if(!alive())return null;
+        const width=crop.right-crop.left,height=crop.bottom-crop.top,raw=makeCanvas();
+        raw.width=Math.ceil(width*2)+48;raw.height=Math.ceil(height*2)+48;
+        const context=raw.getContext('2d');if(!context)throw new Error('画像を準備できません。');
+        context.fillStyle='#fff';context.fillRect(0,0,raw.width,raw.height);context.imageSmoothingQuality='high';context.drawImage(image,crop.left,crop.top,width,height,24,24,width*2,height*2);
+        await read(raw,'7','original');if(!alive())return null;
+      }
+      const result=selectReceiptNameCandidates(row.name,attempts);
+      nameReadings[region.code]={...result,image:enhanced.toDataURL('image/jpeg',.85)};
+      if(region.stripDepartment && !attempts.some(a=>a.confidence>=45))latinRetries.push({code:region.code,enhanced,attempts,original:row.name});
+    }
+    if(latinRetries.length){
+      await worker.reinitialize('eng');if(!alive())return null;
+      await worker.setParameters({tessedit_pageseg_mode:'7',tessedit_char_whitelist:'',preserve_interword_spaces:'1'});
+      for(const item of latinRetries){
+        for(const ratio of [.45,.6]){
+          if(!alive())return null;
+          const canvas=makeCanvas();canvas.width=Math.round(item.enhanced.width*ratio);canvas.height=item.enhanced.height;
+          const context=canvas.getContext('2d');if(!context)throw new Error('画像を準備できません。');
+          context.imageSmoothingQuality='high';context.drawImage(item.enhanced,0,0,canvas.width,canvas.height);
+          const {data}=await worker.recognize(canvas);if(!alive())return null;
+          item.attempts.push({text:data.text,confidence:data.confidence,mode:'7',language:'eng'});
+        }
+        nameReadings[item.code]={...nameReadings[item.code],...selectReceiptNameCandidates(item.original,item.attempts)};
+      }
     }
   }
   return {...selected,nameReadings};
