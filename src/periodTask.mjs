@@ -2,6 +2,7 @@ import { japanToday } from './japanTime.mjs';
 import { canCompleteTask } from './taskCompletionPermission.mjs';
 const validDay = day => /^\d{4}-\d{2}-\d{2}$/.test(day || '') && new Date(day + 'T12:00:00Z').toISOString().slice(0, 10) === day;
 export const isPeriodTask = item => !!(item?.periodStartDate && item?.periodEndDate);
+export const isDailyWorkFinished = (item, day) => isPeriodTask(item) && !!item.dailyWork?.[day];
 export const taskOnDay = (item, sourceDate, day) => isPeriodTask(item) ? item.periodStartDate <= day && day <= item.periodEndDate : sourceDate === day;
 export function periodTaskChanges(item, operation, actor, sourceDate, ownerUid, now = new Date().toISOString()) {
   if (!item || !actor?.id || actor.role === 'viewer' || actor.readOnly) throw new Error('このタスクを変更できません。');

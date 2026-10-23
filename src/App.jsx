@@ -1,7 +1,8 @@
+import useJapanDay from './useJapanDay';
 import ReceiptImport from './components/ReceiptImport';
 import { TaskContent } from './components/TaskReadPreview';
 import TaskPeriodPanel from './components/TaskPeriodPanel';
-import { isPeriodTask, taskOnDay, periodTaskChanges, taskDisplayDay, isTaskPast } from './periodTask.mjs';
+import { isPeriodTask, taskOnDay, periodTaskChanges, taskDisplayDay, isTaskPast, isDailyWorkFinished } from './periodTask.mjs';
 import { japanToday, japanTime, japanDateTime, calendarDate } from './japanTime.mjs';
 import DateInput from './components/DateInput';
 import { taskCompletionActor, completionActorName } from './taskCompletionActor.mjs';
@@ -480,8 +481,8 @@ const CalendarView = ({ calendarNote, saveCalendarNote, currentDate, changeMonth
   const isAdmin = currentUser?.role === 'admin' || (roles?.[currentUser?.role]?.level || 0) >= 40;
   const canEditTask = !readOnly && detailTask && (isAdmin || detailTask.ownerUid === currentUserUid);
   const canFinishTask = !readOnly && canCompleteTask(detailTask, detailTask?.ownerUid, currentUserUid, isAdmin);
-  const todayStr = japanToday();
-  const [selectedCalendarTaskDate, setSelectedCalendarTaskDate] = useState(todayStr);
+  const [selectedCalendarTaskDate, setSelectedCalendarTaskDate] = useState(japanToday);
+  const todayStr = useJapanDay(setSelectedCalendarTaskDate);
   const year = currentDate.getFullYear(), month = currentDate.getMonth();
   const daysInMonth = getDaysInMonth(year, month), firstDayOfWeek = new Date(year, month, 1).getDay();
   const holidays = getJapaneseHolidayMap(year);
@@ -503,9 +504,9 @@ const CalendarView = ({ calendarNote, saveCalendarNote, currentDate, changeMonth
       <div className="mt-1 flex-1 px-1">{myShift.id!=='none'&&<div className={`text-[10px] font-bold px-1.5 py-0.5 rounded truncate ${myShift.color}`}>{myShift.label}</div>}</div>
     </button>);
   }
-  const activePartnerItems=(partnerItems||[]).filter(i=>!i.completed).sort((a,b)=>`${a.date||''}T${a.time||'00:00'}`.localeCompare(`${b.date||''}T${b.time||'00:00'}`));
+  const activePartnerItems=(partnerItems||[]).filter(i=>!i.completed&&!isDailyWorkFinished(i,todayStr)).sort((a,b)=>`${a.date||''}T${a.time||'00:00'}`.localeCompare(`${b.date||''}T${b.time||'00:00'}`));
   const datesToShow=Object.keys(teamData.tasks || {}).filter(sourceDate => sourceDate <= selectedCalendarTaskDate || Object.values(teamData.tasks[sourceDate] || {}).some(tasks => tasks.some(task => taskOnDay(task,sourceDate,selectedCalendarTaskDate)))).sort();
-  const selectedTasks=datesToShow.flatMap(taskDate=>(sortedUsers||[]).flatMap(member=>(teamData.tasks[taskDate]?.[member.id]||[]).filter(t=>t.visibility!=='private'&&!t.completed&&(!t.periodStartDate || t.periodStartDate<=selectedCalendarTaskDate)).map(task=>({...task,ownerUid:member.id,member,taskDate,assigneeIds:Array.isArray(task.assigneeIds)&&task.assigneeIds.length?task.assigneeIds:[member.id]}))));
+  const selectedTasks=datesToShow.flatMap(taskDate=>(sortedUsers||[]).flatMap(member=>(teamData.tasks[taskDate]?.[member.id]||[]).filter(t=>t.visibility!=='private'&&!t.completed&&!(selectedCalendarTaskDate===todayStr&&isDailyWorkFinished(t,todayStr))&&(!t.periodStartDate || t.periodStartDate<=selectedCalendarTaskDate)).map(task=>({...task,ownerUid:member.id,member,taskDate,assigneeIds:Array.isArray(task.assigneeIds)&&task.assigneeIds.length?task.assigneeIds:[member.id]}))));
   const startPartnerEdit=()=>{const [h='',m='']=String(detailPartner?.time||'').split(':');setPartnerEditName(detailPartner?.partnerName||'');setPartnerEditSubject(detailPartner?.subject||'');setPartnerEditImportant(detailPartner?.important === true);setPartnerEditAssigneeIds(partnerAssigneeIds(detailPartner));setPartnerEditDate(detailPartner?.date||'');setPartnerEditHour(h);setPartnerEditMinute(m);setPartnerEditEndTime(detailPartner?.endTime||'');setPartnerEditNote('');setPartnerEditImages([]);setCalendarUploadProgress(null);setIsEditingPartner(true);};
   useEditGuard(isEditingTask || isEditingPartner, isSaving);
   const closeTaskDetail = () => { if (confirmEditDiscard(isEditingTask, isSaving)) { setDetailTask(null); setIsEditingTask(false); } };
@@ -1355,7 +1356,7 @@ const DailyDetailView = ({
   const isAdmin = !!currentUser && !!roles[currentUser.role] && (roles[currentUser.role].level || 0) >= 40;
   const canViewTask = (task, ownerUid) => task?.visibility !== 'private' || ownerUid === currentUserUid;
   const selectedDateTasks = Object.entries(teamData.tasks || {}).flatMap(([sourceDate, owners]) => Object.entries(owners || {}).flatMap(([ownerUid, tasks]) => (tasks || []).filter(task => taskOnDay(task, sourceDate, selectedDate)).map(task => ({ ...task, ownerUid, taskDate: sourceDate })))).filter(task => { if (task?.visibility === 'private' || !canViewTask(task, task.ownerUid)) return false; const assignees = Array.isArray(task.assigneeIds) && task.assigneeIds.length ? task.assigneeIds : [task.ownerUid]; return assignees.includes(selectedUserUid); });
-  const selectedDateActiveTasks = selectedDateTasks.filter(task => !task.completed);
+  const selectedDateActiveTasks = selectedDateTasks.filter(task => !task.completed && !(selectedDate === japanToday() && isDailyWorkFinished(task, selectedDate)));
   const unfinishedPastTasks = Object.keys(teamData.tasks || {})
     .filter(dateStr => dateStr < selectedDate)
     .sort((a, b) => b.localeCompare(a))
@@ -1364,7 +1365,7 @@ const DailyDetailView = ({
         .flatMap(([ownerUid, tasks]) => (tasks || [])
           .filter(task => {
             if (task?.visibility === 'private' || !canViewTask(task, ownerUid)) return false;
-            if (task.completed || taskOnDay(task, dateStr, selectedDate) || (task.periodStartDate && task.periodStartDate > selectedDate)) return false;
+            if ((selectedDate === japanToday() && isDailyWorkFinished(task, selectedDate)) || task.completed || taskOnDay(task, dateStr, selectedDate) || (task.periodStartDate && task.periodStartDate > selectedDate)) return false;
             const assignees = Array.isArray(task.assigneeIds) && task.assigneeIds.length
               ? task.assigneeIds
               : [ownerUid];
@@ -3621,6 +3622,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('calendar');
   const [currentDate, setCurrentDate] = useState(() => calendarDate());
   const [selectedDate, setSelectedDate] = useState(japanToday());
+  useJapanDay(setSelectedDate);
   const [authError, setAuthError] = useState('');
   
   const [shiftTypes, setShiftTypes] = useState(DEFAULT_SHIFT_TYPES);
