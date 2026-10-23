@@ -683,7 +683,7 @@ const TeamShiftView = ({ currentDate, changeMonth, teamData, shiftTypes, updateU
     }
     if (!importText.trim()) return;
 
-    const rawLines = importText.replace(/\n?/g, '\n').split('\n');
+    const rawLines = importText.replace(/\r\n?/g, '\n').split('\n');
     const newShifts = { ...teamData.shifts };
     let newShiftTypes = [...shiftTypes];
     const importedUsers = [];
