@@ -1,3 +1,4 @@
+import { receiptNameRegions, chooseReceiptName } from './receiptNameOcr.mjs';
 import { parseReceiptText, receiptSummary } from './receiptImport.mjs';
 import { prepareReceiptCanvas } from './receiptImage.mjs';
 /** Derive a second OCR pass from detected text positions, with no store-specific coordinates. */
@@ -82,5 +83,23 @@ export async function recognizeReceiptImage(worker,image,bounds,{alive=()=>true,
     }
     readings.push({...first,text:correctedLines.join('\n')});
   }
-  return selectReceiptReading(readings);
+  const selected=selectReceiptReading(readings);
+  const regions=receiptNameRegions(first.tsv,coarse.width,coarse.height).slice(0,25);
+  const nameReadings={};
+  if(regions.length){
+    onStage('商品名を日本語優先で読み直しています…');
+    await worker.reinitialize('jpn');if(!alive())return null;
+    await worker.setParameters({tessedit_pageseg_mode:'7',tessedit_char_whitelist:'',preserve_interword_spaces:'1'});
+    const parsed=parseReceiptText(selected.text);
+    for(const region of regions){
+      if(!alive())return null;
+      const row=parsed.rows.find(row=>row.code===region.code);if(!row)continue;
+      const crop={left:bounds.left+region.left/ratio,right:bounds.left+region.right/ratio,top:bounds.top+region.top/ratio,bottom:bounds.top+region.bottom/ratio};
+      const nameCanvas=prepareReceiptCanvas(image,crop,makeCanvas);
+      const {data}=await worker.recognize(nameCanvas);if(!alive())return null;
+      const text=String(data.text||'').trim().replace(region.stripDepartment?/^[0-9][0-9lI][\s_]+/:/^$/,'');
+      nameReadings[region.code]={chosenName:chooseReceiptName(row.name,text,data.confidence),candidate:text,confidence:data.confidence,image:nameCanvas.toDataURL('image/jpeg',.85)};
+    }
+  }
+  return {...selected,nameReadings};
 }

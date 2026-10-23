@@ -3486,7 +3486,7 @@ const InventoryView = ({ currentUser, inventoryItems = [], inventoryMovements = 
           </div>
         </div>;
       };
-  if (receiptOpen) return <ReceiptImport buyer={currentUser?.name} onClose={()=>setReceiptOpen(false)}/>;
+  if (receiptOpen) return <ReceiptImport key={currentUser?.id} userId={currentUser?.id} buyer={currentUser?.name} onClose={()=>setReceiptOpen(false)}/>;
   return <div className="flex-1 overflow-y-auto bg-gray-50 pb-[84px]">
     <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-4">
       <div className="flex items-center gap-3"><div className="w-11 h-11 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center"><Package size={24}/></div><div><h2 className="text-xl font-black text-gray-800">在庫管理</h2><p className="text-xs text-gray-500">日別タスクで商品を選ぶと在庫が1個減ります。</p></div></div>
