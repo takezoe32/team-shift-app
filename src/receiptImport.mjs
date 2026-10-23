@@ -38,7 +38,7 @@ export function receiptValidation(form, rows, confirmed) {
   return '';
 }
 export function receiptCell(value) {
-  const text=String(value ?? '').replace(/[\t\n\u0000-\u001f\u007f]+/g,' ');
+  const text=String(value ?? '').replace(/[\t\r\n\u0000-\u001f\u007f]+/g,' ');
   return /^[\s\uFEFF]*[=+@-]/.test(text) ? "'"+text : text;
 }
 export function receiptTsv(form, rows) {
