@@ -1,3 +1,4 @@
+import TaskReadPreview from './TaskReadPreview';
 import { isPeriodTask, taskOnDay } from '../periodTask.mjs';
 import { ImportantBadge } from './ImportantToggle';
 import { useEffect, useRef } from 'react';
@@ -26,7 +27,8 @@ export default function CalendarDayPanel({ date, today, teamData, partnerItems, 
     <div className="flex items-center justify-between gap-2">{partner ? <span className="text-sm font-bold text-purple-700">{date.replaceAll('-', '/')} {item.time || '時刻未設定'} <ImportantBadge important={item.important}/> {item.partnerName || 'パートナー未設定'}</span> : <span className="text-xs text-gray-500">対象日 {date.replaceAll('-', '/')} <ImportantBadge important={item.important}/><br/>終了予定 {item.endTime || '未設定'}</span>}{status(item)}</div>
     <div className="mt-2 break-words whitespace-pre-wrap text-base font-bold text-gray-900">{item.subject || (partner ? item.content : item.text) || '件名なし'}</div>
     <div className="mt-2 text-xs text-gray-600">担当：{names(item.assigneeIds)}</div>
-    <div className="mt-1 text-right text-xs font-bold text-blue-700">詳細を開く ›</div>
+    <TaskReadPreview item={item}/>
+    <div className="mt-1 text-right text-xs font-bold text-blue-700">詳細・申し送りを開く ›</div>
   </button>;
   return <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-2 pt-3 pb-[80px] sm:px-4" onClick={onClose}>
     <section role="dialog" aria-modal="true" aria-labelledby="calendar-day-heading" className="flex w-full max-w-lg max-h-full flex-col overflow-hidden rounded-2xl bg-gray-50 shadow-xl" onClick={event => event.stopPropagation()}>
