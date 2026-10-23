@@ -14,7 +14,7 @@ function Note({ children }) {
 export default function HelpView({ currentUser }) {
   const [skip, setSkip] = useState(() => localStorage.getItem('teamshift_skip_help_on_login') === 'true');
   const isReportOwner = String(currentUser?.email || '').trim().toLowerCase() === 'mitsutake.takezoe@plandosee.co.jp';
-  const topics = [['calendar', '予定を見る'], ['daily', '日別タスクを登録'], ['finish', 'タスクを終了'], ['period', '期間のある作業'], ['partner', 'パートナーを登録'], ['schedule', '日程を変更'], ['handoff', '申し送りを追加'], ['history', '終了履歴を見る'], ['line', 'LINEから登録'], ['other', 'シフト・在庫・個人メモ']];
+  const topics = [['calendar', '予定を見る'], ['daily', '日別タスクを登録'], ['finish', 'タスクを終了'], ['period', '期間のある作業'], ['partner', 'パートナーを登録'], ['schedule', '日程を変更'], ['handoff', '申し送りを追加'], ['history', '終了履歴を見る'], ['line', 'LINEから登録'], ['receipt', 'レシート取込'], ['other', 'シフト・在庫・個人メモ']];
   return <div className="flex-1 overflow-y-auto bg-slate-50 pb-24 text-gray-800">
     <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-5">
       <header className="rounded-2xl bg-blue-600 text-white p-6 space-y-4">
@@ -75,6 +75,11 @@ export default function HelpView({ currentUser }) {
         <h3 className="text-lg font-bold">申し送りを追加する</h3>
         <Steps items={['個別トークに「追記」と送り、メンバー／パートナーを選びます。対象は10件ずつ表示され、番号だけを送って選べます。「申し送り 217号室」のように検索することもできます。', '文章・画像・動画を送ります。画像だけ・動画だけでも追加できます。文章はそのまま入力するか「内容：」の後に書いてください。', '対象・文章・添付件数を確認し「このタスクに追加」を押します。添付を続けて送ると確認画面が更新されるので、すべて送り終えてから最新の追加ボタンを押してください。取り消す場合は「キャンセル」です。']}/>
         <Note>1回の追記は画像5枚（各10MB以下）・動画1本（30秒・25MB以内）までです。受信中は確定できません。動画の準備中や受信失敗時は「添付を再試行」、不要な添付は「この添付を除く」を押します。入力期限は30分です。画像・動画の添付は個別トークで使います。従来の連携グループではメンション付きの文章を受け付け、返信は参加者全員に表示されます。</Note>
+      </Section>
+
+      <Section id="help-receipt" title="レシートから仕入れ表用にコピーする">
+        <Steps items={['在庫管理の「レシート取込」を押し、レシートを撮影するか画像を選びます。「文字を読み取る」を押します。','原本と見比べて商品名・税込金額を修正し、購入者・購入日・部門・科目・備考・計上月を入力します。税額や値引きは自動で配分しません。','同じ商品を複数購入した場合などは単価を入力します。G列には単価が入ります。レシート合計は画面上の照合に使い、表には出力しません。','税込金額の確認済みにチェックし、「仕入れ表用にコピー」を押します。既存の店別シートで空行のA列を選んで貼り付けます。購入者と日付は最初の明細だけに入ります。']}/>
+        <Note>画像と入力は保存しません。既存の仕入れ表や在庫数は自動変更しません。自動コピーができない場合は、表示されたデータを手動コピーするか、TSVファイルで保存できます。</Note>
       </Section>
 
       <Section id="help-other" title="シフト・在庫・個人メモ">
