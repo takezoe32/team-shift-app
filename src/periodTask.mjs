@@ -29,3 +29,10 @@ export function periodTaskChanges(item, operation, actor, sourceDate, ownerUid, 
     updates: [...previousUpdates, { id: `daily_${item.id}_${day}`, kind: 'handoff', text: `${Number(day.slice(5,7))}月${Number(day.slice(8))}日 作業終了${note ? '\n' + note : ''}`, authorUid: actor.id, authorName: actor.name || '', createdAt: now, workDate: day }]
   };
 }
+// A period remains today's active work through its final calendar day.
+export function taskDisplayDay(item, sourceDate, today) {
+  return isPeriodTask(item) && taskOnDay(item, sourceDate, today) ? today : sourceDate;
+}
+export function isTaskPast(item, sourceDate, today) {
+  return !item?.completed && (isPeriodTask(item) ? item.periodEndDate < today : sourceDate < today);
+}
