@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Generated local OCR runtime and public models (built before Vite)
+/public/receipt-ocr/
