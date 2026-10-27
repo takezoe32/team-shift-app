@@ -35,3 +35,11 @@ export function taskFileVisibleTo(source, uid, fileId, ownerUid) {
  for(const day of Object.values(source?.teamData?.tasks||{}))for(const [owner,tasks]of Object.entries(day||{}))for(const task of tasks||[])if((task.visibility!=='private'||owner===uid)&&contains(task))return true;
  return (source?.partnerItems||[]).some(task=>(task.visibility!=='private'||task.createdByUid===uid)&&contains(task));
 }
+export function taskFilePreview(name, id) {
+ if(!taskFileUrl(id))throw new Error('添付ファイルを確認してください。');
+ const ext=taskFileExtension(name);
+ if(ext==='pdf')return {kind:'pdf'};
+ if(['txt','csv'].includes(ext))return {kind:'text'};
+ if(['xls','xlsx','doc','docx','ppt','pptx'].includes(ext))return {kind:'drive',url:`https://drive.google.com/file/d/${id}/preview`,openUrl:`https://drive.google.com/file/d/${id}/view`};
+ throw new Error('この形式のプレビューには対応していません。');
+}

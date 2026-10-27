@@ -2,7 +2,7 @@ import { Buffer } from 'node:buffer';
 import { randomBytes } from 'node:crypto';
 import { configuration,cookies,unseal,verifyRequest,privateStore,oauth,fault } from './_lib/report-auth.js';
 import { isReadOnlyUser } from '../src/viewerPermission.mjs';
-import { validateTaskFileContent,taskFileUrl,TASK_FILE_LIMIT,taskFileVisibleTo } from '../src/taskFiles.mjs';
+import { validateTaskFileContent,taskFileUrl,TASK_FILE_LIMIT,taskFileVisibleTo,taskFilePreview } from '../src/taskFiles.mjs';
 import { MEDIA_FOLDER_ID } from '../src/dailyReport.mjs';
 export function createTaskFileHandler({configure=configuration,makeStore=privateStore,makeClient=oauth,fetcher=fetch,now=Date.now}={}){
  return async(req,res)=>{
@@ -24,6 +24,7 @@ export function createTaskFileHandler({configure=configuration,makeStore=private
     const meta=await(await call(`https://www.googleapis.com/drive/v3/files/${id}?fields=id,name,size,parents,appProperties&supportsAllDrives=true`)).json();
     if(!meta.parents?.includes(MEDIA_FOLDER_ID)||meta.appProperties?.teamShiftTaskFile!=='1'||Number(meta.size)>TASK_FILE_LIMIT)throw fault(403,'アプリの添付ファイルではありません。');
     if(!taskFileVisibleTo(source,member.uid,id,meta.appProperties.teamShiftTaskFileOwner))throw fault(403,'このタスクの添付ファイルを開く権限がありません。');
+    if(new URL(req.url,'https://team-shift-app.vercel.app').searchParams.get('mode')==='preview'){let preview;try{preview=taskFilePreview(meta.name,id);}catch(e){throw fault(400,e.message);}return res.status(200).json({...preview,name:meta.name});}
     const data=Buffer.from(await(await call(`https://www.googleapis.com/drive/v3/files/${id}?alt=media&supportsAllDrives=true`)).arrayBuffer());if(data.length>TASK_FILE_LIMIT)throw fault(413,'添付ファイルが大きすぎます。');
     res.setHeader('Content-Type','application/octet-stream');res.setHeader('Content-Disposition',"attachment; filename=attachment; filename*=UTF-8''"+encodeURIComponent(String(meta.name||'attachment').replace(/[\r\n]/g,'')));return res.status(200).send(data);
    }

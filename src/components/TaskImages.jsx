@@ -1,4 +1,5 @@
-import { isTaskFile, validateTaskFiles, TASK_FILE_ACCEPT, safeTaskFileUrl } from '../taskFiles.mjs';
+import TaskFileViewer from './TaskFileViewer';
+import { isTaskFile, validateTaskFiles, TASK_FILE_ACCEPT } from '../taskFiles.mjs';
 import { useEffect, useRef, useState } from 'react';
 import { getTaskImages, validateTaskImageFiles, isTaskVideo } from '../taskImages.mjs';
 
@@ -25,5 +26,6 @@ function VideoAttachment({ media }) {
 }
 export function ImageGallery({ item, onOpen }) {
   const images = getTaskImages(item);
-  return images.length ? <div className="mt-2 flex flex-wrap gap-2" onClick={event=>event.stopPropagation()}>{images.map((image,index)=>image.mediaType === 'file' ? <a key={image.imageUrl} href={safeTaskFileUrl(image.imageUrl)||undefined} target="_blank" rel="noopener noreferrer" className="flex min-h-11 max-w-full items-center gap-2 break-all rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm font-bold text-blue-800">📎 {image.imageName || '添付ファイル'}<span className="text-xs font-normal">ダウンロード</span></a> : image.mediaType === 'video' ? <VideoAttachment key={image.imageUrl} media={image}/> : <a key={image.imageUrl} onClick={event=>{if(onOpen){event.preventDefault();onOpen(image.imageUrl,image.imageName);}}} href={image.imageUrl} target="_blank" rel="noopener noreferrer" className="block"><img src={image.imageUrl} alt={image.imageName || `添付画像${index+1}`} loading="lazy" className="max-h-48 max-w-full w-32 rounded-lg border object-contain bg-white"/></a>)}</div> : null;
+  const [selectedFile,setSelectedFile] = useState(null);
+  return <>{images.length ? <div className="mt-2 flex flex-wrap gap-2" onClick={event=>event.stopPropagation()}>{images.map((image,index)=>image.mediaType === 'file' ? <button type="button" key={image.imageUrl} onClick={()=>setSelectedFile(image)} className="flex min-h-11 max-w-full items-center gap-2 break-all rounded-lg border border-blue-200 bg-blue-50 p-3 text-left text-sm font-bold text-blue-800">📎 {image.imageName || '添付ファイル'}<span className="shrink-0 text-xs font-normal">閲覧する</span></button> : image.mediaType === 'video' ? <VideoAttachment key={image.imageUrl} media={image}/> : <a key={image.imageUrl} onClick={event=>{if(onOpen){event.preventDefault();onOpen(image.imageUrl,image.imageName);}}} href={image.imageUrl} target="_blank" rel="noopener noreferrer" className="block"><img src={image.imageUrl} alt={image.imageName || `添付画像${index+1}`} loading="lazy" className="max-h-48 max-w-full w-32 rounded-lg border object-contain bg-white"/></a>)}</div> : null}{selectedFile&&<TaskFileViewer key={selectedFile.imageUrl} file={selectedFile} onClose={()=>setSelectedFile(null)}/>}</>;
 }
