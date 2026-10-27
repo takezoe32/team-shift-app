@@ -22,7 +22,9 @@
     },
     "api/line-login.js": {
       "maxDuration": 60
+    },
+    "api/meter-readings.js": {
+      "maxDuration": 120
     }
   }
 }
-
