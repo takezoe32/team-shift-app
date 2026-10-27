@@ -2,7 +2,7 @@ import { changeHandoff } from './handoffEdit.mjs';
 export function getTaskImages(item) {
   const images = [...(Array.isArray(item?.images) ? item.images : []), ...(item?.imageUrl ? [item] : [])];
   const seen = new Set();
-  return images.filter(image => image?.imageUrl && !seen.has(image.imageUrl) && seen.add(image.imageUrl)).map(image => ({ imageUrl: image.imageUrl, imageName: image.imageName || '', imagePublicId: image.imagePublicId || '', imageBytes: Number(image.imageBytes || 0), ...(image.mediaType === 'video' ? { mediaType: 'video', duration: Number(image.duration || 0), playbackUrl: image.playbackUrl || taskVideoPlaybackUrl(image.imageUrl) } : {}) }));
+  return images.filter(image => image?.imageUrl && !seen.has(image.imageUrl) && seen.add(image.imageUrl)).map(image => ({ imageUrl: image.imageUrl, imageName: image.imageName || '', imagePublicId: image.imagePublicId || '', imageBytes: Number(image.imageBytes || 0), ...(image.mediaType === 'file' ? {mediaType:'file',fileId:image.fileId || ''} : {}), ...(image.mediaType === 'video' ? { mediaType: 'video', duration: Number(image.duration || 0), playbackUrl: image.playbackUrl || taskVideoPlaybackUrl(image.imageUrl) } : {}) }));
 }
 export const mergeTaskImages = (item, images) => getTaskImages({ images: [...getTaskImages(item), ...images] });
 export function mergePartnerImageChanges(current, changes, actor) {

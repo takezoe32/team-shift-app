@@ -1,3 +1,4 @@
+import { isTaskFile, validateTaskFiles, uploadTaskDocuments } from './taskFiles.mjs';
 import { canAccessMeters } from './meterReadings.mjs';
 import MeterReadings from './components/MeterReadings';
 import { inventorySearchCandidates } from './inventorySearch.mjs';
@@ -174,6 +175,22 @@ const uploadTaskImages = async (files, onProgress = () => {}) => {
   }
   onProgress({ stage: 'saving' });
   return images;
+};
+
+const taskDocumentUploadCache = new WeakMap();
+const uploadTaskAttachments = async (files, onProgress = () => {}) => {
+  const documents = files.filter(isTaskFile), media = files.filter(file => !isTaskFile(file));
+  validateTaskFiles(documents); validateTaskImageFiles(media);
+  const saved = await uploadTaskImages(media, onProgress);
+  for (const file of documents) {
+    if (!taskDocumentUploadCache.has(file)) {
+      const result = await uploadTaskDocuments([file], writeIdentity.user, onProgress);
+      taskDocumentUploadCache.set(file, result[0]);
+    }
+    saved.push(taskDocumentUploadCache.get(file));
+  }
+  onProgress({ stage: 'saving' });
+  return saved;
 };
 
 const INITIAL_ROLES = {
@@ -567,8 +584,8 @@ const CalendarView = ({ calendarNote, saveCalendarNote, currentDate, changeMonth
     setPartnerImagePosition({x:partnerPanRef.current.startPosition.x+dx,y:partnerPanRef.current.startPosition.y+dy});
   };
   const handlePartnerImageMouseUp=()=>{partnerPanRef.current=null;};
-  const savePartnerEdit=async()=>{if(!detailPartner||!updatePartnerItem||calendarSavingRef.current)return;if(!partnerEditName||!partnerEditSubject.trim()||!partnerEditAssigneeUid||!partnerEditDate||!partnerEditHour||!partnerEditMinute){alert('パートナー名・件名・担当者・日付・時間を入力してください。');return;}const noteText=partnerEditNote.trim();calendarSavingRef.current=true;setCalendarUploadProgress({stage:'checking'});setIsSaving(true);try{const changes={partnerName:partnerEditName,subject:partnerEditSubject.trim(),important:partnerEditImportant,assigneeUid:partnerEditAssigneeUid,assigneeIds:partnerEditAssigneeIds,date:partnerEditDate,time:`${partnerEditHour}:${partnerEditMinute}`,endTime:partnerEditEndTime};const imageData=await uploadTaskImages(partnerEditImages, setCalendarUploadProgress);if(noteText||imageData.length){const updates=[createPartnerUpdate(noteText,currentUser,imageData)];changes.updates=updates;changes.content=noteText||detailPartner.content||'';}await updatePartnerItem(detailPartner.id,changes);setDetailPartner(p=>p?{...p,...changes}:p);setCalendarUploadProgress({stage:'done'});setIsEditingPartner(false);setPartnerEditNote('');clearPartnerEditImage();}catch(e){setCalendarUploadProgress({stage:'error',message:e.message});console.error('パートナー申し送り画像の保存に失敗しました:',e);alert(`パートナータスクの更新に失敗しました。\n${e?.message||'画像のアップロードに失敗しました。'}`);}finally{calendarSavingRef.current=false;setIsSaving(false);}};
-  const saveTaskEdit=async()=>{if(!detailTask||!canEditTask||calendarSavingRef.current)return;if(!editingTaskDate){alert('タスクの日付を選択してください。');return;}calendarSavingRef.current=true;setCalendarUploadProgress({stage:'checking'});setIsSaving(true);try{const text=editingTaskText.trim();const subject=editingTaskSubject.trim();const note=editingTaskNote.trim();const newImages=await uploadTaskImages(calendarTaskImages, setCalendarUploadProgress);await updateTaskText(detailTask.taskDate,detailTask.ownerUid,detailTask.id,{targetDate:editingTaskDate,subject,text,endTime:editingTaskEndTime,newImages,important:editingTaskImportant,...(note || newImages.length ? {updates:[createPartnerUpdate(note,currentUser,newImages,'handoff')]} : {})});setDetailTask(p=>p?{...p,taskDate:editingTaskDate,subject,text,endTime:editingTaskEndTime,important:editingTaskImportant,images:mergeTaskImages(p,newImages)}:p);setCalendarTaskImages([]);setCalendarUploadProgress({stage:'done'});setIsEditingTask(false);}catch{setCalendarUploadProgress({stage:'error'});alert('タスクの更新に失敗しました。');}finally{calendarSavingRef.current=false;setIsSaving(false);}};
+  const savePartnerEdit=async()=>{if(!detailPartner||!updatePartnerItem||calendarSavingRef.current)return;if(!partnerEditName||!partnerEditSubject.trim()||!partnerEditAssigneeUid||!partnerEditDate||!partnerEditHour||!partnerEditMinute){alert('パートナー名・件名・担当者・日付・時間を入力してください。');return;}const noteText=partnerEditNote.trim();calendarSavingRef.current=true;setCalendarUploadProgress({stage:'checking'});setIsSaving(true);try{const changes={partnerName:partnerEditName,subject:partnerEditSubject.trim(),important:partnerEditImportant,assigneeUid:partnerEditAssigneeUid,assigneeIds:partnerEditAssigneeIds,date:partnerEditDate,time:`${partnerEditHour}:${partnerEditMinute}`,endTime:partnerEditEndTime};const imageData=await uploadTaskAttachments(partnerEditImages, setCalendarUploadProgress);if(noteText||imageData.length){const updates=[createPartnerUpdate(noteText,currentUser,imageData)];changes.updates=updates;changes.content=noteText||detailPartner.content||'';}await updatePartnerItem(detailPartner.id,changes);setDetailPartner(p=>p?{...p,...changes}:p);setCalendarUploadProgress({stage:'done'});setIsEditingPartner(false);setPartnerEditNote('');clearPartnerEditImage();}catch(e){setCalendarUploadProgress({stage:'error',message:e.message});console.error('パートナー申し送り画像の保存に失敗しました:',e);alert(`パートナータスクの更新に失敗しました。\n${e?.message||'画像のアップロードに失敗しました。'}`);}finally{calendarSavingRef.current=false;setIsSaving(false);}};
+  const saveTaskEdit=async()=>{if(!detailTask||!canEditTask||calendarSavingRef.current)return;if(!editingTaskDate){alert('タスクの日付を選択してください。');return;}calendarSavingRef.current=true;setCalendarUploadProgress({stage:'checking'});setIsSaving(true);try{const text=editingTaskText.trim();const subject=editingTaskSubject.trim();const note=editingTaskNote.trim();const newImages=await uploadTaskAttachments(calendarTaskImages, setCalendarUploadProgress);await updateTaskText(detailTask.taskDate,detailTask.ownerUid,detailTask.id,{targetDate:editingTaskDate,subject,text,endTime:editingTaskEndTime,newImages,important:editingTaskImportant,...(note || newImages.length ? {updates:[createPartnerUpdate(note,currentUser,newImages,'handoff')]} : {})});setDetailTask(p=>p?{...p,taskDate:editingTaskDate,subject,text,endTime:editingTaskEndTime,important:editingTaskImportant,images:mergeTaskImages(p,newImages)}:p);setCalendarTaskImages([]);setCalendarUploadProgress({stage:'done'});setIsEditingTask(false);}catch{setCalendarUploadProgress({stage:'error'});alert('タスクの更新に失敗しました。');}finally{calendarSavingRef.current=false;setIsSaving(false);}};
   const removeTask=async()=>{if(!detailTask||!canEditTask||calendarSavingRef.current)return;if(!window.confirm('このタスクを削除してもよろしいですか？\n使用済みの商品がある場合は在庫へ戻します。'))return;calendarSavingRef.current=true;setIsSaving(true);try{await deleteTask(detailTask.taskDate,detailTask.ownerUid,detailTask.id);setDetailTask(null);}catch(error){alert(`タスクを削除できませんでした。\n${error.message||'もう一度お試しください。'}`);}finally{calendarSavingRef.current=false;setIsSaving(false);}};
   const runPartnerAction = async (action) => {
     if (!detailPartner || calendarSavingRef.current) return;
@@ -1110,7 +1127,7 @@ const DailyTaskItem = ({ task, selectedDate, selectedUserUid, currentUserUid, cu
                 savingEditRef.current = true;
                 setIsSavingEdit(true);
                 try {
-                  const newImages = await uploadTaskImages(editTaskImages, setEditUploadProgress);
+                  const newImages = await uploadTaskAttachments(editTaskImages, setEditUploadProgress);
                   await updateTaskText(task.taskDate || selectedDate, task.ownerUid || selectedUserUid, task.id, { newImages, targetDate: editDate, subject: editSubject.trim(), text: editVal.trim(), endTime: editEndTime, important: editImportant, ...(editNote.trim() || newImages.length ? { updates: [createPartnerUpdate(editNote.trim(), currentUser, newImages, 'handoff')] } : {}) });
                   setEditUploadProgress({stage:'done'});
                   setIsEditing(false);
@@ -1502,8 +1519,8 @@ const DailyDetailView = ({
     setIsUploading(true);
     try {
       const assignees = newTaskAssignees(taskAssigneeIds, selectedUserUid, newTaskVisibility, sortedUsers.map(user => user.id));
-      const images = await uploadTaskImages(newTaskImages, setTaskUploadProgress);
-      const { imageUrl = '', imageName = '', imagePublicId = '', imageBytes = 0 } = images.find(media=>media.mediaType !== 'video') || {};
+      const images = await uploadTaskAttachments(newTaskImages, setTaskUploadProgress);
+      const { imageUrl = '', imageName = '', imagePublicId = '', imageBytes = 0 } = images.find(media=>media.mediaType !== 'video' && media.mediaType !== 'file') || {};
       if (newTaskVisibility === 'private' && selectedUserUid !== currentUserUid) {
         alert('個人メモは、自分の名前を選んでいるときだけ登録できます。');
         return;
@@ -2411,11 +2428,11 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
     const action = editingItemId ? 'partner.edit.save' : 'partner.add.save';
     await debugLog?.('INFO', action + '.start', { itemId: editingItemId || '', partnerName, date, time, assigneeUid, hasImage: !!newPartnerImage });
     try {
-      const addedImages = await uploadTaskImages(newPartnerImages, setPartnerUploadProgress);
+      const addedImages = await uploadTaskAttachments(newPartnerImages, setPartnerUploadProgress);
       const currentItem = editingItemId ? (partnerItems || []).find(item => item.id === editingItemId) : null;
       if (Object.keys(currentItem?.dailyWork || {}).some(day => !partnerPeriodEnd || day < date || day > partnerPeriodEnd)) throw new Error('作業終了の記録がある日を期間から外すことはできません。');
       const images = mergeTaskImages(currentItem, addedImages);
-      const { imageUrl = '', imageName = '', imagePublicId = '', imageBytes = 0 } = images.find(media=>media.mediaType !== 'video') || {};
+      const { imageUrl = '', imageName = '', imagePublicId = '', imageBytes = 0 } = images.find(media=>media.mediaType !== 'video' && media.mediaType !== 'file') || {};
       const hasNewUpdate = !!(content.trim() || addedImages.length);
       const newUpdate = hasNewUpdate ? createPartnerUpdate(content.trim(), currentUser, addedImages, editingItemId ? 'handoff' : 'initial') : null;
       const updates = newUpdate ? [newUpdate] : [];
@@ -3585,8 +3602,8 @@ const BottomNav = ({ inventorySection, setInventorySection, activeTab, setActive
     { id:'completed', label:'終了履歴', description:'終了したタスクを確認', Icon:ClipboardList },
     { id:'receipt', label:'レシート取込（テスト中）', description:'撮影・読取して仕入れ表用にコピー', Icon:Camera },
     ...(canAccessMeters(currentUser) ? [
-    { id:'meter-daily', label:'毎朝検針', description:'検針値を入力・前日比を確認して原本に保存', Icon:FileSpreadsheet },
-    { id:'meter-monthly', label:'毎月検針', description:'部門メーターの原本を開いて入力（別タブ）', Icon:FileSpreadsheet, href:'https://docs.google.com/spreadsheets/d/1KtqHPMkyLzYUlqoLkXsu7xR4viL59pvP/edit?gid=615530499#gid=615530499' },
+    { id:'meter-daily', label:'毎朝検針（テスト中）', description:'検針値を入力・前日比を確認して原本に保存', Icon:FileSpreadsheet },
+    { id:'meter-monthly', label:'毎月検針（テスト中）', description:'部門メーターの原本を開いて入力（別タブ）', Icon:FileSpreadsheet, href:'https://docs.google.com/spreadsheets/d/1KtqHPMkyLzYUlqoLkXsu7xR4viL59pvP/edit?gid=615530499#gid=615530499' },
     ] : []),
     ...(canManageSettings ? [{ id:'settings', label:'設定', description:'メンバー管理・アプリの設定', Icon:Settings }] : [])
   ];
