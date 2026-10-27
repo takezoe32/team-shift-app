@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { canAccessMeters,METER_FIELDS,meterChanges,meterDifference,meterSheet,meterDate,previousMeterDate,meterRow } from '../src/meterReadings.mjs';
-import { meterSheets } from '../api/_lib/meter-sheets.js';
+import { nativeMeterSheets as meterSheets } from '../api/_lib/meter-sheets.js';
 import { createMeterHandler } from '../api/meter-readings.js';
 import { seal } from '../api/_lib/report-auth.js';
 
