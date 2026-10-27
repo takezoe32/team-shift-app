@@ -14,6 +14,21 @@ export async function archiveReportMedia(report, call, fetcher) {
   if (!folder) folder = await call('https://www.googleapis.com/drive/v3/files?fields=id&supportsAllDrives=true', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: month, mimeType: 'application/vnd.google-apps.folder', parents: [MEDIA_FOLDER_ID] }) });
   const saved = [];
   for (const media of report.media || []) {
+    if (media.mediaType === 'file') {
+      const id = String(media.fileId || '');
+      if (!/^[A-Za-z0-9_-]{10,200}$/.test(id)) throw new Error('添付ファイルの保存元を確認できません。');
+      const query = `'${folder.id}' in parents and trashed=false and appProperties has { key='teamShiftTaskFileSource' and value='${id}' }`;
+      const found = await call(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,webViewLink)&supportsAllDrives=true&includeItemsFromAllDrives=true`);
+      let file = found.files?.[0];
+      if (!file) {
+        const source = await call(`https://www.googleapis.com/drive/v3/files/${id}?fields=id,parents,appProperties&supportsAllDrives=true`);
+        if (!source.parents?.includes(MEDIA_FOLDER_ID) || source.appProperties?.teamShiftTaskFile !== '1') throw new Error('アプリの添付ファイルではありません。');
+        file = await call(`https://www.googleapis.com/drive/v3/files/${id}/copy?fields=id,webViewLink&supportsAllDrives=true`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:media.imageName||'添付ファイル',parents:[folder.id],appProperties:{teamShiftTaskFileSource:id}})});
+      }
+      saved.push({...media,savedUrl:file.webViewLink||`https://drive.google.com/file/d/${file.id}/view`});
+      continue;
+    }
+
     let source;
     try { source = new URL(media.imageUrl); } catch { throw new Error('添付ファイルのURLが不正です。'); }
     if (source.protocol !== 'https:' || source.hostname !== 'res.cloudinary.com') throw new Error('添付ファイルの保存元を確認できません。');

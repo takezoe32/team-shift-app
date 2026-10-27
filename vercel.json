@@ -25,6 +25,9 @@
     },
     "api/meter-readings.js": {
       "maxDuration": 120
+    },
+    "api/task-files.js": {
+      "maxDuration": 60
     }
   }
 }
