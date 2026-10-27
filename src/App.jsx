@@ -3541,6 +3541,8 @@ const BottomNav = ({ activeTab, setActiveTab, setSelectedDate, currentUser, role
   const canManageSettings = (roles[currentUser.role]?.level || 10) >= 30;
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
+  const taskMenuRef = useRef(null);
+  const [taskMenuOpen, setTaskMenuOpen] = useState(false);
   const primary = [
     { id:'calendar', label:'カレンダー', Icon:CalendarIcon },
     ...(canManageShift ? [{ id:'team-shift', label:'シフト', Icon:Table }] : []),
@@ -3553,29 +3555,35 @@ const BottomNav = ({ activeTab, setActiveTab, setSelectedDate, currentUser, role
     ...(canManageSettings ? [{ id:'settings', label:'設定', description:'メンバー管理・アプリの設定', Icon:Settings }] : [])
   ];
   const moreActive = secondary.some(item => item.id === activeTab);
-  const closeMenu = () => menuRef.current?.close();
+  const closeMenu = () => { menuRef.current?.close(); taskMenuRef.current?.close(); };
   const isPrimaryActive = id => id === 'daily' ? ['daily','partner'].includes(activeTab) : activeTab === id;
   const navigate = tab => {
-    if (tab === activeTab || (tab === 'daily' && activeTab === 'partner')) { closeMenu(); return; }
+    if (tab === activeTab) { closeMenu(); return; }
     if (!confirmDiscardEdits()) return;
     if (tab === 'daily') setSelectedDate(japanToday());
     setActiveTab(tab);
     closeMenu();
   };
   useEffect(() => {
-    if (!menuOpen) return;
+    if (!menuOpen && !taskMenuOpen) return;
     const previous = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = previous; };
-  }, [menuOpen]);
+  }, [menuOpen, taskMenuOpen]);
   const navClass = selected => `min-w-0 flex-1 min-h-[68px] flex flex-col items-center justify-center gap-1.5 relative active:bg-blue-50 ${selected?'text-blue-600':'text-gray-500'}`;
   return <>
     <nav aria-label="メインメニュー" className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 pb-safe z-20 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
       <div className="flex min-h-[68px] w-full">
-        {primary.map(({id,label,Icon})=><button key={id} type="button" aria-current={isPrimaryActive(id)?'page':undefined} onClick={()=>navigate(id)} className={navClass(isPrimaryActive(id))}><Icon className="w-6 h-6" aria-hidden="true"/><span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">{label}</span>{isPrimaryActive(id)&&<span className="absolute top-0 w-1/2 h-0.5 bg-blue-600 rounded-b-full"/>}</button>)}
+        {primary.map(({id,label,Icon})=><button key={id} type="button" aria-current={isPrimaryActive(id)?'page':undefined} aria-haspopup={id==='daily'?'dialog':undefined} aria-expanded={id==='daily'?taskMenuOpen:undefined} aria-controls={id==='daily'?'task-navigation':undefined} onClick={()=>{if(id==='daily'){taskMenuRef.current?.showModal();setTaskMenuOpen(true);}else navigate(id);}} className={navClass(isPrimaryActive(id)||(id==='daily'&&taskMenuOpen))}><Icon className="w-6 h-6" aria-hidden="true"/><span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">{label}</span>{isPrimaryActive(id)&&<span className="absolute top-0 w-1/2 h-0.5 bg-blue-600 rounded-b-full"/>}</button>)}
         <button type="button" aria-haspopup="dialog" aria-expanded={menuOpen} aria-controls="more-navigation" onClick={()=>{menuRef.current?.showModal();setMenuOpen(true);}} className={navClass(moreActive||menuOpen)}><span aria-hidden="true" className="h-6 flex items-center text-2xl font-black leading-none tracking-widest">•••</span><span className="text-[10px] sm:text-xs font-bold">その他</span>{moreActive&&<span className="absolute top-0 w-1/2 h-0.5 bg-blue-600 rounded-b-full"/>}</button>
       </div>
     </nav>
+    <dialog id="task-navigation" ref={taskMenuRef} aria-labelledby="task-navigation-heading" onClose={()=>setTaskMenuOpen(false)} onClick={event=>{if(event.target===event.currentTarget)closeMenu();}} className="fixed inset-x-0 top-auto bottom-0 m-0 mx-auto w-full max-w-xl max-h-[85dvh] overflow-y-auto rounded-t-3xl border-0 bg-white p-0 text-gray-800 shadow-2xl backdrop:bg-black/40">
+      <div className="p-4 sm:p-6 space-y-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+        <div className="flex items-center justify-between"><h2 id="task-navigation-heading" className="text-lg font-bold">タスク</h2><button type="button" autoFocus onClick={closeMenu} aria-label="タスクメニューを閉じる" className="min-h-11 min-w-11 flex items-center justify-center rounded-full bg-gray-100 active:bg-gray-200"><X size={22}/></button></div>
+        <div className="grid grid-cols-2 gap-3">{[{id:'daily',label:'日別タスク',Icon:CheckSquare},{id:'partner',label:'パートナー',Icon:Users}].map(({id,label,Icon})=><button key={id} type="button" aria-current={activeTab===id?'page':undefined} onClick={()=>navigate(id)} className={`min-h-28 rounded-2xl border p-4 text-left flex flex-col items-start gap-3 active:bg-blue-100 ${activeTab===id?'border-blue-500 bg-blue-50 text-blue-800':'border-gray-200 bg-gray-50 text-gray-800'}`}><Icon size={26} aria-hidden="true"/><span className="text-base font-bold">{label}</span></button>)}</div>
+      </div>
+    </dialog>
     <dialog id="more-navigation" ref={menuRef} aria-labelledby="more-navigation-heading" onClose={()=>setMenuOpen(false)} onClick={event=>{if(event.target===event.currentTarget)closeMenu();}} className="fixed inset-x-0 top-auto bottom-0 m-0 mx-auto w-full max-w-xl max-h-[85dvh] overflow-y-auto rounded-t-3xl border-0 bg-white p-0 text-gray-800 shadow-2xl backdrop:bg-black/40">
       <div className="p-4 sm:p-6 space-y-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
         <div className="flex items-center justify-between"><h2 id="more-navigation-heading" className="text-lg font-bold">その他のメニュー</h2><button type="button" autoFocus onClick={closeMenu} aria-label="メニューを閉じる" className="min-h-11 min-w-11 flex items-center justify-center rounded-full bg-gray-100 active:bg-gray-200"><X size={22}/></button></div>
@@ -4176,7 +4184,6 @@ export default function App() {
               </div>
             </div>
 
-            {['daily','partner'].includes(activeTab) && <section className="shrink-0 border-b border-gray-200 bg-white px-3 py-3"><div className="mx-auto max-w-3xl"><h2 className="mb-2 text-base font-bold text-gray-800">タスク</h2><div role="group" aria-label="タスクの種類" className="grid grid-cols-2 gap-2">{[['daily','日別タスク'],['partner','パートナータスク']].map(([id,label])=><button key={id} type="button" aria-pressed={activeTab===id} onClick={()=>{if(activeTab===id || !confirmDiscardEdits())return;if(id==='daily')setSelectedDate(japanToday());setActiveTab(id);}} className={`min-h-11 rounded-xl border px-3 text-sm font-bold active:scale-[0.98] ${activeTab===id?'border-blue-600 bg-blue-600 text-white':'border-gray-300 bg-white text-gray-600'}`}>{label}</button>)}</div></div></section>}
 
             {activeTab === 'help' ? (
               <HelpView currentUser={currentUser}/>
