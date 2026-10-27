@@ -85,7 +85,7 @@ export default function HelpView({ currentUser }) {
       <Section id="help-other" title="シフト・在庫・個人メモ">
         <div className="space-y-4">
           <div><h3 className="text-lg font-bold">シフト管理</h3><p className="leading-relaxed mt-1">出勤・休みを確認し、権限のある人が変更します。変更内容は他の人にも表示されます。利用できる人だけメニューが表示されます。</p></div>
-          <div><h3 className="text-lg font-bold">在庫管理</h3><p className="leading-relaxed mt-1">商品と在庫数を確認します。バーコードや手入力で商品を探し、入出庫を記録できます。日別タスクの通常入力で使用商品と数量を選ぶと、登録時に在庫へ反映されます。</p></div>
+          <div><h3 className="text-lg font-bold">在庫管理</h3><p className="leading-relaxed mt-1">画面下の「在庫管理」から「登録」「在庫一覧」「在庫変動履歴」を選びます。在庫一覧ではバーコードや手入力で商品を探し、在庫数を変更できます。未登録商品の登録ボタンではバーコードを引き継ぎます。日別タスクの通常入力で使用商品と数量を選ぶと、登録時に在庫へ反映されます。</p></div>
           <div><h3 className="text-lg font-bold">自分だけの個人メモ</h3><p className="leading-relaxed mt-1">日別タスクの「詳しく入力する」から、自分の名前を選んで「個人メモ」に切り替えます。内容か写真を追加して保存します。本人だけに表示され、日報には含まれません。</p></div>
         </div>
       </Section>

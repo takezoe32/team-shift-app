@@ -2998,9 +2998,10 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
 
 const normalizeInventoryName = (value) => String(value ?? '').normalize('NFKC').trim();
 
-const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInventoryItem, adjustInventoryStock, editInventoryItem, deleteInventoryItem, updateInventoryImage }) => {
+const InventoryView = ({ section = 'list', onSectionChange, inventoryItems = [], inventoryMovements = [], addInventoryItem, adjustInventoryStock, editInventoryItem, deleteInventoryItem, updateInventoryImage }) => {
+  const inventoryScrollRef = useRef(null);
+  useEffect(()=>{inventoryScrollRef.current?.scrollTo({top:0});},[section]);
   const [sortOrder, setSortOrder] = useState(() => localStorage.getItem('inventory_sort_order') || 'name');
-  const [registrationOpen, setRegistrationOpen] = useState(false);
   const [unbarcodedOpen, setUnbarcodedOpen] = useState(false);
   const [registeredOpen, setRegisteredOpen] = useState(false);
   const [replenishmentOpen, setReplenishmentOpen] = useState(false);
@@ -3060,7 +3061,6 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
     setIsLookingUpProduct(false);
     const existing = barcode && inventoryItems.find(item => normalizeInventoryName(item.barcode) === barcode);
     setScannedStockItemId(existing?.id || '');
-    setRegistrationOpen(false);
     setScanDirection('set');
     setScanQuantity(existing ? String(Math.max(0, Number(existing.stock) || 0)) : '1');
     setBarcodeLookupMessage(existing ? '登録済み商品：' + inventoryProductLabel(existing) + '。在庫数を変更して保存できます。' : barcode ? '商品未登録です。「この商品を登録する」から登録してください。' : '');
@@ -3147,8 +3147,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
       setSelectedYahooImage(null);
       setNewProductPhotoPreview('');
       uploadedProductPhotoRef.current = null;
-      setRegistrationOpen(false);
-      setNewKind('');
+        setNewKind('');
       setNewName('');
       setNewManufacturer('');
       setNewModelNumber('');
@@ -3161,7 +3160,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
       setNewBarcode('');
       setNewMinStock('2');
       setNewStock('');
-      setBarcodeLookupMessage('');
+      setBarcodeLookupMessage('商品を登録しました。続けて別の商品を登録できます。');
       setProductLookupCandidates([]);
       setProductLookupSource('');
     } catch (error) {
@@ -3316,7 +3315,7 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
     setNewModelNumber(code.modelNumber);
     setNewManufacturer(code.manufacturer);
     const matches = findModelProducts(inventoryItems, code);
-    setRegistrationOpen(matches.length === 0);
+    if (!matches.length) onSectionChange('register');
     if (matches.length === 1) {
       setScannedStockItemId(matches[0].id);
       setScanDirection('set');setScanQuantity(String(Math.max(0, Number(matches[0].stock) || 0)));
@@ -3402,10 +3401,12 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
   const barcodedItems = remainingItems.filter(item=>normalizeInventoryName(item.barcode));
   const unbarcodedItems = remainingItems.filter(item=>!normalizeInventoryName(item.barcode));
   const openRelatedProduct = id => {
+    onSectionChange('list');
     setReplenishmentOpen(true); setRegisteredOpen(true); setUnbarcodedOpen(true);
     requestAnimationFrame(()=>document.getElementById('inventory-product-' + id)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
   };
   const editScannedProduct = () => {
+    onSectionChange('list');
     const item = inventoryItems.find(product => product.id === scannedStockItemId);
     if (!item || !startEdit(item)) return;
     if (needsReplenishment(item)) setReplenishmentOpen(true);
@@ -3486,21 +3487,21 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
           </div>
         </div>;
       };
-  return <div className="flex-1 overflow-y-auto bg-gray-50 pb-[84px]">
+  return <div ref={inventoryScrollRef} className="flex-1 overflow-y-auto bg-gray-50 pb-[84px]">
     <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-4">
-      <div className="flex items-center gap-3"><div className="w-11 h-11 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center"><Package size={24}/></div><div><h2 className="text-xl font-black text-gray-800">在庫管理</h2><p className="text-xs text-gray-500">日別タスクで商品を選ぶと在庫が1個減ります。</p></div></div>
-      <section className="rounded-2xl border border-gray-200 bg-white p-4 space-y-3">
+      <div className="flex items-center gap-3"><div className="w-11 h-11 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center"><Package size={24}/></div><div><h2 className="text-xl font-black text-gray-800">{section==='register'?'商品登録':section==='history'?'在庫変動履歴':'在庫一覧'}</h2><p className="text-xs text-gray-500">日別タスクで商品を選ぶと在庫が1個減ります。</p></div></div>
+      {section !== 'history' && <section className="rounded-2xl border border-gray-200 bg-white p-4 space-y-3">
         <div className="flex items-center justify-between gap-2"><h3 className="text-sm font-black text-gray-700">バーコード・QRコードで商品を確認</h3><button type="button" disabled={isSaving} onClick={()=>setScannerOpen(true)} className="shrink-0 inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-indigo-600 px-3 text-xs font-bold text-white"><Camera size={16}/>カメラで読取</button></div>
         <label className="block text-xs font-bold text-gray-600">バーコード番号（任意）<input value={newBarcode} disabled={isSaving} onChange={e=>changeBarcode(e.target.value)} inputMode="numeric" placeholder="バーコードを読み取るか入力" className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base" maxLength={80}/></label>
         {scannedStockItemId && <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-2"><div className="text-sm font-bold text-emerald-800">登録済み商品の在庫変更：{inventoryProductLabel(inventoryItems.find(item=>item.id===scannedStockItemId))}</div><p className="text-sm font-bold">現在の在庫：{Math.max(0, Number(inventoryItems.find(item=>item.id===scannedStockItemId)?.stock) || 0)}個</p>{renderReplacementInfo(inventoryItems.find(item=>item.id===scannedStockItemId))}<div className="flex flex-wrap gap-2"><select aria-label="在庫変更方法" disabled={isSaving} value={scanDirection} onChange={e=>{setScanDirection(e.target.value);setScanQuantity(e.target.value==='set'?String(Math.max(0,Number(inventoryItems.find(item=>item.id===scannedStockItemId)?.stock)||0)):'1');}} className="rounded-lg border border-emerald-300"><option value="set">在庫数を指定</option><option value="in">入庫（増やす）</option><option value="out">出庫（減らす）</option></select><input type="number" disabled={isSaving} min={scanDirection==='set'?'0':'1'} step="1" value={scanQuantity} onChange={e=>setScanQuantity(e.target.value)} aria-label={scanDirection==='set'?'変更後の在庫数':'入出庫数量'} className="min-h-11 w-24 rounded-lg border border-emerald-300 px-2 text-center text-base"/><button type="button" onClick={()=>void handleScannedStockAdd()} disabled={isSaving} className="flex-1 min-h-11 rounded-lg bg-emerald-600 px-3 text-sm font-bold text-white disabled:opacity-50">{isSaving?'保存中…':scanDirection==='set'?'在庫数を保存':'この数量の入出庫を保存'}</button></div></div>}
         {scannedStockItemId && <ActionIconButton action="edit" type="button" onClick={editScannedProduct} disabled={isSaving || !!uploadingImageId || !inventoryItems.some(item => item.id === scannedStockItemId)} className="w-full"/>}
         {qrModelCandidates.length > 0 && <div className="space-y-2">{qrModelCandidates.map(id => inventoryItems.find(item => item.id === id)).filter(Boolean).map(item => <button type="button" key={item.id} disabled={isSaving} onClick={() => { setScannedStockItemId(item.id); setScanDirection('set'); setScanQuantity(String(Math.max(0, Number(item.stock) || 0))); setQrModelCandidates([]); setBarcodeLookupMessage('登録済み商品：' + inventoryProductLabel(item) + '。入出庫・編集ができます。'); }} className="min-h-11 w-full rounded-lg border border-blue-300 p-2 text-left text-sm font-bold text-blue-800">{inventoryProductLabel(item)} ・ 棚番号：{item.shelfNumber || '未設定'}</button>)}</div>}
-        {newBarcode && !scannedStockItemId && !qrModelCandidates.length && <div role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-3 space-y-2"><p className="font-bold text-amber-900">商品未登録</p><p className="text-sm text-amber-900">このバーコードの商品は登録されていません。商品情報を入力して登録してください。</p><button type="button" disabled={isSaving} onClick={()=>{setRegistrationOpen(true);requestAnimationFrame(()=>document.getElementById('inventory-registration')?.scrollIntoView({behavior:'smooth',block:'start'}));}} className="min-h-11 rounded-lg bg-blue-600 px-4 font-bold text-white disabled:opacity-50">この商品を登録する</button></div>}
+        {newBarcode && !scannedStockItemId && !qrModelCandidates.length && <div role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-3 space-y-2"><p className="font-bold text-amber-900">商品未登録</p><p className="text-sm text-amber-900">このバーコードの商品は登録されていません。商品情報を入力して登録してください。</p><button type="button" disabled={isSaving} onClick={()=>{onSectionChange('register');requestAnimationFrame(()=>document.getElementById('inventory-registration')?.scrollIntoView({behavior:'smooth',block:'start'}));}} className="min-h-11 rounded-lg bg-blue-600 px-4 font-bold text-white disabled:opacity-50">この商品を登録する</button></div>}
         {!scannedStockItemId && barcodeLookupMessage && <p className="text-xs text-blue-800">{barcodeLookupMessage}</p>}
         {scannedStockItemId && barcodeLookupMessage && <p className="text-xs text-emerald-800">{barcodeLookupMessage}</p>}
-      </section>
-      <button type="button" aria-expanded={registrationOpen} aria-controls="inventory-registration" disabled={isSaving || !!scannedStockItemId} onClick={()=>setRegistrationOpen(open=>!open)} className="w-full min-h-11 rounded-xl border border-blue-200 bg-white px-3 text-left text-sm font-bold text-blue-800">商品を追加・バーコード登録 {registrationOpen ? '▲ 閉じる' : '▼ 開く'}</button>
-      {registrationOpen && !scannedStockItemId && <form id="inventory-registration" onSubmit={e => { e.preventDefault(); void handleAdd(); }} className="rounded-2xl border border-gray-200 bg-white p-4 space-y-3 shadow-sm">
+      </section>}
+      {section==='register' && scannedStockItemId && <button type="button" disabled={isSaving} onClick={()=>changeBarcode('')} className="min-h-11 w-full rounded-xl bg-blue-600 px-4 font-bold text-white">別の商品を登録する</button>}
+      {section === 'register' && !scannedStockItemId && <form id="inventory-registration" onSubmit={e => { e.preventDefault(); void handleAdd(); }} className="rounded-2xl border border-gray-200 bg-white p-4 space-y-3 shadow-sm">
         {newBarcode && !scannedStockItemId && <button type="button" onClick={() => void lookupProductByBarcode(newBarcode, 'yahoo')} disabled={isLookingUpProduct} className="w-full min-h-10 rounded-lg border border-blue-300 text-blue-800 text-xs font-bold disabled:opacity-50">Yahoo!ショッピングで商品候補を検索</button>}
         {newBarcode && !scannedStockItemId && <button type="button" onClick={() => void lookupProductByBarcode(newBarcode)} disabled={isLookingUpProduct} className="w-full min-h-10 rounded-lg border border-blue-300 text-blue-800 text-xs font-bold disabled:opacity-50">{isLookingUpProduct ? '商品情報を検索中…' : 'メーカー公式サイトで候補を検索（任意）'}</button>}
         {barcodeLookupMessage && <div className="rounded-lg bg-blue-50 border border-blue-100 p-2 text-xs text-blue-800 space-y-2"><div>{barcodeLookupMessage}</div>{isLookingUpProduct && <div className="flex items-center gap-2"><Loader2 size={14} className="animate-spin"/>商品候補を検索中…</div>}{productLookupSource && <a href={productLookupSource} target="_blank" rel="noopener noreferrer" className="block underline break-all">取得元の商品ページを確認 ↗</a>}{productLookupCandidates.length > 0 && !productLookupSource && <div className="space-y-2"><div className="font-bold">商品候補（選択すると各入力欄に反映します）</div>{productLookupCandidates.map((candidate) => <div key={candidate.url} className="rounded-lg border border-blue-200 bg-white p-2 space-y-1">{candidate.imageUrl && <div className="space-y-1"><img src={candidate.imageUrl} alt={candidate.title + 'のYahoo商品画像'} loading="lazy" referrerPolicy="no-referrer" className="h-32 w-full rounded-lg bg-white object-contain"/><button type="button" disabled={isSaving} onClick={()=>selectYahooProductImage(candidate)} className="min-h-11 rounded-lg bg-blue-600 px-3 text-sm font-bold text-white disabled:opacity-50">この商品情報と画像を使う</button></div>}<button type="button" onClick={() => applyProductCandidate(candidate)} className="text-left font-bold underline">{candidate.title}</button><div className="text-[11px] text-gray-600">{candidate.manufacturer ? candidate.manufacturer + '・' : ''}{candidate.sourceType || 'メーカー公式サイト'}{candidate.description ? '：' + candidate.description : ''}</div>{candidate.fieldsInferred && <div className="text-xs text-gray-700 space-y-1"><div>メーカー候補：{candidate.manufacturer || '判別できません'}</div><div>商品名候補：{candidate.productName || candidate.title}</div><div>型番候補：{candidate.modelNumber || '判別できません'}</div>{candidate.brand && <div>Yahooブランド：{candidate.brand}</div>}<div className="text-amber-800">分離結果は推定です。選択後に各欄を確認・修正してください。</div></div>}<a href={candidate.url} target="_blank" rel="noopener noreferrer" className="break-all underline">ページを確認 ↗</a>{candidate.exactCodeMatch && <span className="inline-block rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">JANコード一致</span>}</div>)}</div>}</div>}
@@ -3523,26 +3524,32 @@ const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInvent
         <button type="submit" disabled={isSaving || !hasInventoryProductDetails({ kind: newKind, name: newName, manufacturer: newManufacturer, modelNumber: newModelNumber })} className="w-full min-h-11 rounded-xl bg-blue-600 text-white font-bold text-sm disabled:opacity-50">{isSaving?'登録中…':'商品を追加'}</button>
         <p className="text-[11px] text-gray-500">種類・商品名・メーカー・型番のいずれか1つを入力すると登録できます。JANコード・使用箇所だけでは登録できません。</p>
       </form>}
+      {section === 'list' && <>
       {sortedItems.length===0 && <div className="rounded-xl bg-white border border-gray-200 p-6 text-center text-sm text-gray-500">商品が登録されていません。</div>}
       <label className="flex flex-wrap items-center gap-2 text-sm font-bold text-gray-700">各一覧の並び順<select aria-label="商品の並び順" value={sortOrder} onChange={e=>{setSortOrder(e.target.value);localStorage.setItem('inventory_sort_order',e.target.value);}} className="min-h-11 rounded-lg border border-gray-300 bg-white px-3"><option value="name">種類・商品名順</option><option value="shelf-asc">棚番号順（昇順）</option><option value="shelf-desc">棚番号順（降順）</option></select><span className="text-xs font-normal text-gray-500">棚番号が空欄の商品は末尾</span></label>
       <section className="space-y-2"><button type="button" aria-expanded={replenishmentOpen} aria-controls="inventory-replenishment" disabled={isSaving} onClick={()=>setReplenishmentOpen(open=>!open)} className="w-full min-h-11 rounded-xl border border-red-300 bg-red-50 px-3 text-left text-sm font-bold text-red-800">補充商品（{replenishmentItems.length}件） {replenishmentOpen ? '▲ 閉じる' : '▼ 開く'}</button>{replenishmentOpen && <div id="inventory-replenishment" className="space-y-2">{replenishmentItems.length ? replenishmentItems.map(renderInventoryItem) : <p className="p-3 text-xs text-gray-500">補充が必要な商品はありません。</p>}</div>}</section>
       <section className="space-y-2"><button type="button" aria-expanded={registeredOpen} aria-controls="inventory-registered" disabled={isSaving} onClick={()=>setRegisteredOpen(open=>!open)} className="w-full min-h-11 rounded-xl border border-gray-300 bg-white px-3 text-left text-sm font-bold text-gray-700">登録商品（{barcodedItems.length}件） {registeredOpen ? '▲ 閉じる' : '▼ 開く'}</button>{registeredOpen && <div id="inventory-registered" className="space-y-2">{barcodedItems.length ? barcodedItems.map(renderInventoryItem) : <p className="p-3 text-xs text-gray-500">補充商品以外のバーコード登録済み商品はありません。</p>}</div>}</section>
       {unbarcodedItems.length > 0 && <section className="space-y-2"><button type="button" aria-expanded={unbarcodedOpen} aria-controls="inventory-unbarcoded" disabled={isSaving} onClick={()=>setUnbarcodedOpen(open=>!open)} className="w-full min-h-11 rounded-xl border border-gray-300 bg-white px-3 text-left text-sm font-bold text-gray-700">バーコード未登録の商品（{unbarcodedItems.length}件） {unbarcodedOpen ? '▲ 閉じる' : '▼ 開く'}</button>{unbarcodedOpen && <div id="inventory-unbarcoded" className="space-y-2">{unbarcodedItems.map(renderInventoryItem)}</div>}</section>}
-      <section className="rounded-2xl border border-gray-200 bg-white p-4 space-y-2"><div className="flex items-center gap-2"><History size={17} className="text-gray-500"/><h3 className="text-sm font-black text-gray-700">在庫変動履歴</h3></div><p className="text-[11px] text-gray-500">入庫・在庫調整・タスク使用・タスク削除による戻しを記録します。月末の実在庫との差異は「在庫数を保存」で調整し、履歴を確認してください。</p>{inventoryMovements.length ? <div className="max-h-72 overflow-y-auto divide-y divide-gray-100">{[...inventoryMovements].sort((a,b)=>String(b.timestamp||'').localeCompare(String(a.timestamp||''))).slice(0,50).map(entry=><div key={entry.id} className="py-2 text-xs"><div className="flex items-start justify-between gap-2"><span className="font-bold text-gray-700">{entry.productName || '商品'}</span><span className={`font-black tabular-nums ${Number(entry.delta||0)<0?'text-red-600':'text-emerald-700'}`}>{Number(entry.delta||0)>0?'+':''}{Number(entry.delta||0)}個</span></div><div className="mt-0.5 text-gray-500">{entry.typeLabel || entry.type || '在庫変更'} ・ {entry.timestamp ? japanDateTime(entry.timestamp) : ''}</div>{entry.stockBefore !== undefined && <div className="mt-0.5 text-gray-600">在庫：{entry.stockBefore} → {entry.stockAfter}個</div>}{entry.actorName && <div className="mt-0.5 text-gray-600">操作：{entry.actorName}</div>}{entry.reason && <div className="mt-0.5 text-gray-600">理由：{entry.reason}</div>}</div>)}</div> : <p className="py-2 text-xs text-gray-400">まだ履歴はありません。今後の在庫変更から記録されます。</p>}</section>
+      </>}
+      {section === 'history' && <section className="rounded-2xl border border-gray-200 bg-white p-4 space-y-2"><div className="flex items-center gap-2"><History size={17} className="text-gray-500"/><h3 className="text-sm font-black text-gray-700">在庫変動履歴</h3></div><p className="text-[11px] text-gray-500">入庫・在庫調整・タスク使用・タスク削除による戻しを記録します。月末の実在庫との差異は「在庫数を保存」で調整し、履歴を確認してください。</p>{inventoryMovements.length ? <div className="max-h-72 overflow-y-auto divide-y divide-gray-100">{[...inventoryMovements].sort((a,b)=>String(b.timestamp||'').localeCompare(String(a.timestamp||''))).slice(0,50).map(entry=><div key={entry.id} className="py-2 text-xs"><div className="flex items-start justify-between gap-2"><span className="font-bold text-gray-700">{entry.productName || '商品'}</span><span className={`font-black tabular-nums ${Number(entry.delta||0)<0?'text-red-600':'text-emerald-700'}`}>{Number(entry.delta||0)>0?'+':''}{Number(entry.delta||0)}個</span></div><div className="mt-0.5 text-gray-500">{entry.typeLabel || entry.type || '在庫変更'} ・ {entry.timestamp ? japanDateTime(entry.timestamp) : ''}</div>{entry.stockBefore !== undefined && <div className="mt-0.5 text-gray-600">在庫：{entry.stockBefore} → {entry.stockAfter}個</div>}{entry.actorName && <div className="mt-0.5 text-gray-600">操作：{entry.actorName}</div>}{entry.reason && <div className="mt-0.5 text-gray-600">理由：{entry.reason}</div>}</div>)}</div> : <p className="py-2 text-xs text-gray-400">まだ履歴はありません。今後の在庫変更から記録されます。</p>}</section>}
+      {section === 'register' && <>
       <div><span style={{ margin: '15px 15px 15px 15px' }}><a href="https://developer.yahoo.co.jp/sitemap/">Webサービス by Yahoo! JAPAN</a></span></div>
       <p className="text-[11px] text-gray-500">在庫が商品ごとの発注基準数以下になると赤く表示されます。登録済み商品はJANコードで表示します。未登録商品はYahoo検索・Google検索・手入力を利用できます。販売店の情報はメーカー公式確認済みではありません。商品名・型番・セット数量を確認して保存してください。</p>
+      </>}
     </div>
     {scannerOpen && <BarcodeScannerModal onDetected={handleBarcodeDetected} onClose={()=>setScannerOpen(false)}/>}
   </div>;
 };
 
-const BottomNav = ({ activeTab, setActiveTab, setSelectedDate, currentUser, roles }) => {
+const BottomNav = ({ inventorySection, setInventorySection, activeTab, setActiveTab, setSelectedDate, currentUser, roles }) => {
   const canManageShift = checkCanManageShift(currentUser, roles) || isReadOnlyUser(currentUser, roles);
   const canManageSettings = (roles[currentUser.role]?.level || 10) >= 30;
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
   const taskMenuRef = useRef(null);
   const [taskMenuOpen, setTaskMenuOpen] = useState(false);
+  const inventoryMenuRef = useRef(null);
+  const [inventoryMenuOpen, setInventoryMenuOpen] = useState(false);
   const primary = [
     { id:'calendar', label:'カレンダー', Icon:CalendarIcon },
     ...(canManageShift ? [{ id:'team-shift', label:'シフト', Icon:Table }] : []),
@@ -3555,7 +3562,7 @@ const BottomNav = ({ activeTab, setActiveTab, setSelectedDate, currentUser, role
     ...(canManageSettings ? [{ id:'settings', label:'設定', description:'メンバー管理・アプリの設定', Icon:Settings }] : [])
   ];
   const moreActive = secondary.some(item => item.id === activeTab);
-  const closeMenu = () => { menuRef.current?.close(); taskMenuRef.current?.close(); };
+  const closeMenu = () => { menuRef.current?.close(); taskMenuRef.current?.close(); inventoryMenuRef.current?.close(); };
   const isPrimaryActive = id => id === 'daily' ? ['daily','partner'].includes(activeTab) : activeTab === id;
   const navigate = tab => {
     if (tab === activeTab) { closeMenu(); return; }
@@ -3565,19 +3572,25 @@ const BottomNav = ({ activeTab, setActiveTab, setSelectedDate, currentUser, role
     closeMenu();
   };
   useEffect(() => {
-    if (!menuOpen && !taskMenuOpen) return;
+    if (!menuOpen && !taskMenuOpen && !inventoryMenuOpen) return;
     const previous = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = previous; };
-  }, [menuOpen, taskMenuOpen]);
+  }, [menuOpen, taskMenuOpen, inventoryMenuOpen]);
   const navClass = selected => `min-w-0 flex-1 min-h-[68px] flex flex-col items-center justify-center gap-1.5 relative active:bg-blue-50 ${selected?'text-blue-600':'text-gray-500'}`;
   return <>
     <nav aria-label="メインメニュー" className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 pb-safe z-20 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
       <div className="flex min-h-[68px] w-full">
-        {primary.map(({id,label,Icon})=><button key={id} type="button" aria-current={isPrimaryActive(id)?'page':undefined} aria-haspopup={id==='daily'?'dialog':undefined} aria-expanded={id==='daily'?taskMenuOpen:undefined} aria-controls={id==='daily'?'task-navigation':undefined} onClick={()=>{if(id==='daily'){taskMenuRef.current?.showModal();setTaskMenuOpen(true);}else navigate(id);}} className={navClass(isPrimaryActive(id)||(id==='daily'&&taskMenuOpen))}><Icon className="w-6 h-6" aria-hidden="true"/><span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">{label}</span>{isPrimaryActive(id)&&<span className="absolute top-0 w-1/2 h-0.5 bg-blue-600 rounded-b-full"/>}</button>)}
+        {primary.map(({id,label,Icon})=><button key={id} type="button" aria-current={isPrimaryActive(id)?'page':undefined} aria-haspopup={['daily','inventory'].includes(id)?'dialog':undefined} aria-expanded={id==='daily'?taskMenuOpen:id==='inventory'?inventoryMenuOpen:undefined} aria-controls={id==='daily'?'task-navigation':id==='inventory'?'inventory-navigation':undefined} onClick={()=>{if(id==='daily'){taskMenuRef.current?.showModal();setTaskMenuOpen(true);}else if(id==='inventory'){inventoryMenuRef.current?.showModal();setInventoryMenuOpen(true);}else navigate(id);}} className={navClass(isPrimaryActive(id)||(id==='daily'&&taskMenuOpen)||(id==='inventory'&&inventoryMenuOpen))}><Icon className="w-6 h-6" aria-hidden="true"/><span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">{label}</span>{isPrimaryActive(id)&&<span className="absolute top-0 w-1/2 h-0.5 bg-blue-600 rounded-b-full"/>}</button>)}
         <button type="button" aria-haspopup="dialog" aria-expanded={menuOpen} aria-controls="more-navigation" onClick={()=>{menuRef.current?.showModal();setMenuOpen(true);}} className={navClass(moreActive||menuOpen)}><span aria-hidden="true" className="h-6 flex items-center text-2xl font-black leading-none tracking-widest">•••</span><span className="text-[10px] sm:text-xs font-bold">その他</span>{moreActive&&<span className="absolute top-0 w-1/2 h-0.5 bg-blue-600 rounded-b-full"/>}</button>
       </div>
     </nav>
+    <dialog id="inventory-navigation" ref={inventoryMenuRef} aria-labelledby="inventory-navigation-heading" onClose={()=>setInventoryMenuOpen(false)} onClick={event=>{if(event.target===event.currentTarget)closeMenu();}} className="fixed inset-x-0 top-auto bottom-0 m-0 mx-auto w-full max-w-xl max-h-[85dvh] overflow-y-auto rounded-t-3xl border-0 bg-white p-0 text-gray-800 shadow-2xl backdrop:bg-black/40">
+      <div className="p-4 sm:p-6 space-y-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+        <div className="flex items-center justify-between"><h2 id="inventory-navigation-heading" className="text-lg font-bold">在庫管理</h2><button type="button" autoFocus onClick={closeMenu} aria-label="在庫管理メニューを閉じる" className="min-h-11 min-w-11 flex items-center justify-center rounded-full bg-gray-100 active:bg-gray-200"><X size={22}/></button></div>
+        <div className="grid grid-cols-2 gap-3">{[...(!isReadOnlyUser(currentUser,roles)?[{id:'register',label:'登録',Icon:UserPlus}]:[]),{id:'list',label:'在庫一覧',Icon:Package},{id:'history',label:'在庫変動履歴',Icon:History}].map(({id,label,Icon})=><button key={id} type="button" aria-current={activeTab==='inventory'&&inventorySection===id?'page':undefined} onClick={()=>{if(activeTab==='inventory'&&inventorySection===id){closeMenu();return;}if(!confirmDiscardEdits())return;setInventorySection(id);setActiveTab('inventory');closeMenu();}} className={`min-h-28 rounded-2xl border p-4 text-left flex flex-col items-start gap-3 active:bg-blue-100 ${activeTab==='inventory'&&inventorySection===id?'border-blue-500 bg-blue-50 text-blue-800':'border-gray-200 bg-gray-50 text-gray-800'}`}><Icon size={26} aria-hidden="true"/><span className="text-base font-bold">{label}</span></button>)}</div>
+      </div>
+    </dialog>
     <dialog id="task-navigation" ref={taskMenuRef} aria-labelledby="task-navigation-heading" onClose={()=>setTaskMenuOpen(false)} onClick={event=>{if(event.target===event.currentTarget)closeMenu();}} className="fixed inset-x-0 top-auto bottom-0 m-0 mx-auto w-full max-w-xl max-h-[85dvh] overflow-y-auto rounded-t-3xl border-0 bg-white p-0 text-gray-800 shadow-2xl backdrop:bg-black/40">
       <div className="p-4 sm:p-6 space-y-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
         <div className="flex items-center justify-between"><h2 id="task-navigation-heading" className="text-lg font-bold">タスク</h2><button type="button" autoFocus onClick={closeMenu} aria-label="タスクメニューを閉じる" className="min-h-11 min-w-11 flex items-center justify-center rounded-full bg-gray-100 active:bg-gray-200"><X size={22}/></button></div>
@@ -3596,6 +3609,7 @@ const BottomNav = ({ activeTab, setActiveTab, setSelectedDate, currentUser, role
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [activeTab, setActiveTab] = useState('calendar');
+  const [inventorySection, setInventorySection] = useState('list');
   const [currentDate, setCurrentDate] = useState(() => calendarDate());
   const [selectedDate, setSelectedDate] = useState(japanToday());
   useJapanDay(setSelectedDate);
@@ -4188,7 +4202,7 @@ export default function App() {
             {activeTab === 'help' ? (
               <HelpView currentUser={currentUser}/>
             ) : isReadOnlyUser(currentUser, roles) && !['calendar', 'team-shift'].includes(activeTab) ? (
-              <ViewerWorkspace tab={activeTab} teamData={teamData} partnerItems={partnerItems} inventoryItems={inventoryItems} users={sortedUsers} date={selectedDate} onDate={setSelectedDate}/>
+              <ViewerWorkspace inventorySection={inventorySection} inventoryMovements={inventoryMovements} tab={activeTab} teamData={teamData} partnerItems={partnerItems} inventoryItems={inventoryItems} users={sortedUsers} date={selectedDate} onDate={setSelectedDate}/>
             ) : activeTab === 'partner' ? (
               <PartnerView
                 currentUser={currentUser}
@@ -4265,7 +4279,7 @@ export default function App() {
             ) : activeTab === 'receipt' ? (
               <ReceiptImport key={currentUser.id} userId={currentUser.id} buyer={currentUser.name} onClose={()=>setActiveTab('calendar')}/>
             ) : activeTab === 'inventory' ? (
-              <InventoryView
+              <InventoryView section={inventorySection} onSectionChange={setInventorySection}
                 currentUser={currentUser}
                 inventoryItems={inventoryItems}
                 inventoryMovements={inventoryMovements}
@@ -4801,7 +4815,7 @@ export default function App() {
               />
             )}
 
-            <BottomNav activeTab={activeTab} currentUser={currentUser} roles={roles} setActiveTab={setActiveTab} setSelectedDate={setSelectedDate}/>
+            <BottomNav inventorySection={inventorySection} setInventorySection={setInventorySection} activeTab={activeTab} currentUser={currentUser} roles={roles} setActiveTab={setActiveTab} setSelectedDate={setSelectedDate}/>
           </div>
         </div>
       )}
