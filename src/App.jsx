@@ -2999,8 +2999,7 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
 
 const normalizeInventoryName = (value) => String(value ?? '').normalize('NFKC').trim();
 
-const InventoryView = ({ currentUser, inventoryItems = [], inventoryMovements = [], addInventoryItem, adjustInventoryStock, editInventoryItem, deleteInventoryItem, updateInventoryImage }) => {
-  const [receiptOpen, setReceiptOpen] = useState(false);
+const InventoryView = ({ inventoryItems = [], inventoryMovements = [], addInventoryItem, adjustInventoryStock, editInventoryItem, deleteInventoryItem, updateInventoryImage }) => {
   const [sortOrder, setSortOrder] = useState(() => localStorage.getItem('inventory_sort_order') || 'name');
   const [registrationOpen, setRegistrationOpen] = useState(false);
   const [unbarcodedOpen, setUnbarcodedOpen] = useState(false);
@@ -3488,11 +3487,9 @@ const InventoryView = ({ currentUser, inventoryItems = [], inventoryMovements = 
           </div>
         </div>;
       };
-  if (receiptOpen) return <ReceiptImport key={currentUser?.id} userId={currentUser?.id} buyer={currentUser?.name} onClose={()=>setReceiptOpen(false)}/>;
   return <div className="flex-1 overflow-y-auto bg-gray-50 pb-[84px]">
     <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-4">
       <div className="flex items-center gap-3"><div className="w-11 h-11 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center"><Package size={24}/></div><div><h2 className="text-xl font-black text-gray-800">在庫管理</h2><p className="text-xs text-gray-500">日別タスクで商品を選ぶと在庫が1個減ります。</p></div></div>
-      <button type="button" disabled={isSaving} onClick={()=>setReceiptOpen(true)} className="w-full min-h-14 rounded-xl border-2 border-green-600 bg-green-50 px-4 text-left font-bold text-green-800">レシート取込（テスト中） — 撮影して仕入れ表用にコピー</button>
       <section className="rounded-2xl border border-gray-200 bg-white p-4 space-y-3">
         <div className="flex items-center justify-between gap-2"><h3 className="text-sm font-black text-gray-700">バーコード・QRコードで商品を確認</h3><button type="button" disabled={isSaving} onClick={()=>setScannerOpen(true)} className="shrink-0 inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-indigo-600 px-3 text-xs font-bold text-white"><Camera size={16}/>カメラで読取</button></div>
         <label className="block text-xs font-bold text-gray-600">バーコード番号（任意）<input value={newBarcode} disabled={isSaving} onChange={e=>changeBarcode(e.target.value)} inputMode="numeric" placeholder="バーコードを読み取るか入力" className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base" maxLength={80}/></label>
@@ -3542,81 +3539,51 @@ const InventoryView = ({ currentUser, inventoryItems = [], inventoryMovements = 
 
 const BottomNav = ({ activeTab, setActiveTab, setSelectedDate, currentUser, roles }) => {
   const canManageShift = checkCanManageShift(currentUser, roles) || isReadOnlyUser(currentUser, roles);
-  const userRoleObj = roles[currentUser.role] || { level: 10 };
-  const canManageSettings = userRoleObj.level >= 30;
-
-  return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 pb-safe z-20 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
-      <div className="flex h-[68px] w-full max-w-full">
-        <button 
-          onClick={() => {if(confirmDiscardEdits()) setActiveTab('calendar');}}
-          className={`flex-1 flex flex-col items-center justify-center space-y-1.5 relative ${activeTab === 'calendar' ? 'text-blue-600' : 'text-gray-400'}`}
-        >
-          <CalendarIcon className="w-6 h-6"/>
-          <span className="text-[10px] font-bold">カレンダー</span>
-          {activeTab === 'calendar' && <div className="absolute top-0 w-1/2 h-0.5 bg-blue-600 rounded-b-full"></div>}
-        </button>
-        
-        {canManageShift && (
-          <button 
-            onClick={() => {if(confirmDiscardEdits()) setActiveTab('team-shift');}}
-            className={`flex-1 flex flex-col items-center justify-center space-y-1.5 relative ${activeTab === 'team-shift' ? 'text-purple-600' : 'text-gray-400'}`}
-          >
-            <Table className="w-6 h-6"/>
-            <span className="text-[10px] font-bold">シフト管理</span>
-            {activeTab === 'team-shift' && <div className="absolute top-0 w-1/2 h-0.5 bg-purple-600 rounded-b-full"></div>}
-          </button>
-        )}
-
-        <button 
-          onClick={() => { if(!confirmDiscardEdits())return; setSelectedDate(japanToday()); setActiveTab('daily'); }}
-          className={`flex-1 flex flex-col items-center justify-center space-y-1.5 relative ${activeTab === 'daily' ? 'text-blue-600' : 'text-gray-400'}`}
-        >
-          <CheckSquare className="w-6 h-6"/>
-          <span className="text-[10px] font-bold">日別タスク</span>
-          {activeTab === 'daily' && <div className="absolute top-0 w-1/2 h-0.5 bg-blue-600 rounded-b-full"></div>}
-        </button>
-
-        <button
-          onClick={() => {if(confirmDiscardEdits()) setActiveTab('partner');}}
-          className={`flex-1 flex flex-col items-center justify-center space-y-1.5 relative ${activeTab === 'partner' ? 'text-blue-600' : 'text-gray-400'}`}
-        >
-          <Handshake className="w-6 h-6"/>
-          <span className="text-[10px] font-bold">パートナー</span>
-          {activeTab === 'partner' && <div className="absolute top-0 w-1/2 h-0.5 bg-blue-600 rounded-b-full"></div>}
-        </button>
-
-        <button
-          onClick={() => {if(confirmDiscardEdits()) setActiveTab('completed');}}
-          className={`flex-1 flex flex-col items-center justify-center space-y-1.5 relative ${activeTab === 'completed' ? 'text-green-600' : 'text-gray-400'}`}
-        >
-          <ClipboardList className="w-6 h-6"/>
-          <span className="text-[10px] font-bold">終了履歴</span>
-          {activeTab === 'completed' && <div className="absolute top-0 w-1/2 h-0.5 bg-green-600 rounded-b-full"></div>}
-        </button>
-
-        <button
-          onClick={() => {if(confirmDiscardEdits()) setActiveTab('inventory');}}
-          className={`flex-1 flex flex-col items-center justify-center space-y-1.5 relative ${activeTab === 'inventory' ? 'text-emerald-600' : 'text-gray-400'}`}
-        >
-          <Package className="w-6 h-6"/>
-          <span className="text-[10px] font-bold">在庫管理</span>
-          {activeTab === 'inventory' && <div className="absolute top-0 w-1/2 h-0.5 bg-emerald-600 rounded-b-full"></div>}
-        </button>
-
-        {canManageSettings && (
-          <button 
-            onClick={() => {if(confirmDiscardEdits()) setActiveTab('settings');}}
-            className={`flex-1 flex flex-col items-center justify-center space-y-1.5 relative ${activeTab === 'settings' ? 'text-blue-600' : 'text-gray-400'}`}
-          >
-            <Settings className="w-6 h-6"/>
-            <span className="text-[10px] font-bold">設定</span>
-            {activeTab === 'settings' && <div className="absolute top-0 w-1/2 h-0.5 bg-blue-600 rounded-b-full"></div>}
-          </button>
-        )}
+  const canManageSettings = (roles[currentUser.role]?.level || 10) >= 30;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+  const primary = [
+    { id:'calendar', label:'カレンダー', Icon:CalendarIcon },
+    { id:'daily', label:'日別タスク', Icon:CheckSquare },
+    { id:'partner', label:'パートナー', Icon:Handshake },
+    { id:'inventory', label:'在庫管理', Icon:Package }
+  ];
+  const secondary = [
+    ...(canManageShift ? [{ id:'team-shift', label:'シフト管理', description:'勤務・休みの予定を確認', Icon:Table }] : []),
+    { id:'completed', label:'終了履歴', description:'終了したタスクを確認', Icon:ClipboardList },
+    { id:'receipt', label:'レシート取込（テスト中）', description:'撮影・読取して仕入れ表用にコピー', Icon:Camera },
+    ...(canManageSettings ? [{ id:'settings', label:'設定', description:'メンバー管理・アプリの設定', Icon:Settings }] : [])
+  ];
+  const moreActive = secondary.some(item => item.id === activeTab);
+  const closeMenu = () => menuRef.current?.close();
+  const navigate = tab => {
+    if (tab === activeTab) { closeMenu(); return; }
+    if (!confirmDiscardEdits()) return;
+    if (tab === 'daily') setSelectedDate(japanToday());
+    setActiveTab(tab);
+    closeMenu();
+  };
+  useEffect(() => {
+    if (!menuOpen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previous; };
+  }, [menuOpen]);
+  const navClass = selected => `min-w-0 flex-1 min-h-[68px] flex flex-col items-center justify-center gap-1.5 relative active:bg-blue-50 ${selected?'text-blue-600':'text-gray-500'}`;
+  return <>
+    <nav aria-label="メインメニュー" className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 pb-safe z-20 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+      <div className="flex min-h-[68px] w-full">
+        {primary.map(({id,label,Icon})=><button key={id} type="button" aria-current={activeTab===id?'page':undefined} onClick={()=>navigate(id)} className={navClass(activeTab===id)}><Icon className="w-6 h-6" aria-hidden="true"/><span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">{label}</span>{activeTab===id&&<span className="absolute top-0 w-1/2 h-0.5 bg-blue-600 rounded-b-full"/>}</button>)}
+        <button type="button" aria-haspopup="dialog" aria-expanded={menuOpen} aria-controls="more-navigation" onClick={()=>{menuRef.current?.showModal();setMenuOpen(true);}} className={navClass(moreActive||menuOpen)}><span aria-hidden="true" className="h-6 flex items-center text-2xl font-black leading-none tracking-widest">•••</span><span className="text-[10px] sm:text-xs font-bold">その他</span>{moreActive&&<span className="absolute top-0 w-1/2 h-0.5 bg-blue-600 rounded-b-full"/>}</button>
       </div>
-    </div>
-  );
+    </nav>
+    <dialog id="more-navigation" ref={menuRef} aria-labelledby="more-navigation-heading" onClose={()=>setMenuOpen(false)} onClick={event=>{if(event.target===event.currentTarget)closeMenu();}} className="fixed inset-x-0 top-auto bottom-0 m-0 mx-auto w-full max-w-xl max-h-[85dvh] overflow-y-auto rounded-t-3xl border-0 bg-white p-0 text-gray-800 shadow-2xl backdrop:bg-black/40">
+      <div className="p-4 sm:p-6 space-y-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+        <div className="flex items-center justify-between"><h2 id="more-navigation-heading" className="text-lg font-bold">その他のメニュー</h2><button type="button" autoFocus onClick={closeMenu} aria-label="メニューを閉じる" className="min-h-11 min-w-11 flex items-center justify-center rounded-full bg-gray-100 active:bg-gray-200"><X size={22}/></button></div>
+        <div className="grid grid-cols-2 gap-3">{secondary.map(({id,label,description,Icon})=><button key={id} type="button" aria-current={activeTab===id?'page':undefined} onClick={()=>navigate(id)} className={`min-h-28 rounded-2xl border p-4 text-left flex flex-col items-start gap-2 active:bg-blue-100 ${activeTab===id?'border-blue-500 bg-blue-50 text-blue-800':'border-gray-200 bg-gray-50 text-gray-800'}`}><Icon size={26} aria-hidden="true"/><span className="text-base font-bold">{label}</span><span className="text-xs text-gray-600">{description}</span></button>)}</div>
+      </div>
+    </dialog>
+  </>;
 };
 
 export default function App() {
@@ -4287,6 +4254,8 @@ export default function App() {
                   setPartnerItems(updatedItems);
                 }}
               />
+            ) : activeTab === 'receipt' ? (
+              <ReceiptImport key={currentUser.id} userId={currentUser.id} buyer={currentUser.name} onClose={()=>setActiveTab('calendar')}/>
             ) : activeTab === 'inventory' ? (
               <InventoryView
                 currentUser={currentUser}
