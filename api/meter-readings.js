@@ -2,7 +2,7 @@ import { isReadOnlyUser } from '../src/viewerPermission.mjs';
 import { configuration,cookies,unseal,seal,verifyRequest,privateStore,oauth,fault } from './_lib/report-auth.js';
 import { makeLineStore } from './_lib/line-store.js';
 import { meterSheets } from './_lib/meter-sheets.js';
-import { meterDate,meterChanges } from '../src/meterReadings.mjs';
+import { meterDate,meterChanges,canAccessMeters } from '../src/meterReadings.mjs';
 import { randomBytes } from 'node:crypto';
 export function createMeterHandler({configure=configuration,makeStore=privateStore,makeLocks=makeLineStore,makeClient=oauth,makeSheets=meterSheets,env=globalThis.process.env,now=Date.now}={}){
  return async(req,res)=>{
@@ -17,6 +17,7 @@ export function createMeterHandler({configure=configuration,makeStore=privateSto
    if(!member||member.purpose!=='line-member'||member.expires<=now()||member.uid!==uid)throw fault(401,'アプリと同じGoogleアカウントで本人確認してください。');
    const store=makeStore(config),source=await store.source(),user=source.users?.[uid];
    if(!user||isReadOnlyUser(user,source.roles||{})||String(user.email||'').trim().toLowerCase()!==member.email)throw fault(403,'検針入力は登録メンバーのみ利用できます。');
+   if(!canAccessMeters(user)||!canAccessMeters({email:member.email}))throw fault(403,'検針はplandosee.co.jpのアカウントのみ利用できます。');
    const date=req.method==='GET'?query.get('date'):req.body?.date;try{meterDate(date);}catch(e){throw fault(400,e.message);}
    const connection=await store.get();if(!connection?.refreshToken||connection.needsReconnect)throw fault(503,'管理者が日報のGoogle Drive連携を確認してください。');
    const client=makeClient(config);client.setCredentials({refresh_token:connection.refreshToken});

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { METER_FIELDS,meterChanges,meterDifference,meterSheet,meterDate,previousMeterDate,meterRow } from '../src/meterReadings.mjs';
+import { canAccessMeters,METER_FIELDS,meterChanges,meterDifference,meterSheet,meterDate,previousMeterDate,meterRow } from '../src/meterReadings.mjs';
 import { meterSheets } from '../api/_lib/meter-sheets.js';
 import { createMeterHandler } from '../api/meter-readings.js';
 import { seal } from '../api/_lib/report-auth.js';
@@ -32,10 +32,10 @@ test('原本の当日・前日を読み、指定した日の入力セルだけ�
 test('式の保護と年度違いを検出する',async()=>{
  const s=meterSheets('x',sheetFetcher({formula:true}).fetcher),snap=await s.read('2026-10-27');await assert.rejects(()=>s.write(snap,{'electric-reading':1}));await assert.rejects(()=>meterSheets('x',sheetFetcher({year:2025}).fetcher).read('2026-10-27'),/年度/);
 });
-const secret=Buffer.alloc(32,8).toString('base64'),now=()=>1800000000000,uid='u1',email='member@example.com';
+const secret=Buffer.alloc(32,8).toString('base64'),now=()=>1800000000000,uid='u1',email='member@plandosee.co.jp';
 const baseline={date:'2026-10-27',previousDate:'2026-10-26',current:{'gas-main':10},previous:{'gas-main':8},formulas:{'gas-main':false},sheets:{main:'10',h:'Ｈ-10'}};
-function handlerFixture({role='member',fresh=baseline}={}){
- const writes=[],records={};let reads=0;const h=createMeterHandler({now,configure:()=>({ready:true,secret}),makeStore:()=>({source:async()=>({users:{[uid]:{email,role,name:'担当者'}}}),get:async()=>({refreshToken:'private-token'})}),makeClient:()=>({setCredentials(){},getAccessToken:async()=>({token:'private-access'})}),makeSheets:()=>({read:async()=>{reads++;return reads>1?{...baseline,current:{'gas-main':11}}:fresh;},write:async(s,c)=>writes.push(c)}),makeLocks:()=>({transact:async(paths,plan)=>{const out=plan(records);for(const w of out.writes||[])records[w.path]=w.value;return out.result;}})});return {h,writes};
+function handlerFixture({role='member',fresh=baseline,accountEmail=email}={}){
+ const writes=[],records={};let reads=0;const h=createMeterHandler({now,configure:()=>({ready:true,secret}),makeStore:()=>({source:async()=>({users:{[uid]:{email:accountEmail,role,name:'担当者'}}}),get:async()=>({refreshToken:'private-token'})}),makeClient:()=>({setCredentials(){},getAccessToken:async()=>({token:'private-access'})}),makeSheets:()=>({read:async()=>{reads++;return reads>1?{...baseline,current:{'gas-main':11}}:fresh;},write:async(s,c)=>writes.push(c)}),makeLocks:()=>({transact:async(paths,plan)=>{const out=plan(records);for(const w of out.writes||[])records[w.path]=w.value;return out.result;}})});return {h,writes};
 }
 function request(method,extra={}){return {method,url:'/api/meter-readings?appUid=u1&date=2026-10-27',headers:{origin:'https://team-shift-app.vercel.app','content-type':'application/json',cookie:'__Host-teamshift_line_member='+seal({purpose:'line-member',uid,email,expires:now()+60000},secret)},body:{action:'save',appUid:uid,date:'2026-10-27',values:{'gas-main':'11'},revision:seal({purpose:'meter-snapshot',uid,date:'2026-10-27',expires:now()+60000,snapshot:baseline},secret)},...extra};}
 async function invoke(h,req){const res={setHeader(){},status(n){this.code=n;return this;},json(data){this.data=data;return this;}};await h(req,res);return res;}
@@ -43,3 +43,12 @@ test('認証済みメンバーが確認済みデータを保存し、保存後�
 test('未ログイン・閲覧ユーザー・他サイトからの書込を拒否',async()=>{const {h,writes}=handlerFixture();assert.equal((await invoke(h,request('POST',{headers:{origin:'https://team-shift-app.vercel.app','content-type':'application/json'}}))).code,401);assert.equal((await invoke(handlerFixture({role:'viewer'}).h,request('GET'))).code,403);assert.equal((await invoke(h,request('POST',{headers:{origin:'https://evil.example','content-type':'application/json'}}))).code,403);assert.equal(writes.length,0);});
 test('原本の変更・別日付の確認トークンでは上書きしない',async()=>{const changed=handlerFixture({fresh:{...baseline,previous:{'gas-main':9}}});assert.equal((await invoke(changed.h,request('POST'))).code,409);assert.equal(changed.writes.length,0);const {h,writes}=handlerFixture(),req=request('POST');req.body.date='2026-10-28';assert.equal((await invoke(h,req)).code,409);assert.equal(writes.length,0);});
 
+
+test('検針は正確な社内ドメインだけ許可し、外部・類似・サブドメインを拒否',async()=>{
+ for(const email of ['staff@plandosee.co.jp',' Staff@PLANDOSEE.CO.JP '])assert.equal(canAccessMeters({email}),true);
+ for(const email of ['staff@gmail.com','staff@plandosee.co.jp.evil.com','staff@sub.plandosee.co.jp','@plandosee.co.jp','staff@@plandosee.co.jp','staff@notplandosee.co.jp',''])assert.equal(canAccessMeters({email}),false);
+ assert.equal(canAccessMeters(null),false);
+ const external='member@gmail.com', {h,writes}=handlerFixture({accountEmail:external});
+ for(const method of ['GET','POST']){const req=request(method);req.headers.cookie='__Host-teamshift_line_member='+seal({purpose:'line-member',uid,email:external,expires:now()+60000},secret);assert.equal((await invoke(h,req)).code,403);}
+ assert.equal(writes.length,0);
+});

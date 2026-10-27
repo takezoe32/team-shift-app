@@ -3,11 +3,14 @@ import { GoogleLogin } from '@react-oauth/google';
 import DateInput from './DateInput';
 import { useEditGuard,confirmEditDiscard } from '../editGuard';
 import { japanToday } from '../japanTime.mjs';
-import { METER_GROUPS,METER_FIELDS,METER_URL,meterChanges,meterDifference } from '../meterReadings.mjs';
+import { METER_GROUPS,METER_FIELDS,METER_URL,canAccessMeters,meterChanges,meterDifference } from '../meterReadings.mjs';
 const control='min-h-11 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-800 disabled:opacity-50';
 const primary=control+' bg-blue-600! text-white! border-blue-600!';
 const showNumber=(value,unit='')=>value===null||value===undefined?'未記録':Number(value).toLocaleString('ja-JP',{maximumFractionDigits:8})+(unit?' '+unit:'');
 export default function MeterReadings({currentUser}){
+ return canAccessMeters(currentUser)?<MeterReadingsForm currentUser={currentUser}/>:<p role="alert" className="p-6 text-sm text-gray-600">検針はplandosee.co.jpのアカウントのみ利用できます。</p>;
+}
+function MeterReadingsForm({currentUser}){
  const [date,setDate]=useState(japanToday),[section,setSection]=useState('main'),[snapshot,setSnapshot]=useState(null),[values,setValues]=useState({}),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState(''),[verify,setVerify]=useState(false),[refresh,setRefresh]=useState(0),[review,setReview]=useState(false);
  const dialog=useRef(null),lock=useRef(false),latest=useRef(0);
  const dirty=METER_FIELDS.some(f=>Object.hasOwn(values,f.id)&&String(values[f.id])!==String(snapshot?.current[f.id]??''));

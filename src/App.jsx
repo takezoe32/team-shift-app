@@ -1,3 +1,4 @@
+import { canAccessMeters } from './meterReadings.mjs';
 import MeterReadings from './components/MeterReadings';
 import { inventorySearchCandidates } from './inventorySearch.mjs';
 import useJapanDay from './useJapanDay';
@@ -3583,8 +3584,10 @@ const BottomNav = ({ inventorySection, setInventorySection, activeTab, setActive
   const secondary = [
     { id:'completed', label:'終了履歴', description:'終了したタスクを確認', Icon:ClipboardList },
     { id:'receipt', label:'レシート取込（テスト中）', description:'撮影・読取して仕入れ表用にコピー', Icon:Camera },
+    ...(canAccessMeters(currentUser) ? [
     { id:'meter-daily', label:'毎朝検針', description:'検針値を入力・前日比を確認して原本に保存', Icon:FileSpreadsheet },
     { id:'meter-monthly', label:'毎月検針', description:'部門メーターの原本を開いて入力（別タブ）', Icon:FileSpreadsheet, href:'https://docs.google.com/spreadsheets/d/1KtqHPMkyLzYUlqoLkXsu7xR4viL59pvP/edit?gid=615530499#gid=615530499' },
+    ] : []),
     ...(canManageSettings ? [{ id:'settings', label:'設定', description:'メンバー管理・アプリの設定', Icon:Settings }] : [])
   ];
   const moreActive = secondary.some(item => item.id === activeTab);
