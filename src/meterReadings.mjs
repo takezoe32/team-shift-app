@@ -1,3 +1,4 @@
+export const canAccessMeters = user => /^[^@\s]+@plandosee\.co\.jp$/.test(String(user?.email || '').trim().toLowerCase());
 export const METER_FILE_ID = '1Kt-cUPgl5qt5eMzCMPljymBO3YnGIv8y';
 export const METER_URL = `https://docs.google.com/spreadsheets/d/${METER_FILE_ID}/edit`;
 export const METER_YEAR = 2026;
