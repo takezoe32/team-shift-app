@@ -16,7 +16,7 @@ export function planTaskEdit(teamData, sourceDate, ownerUid, taskId, input, acto
   delete changes.periodOperation;
   const destination = tasks[targetDate]?.[ownerUid] || [];
   if (targetDate !== sourceDate && destination.some(item => item.id === taskId)) throw new Error('変更先に同じタスクがあります。画面を更新してください。');
-  if (changes.handoffOperation) Object.assign(changes, changeHandoff(task, changes.handoffOperation));
+  if (changes.handoffOperation) Object.assign(changes, changeHandoff(task, changes.handoffOperation, 'text', actor));
   const editingHandoff = !!changes.handoffOperation;
   delete changes.handoffOperation;
   if (!period && !editingHandoff && Array.isArray(changes.updates)) changes.updates = [...(task.updates || []), ...changes.updates.slice(-1)];

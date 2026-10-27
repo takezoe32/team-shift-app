@@ -5,10 +5,10 @@ export function getTaskImages(item) {
   return images.filter(image => image?.imageUrl && !seen.has(image.imageUrl) && seen.add(image.imageUrl)).map(image => ({ imageUrl: image.imageUrl, imageName: image.imageName || '', imagePublicId: image.imagePublicId || '', imageBytes: Number(image.imageBytes || 0), ...(image.mediaType === 'video' ? { mediaType: 'video', duration: Number(image.duration || 0), playbackUrl: image.playbackUrl || taskVideoPlaybackUrl(image.imageUrl) } : {}) }));
 }
 export const mergeTaskImages = (item, images) => getTaskImages({ images: [...getTaskImages(item), ...images] });
-export function mergePartnerImageChanges(current, changes) {
+export function mergePartnerImageChanges(current, changes, actor) {
   if (changes.handoffOperation) {
     const { handoffOperation, ...other } = changes;
-    return { ...current, ...other, ...changeHandoff(current, handoffOperation, 'content') };
+    return { ...current, ...other, ...changeHandoff(current, handoffOperation, 'content', actor) };
   }
   const next = { ...current, ...changes };
   if (Array.isArray(changes.images)) next.images = mergeTaskImages(current, changes.images);
@@ -59,3 +59,4 @@ export async function validateTaskVideo(file) {
   durationCache.set(file, duration);
   return duration;
 }
+

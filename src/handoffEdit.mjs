@@ -1,4 +1,5 @@
-export function changeHandoff(item, operation, field = 'text') {
+export const canChangeHandoff = (update, actor) => !!actor?.id && !actor.readOnly && actor.role !== 'viewer' && !!update?.authorUid && update.authorUid === actor.id;
+export function changeHandoff(item, operation, field = 'text', actor) {
   const existing = Array.isArray(item.updates) ? item.updates : [];
   const updates = existing.length || field !== 'content' || !item.content ? existing : [{
     id: 'legacy_' + item.id, text: item.content, authorUid: item.createdByUid || '',
@@ -6,6 +7,7 @@ export function changeHandoff(item, operation, field = 'text') {
   }];
   const target = updates.find(update => update.id === operation.id);
   if (!target) throw new Error('申し送りが削除されています。最新の内容を確認してください。');
+  if (!canChangeHandoff(target, actor)) throw new Error('申し送りの編集・削除は追加した本人のみ行えます。');
   if (target.text !== operation.expectedText || (target.updatedAt || '') !== operation.expectedUpdatedAt) throw new Error('別の端末で変更されています。最新の内容を確認してください。');
   if (!['edit', 'delete'].includes(operation.action)) throw new Error('操作が無効です。');
   const text = String(operation.text || '').trim();
@@ -24,3 +26,4 @@ export function findLiveTask(teamData, selected) {
   }
   return null;
 }
+
