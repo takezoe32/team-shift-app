@@ -1,3 +1,4 @@
+import { taskHistoryEntries } from './taskHistory.mjs';
 import { isTaskFile, validateTaskFiles, uploadTaskDocuments } from './taskFiles.mjs';
 import { canAccessMeters } from './meterReadings.mjs';
 import MeterReadings from './components/MeterReadings';
@@ -2824,14 +2825,15 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
 
   Object.entries(teamData?.tasks || {}).forEach(([dateStr, tasksByUser]) => {
     Object.entries(tasksByUser || {}).forEach(([ownerUid, tasks]) => {
-      (tasks || []).filter(task => task?.completed).forEach(task => {
-        completedEntries.push({
+      (tasks || []).filter(Boolean).forEach(task => {
+        const entry = {
           type: 'member',
           id: task.id,
           date: dateStr,
           completedAt: task.completedAt || task.updatedAt || task.createdAt || null,
           completedByName: completionActorName(task),
           ownerUid,
+          assigneeIds: Array.isArray(task.assigneeIds) ? task.assigneeIds : [ownerUid],
           ownerName: memberMap[ownerUid]?.name || '不明なメンバー',
           assigneeNames: (Array.isArray(task.assigneeIds) ? task.assigneeIds : [ownerUid])
             .map(uid => memberMap[uid]?.name)
@@ -2839,15 +2841,16 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
           title: task.subject || task.text || '内容なし',
           content: task.subject && task.text ? task.text : '',
           imageUrl: task.imageUrl || '', images: getTaskImages(task)
-        });
+        };
+        completedEntries.push(...taskHistoryEntries(entry, task));
       });
     });
   });
 
-  (partnerItems || []).filter(item => item?.completed).forEach(item => {
+  (partnerItems || []).filter(Boolean).forEach(item => {
     const assigneeIds = partnerAssigneeIds(item);
     const assigneeUid = assigneeIds[0] || '';
-    completedEntries.push({
+    const entry = {
       type: 'partner',
       id: item.id,
       date: item.date || String(item.completedAt || '').slice(0, 10),
@@ -2861,7 +2864,8 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
       content: item.content || '',
       partnerName: item.partnerName || '',
       imageUrl: item.imageUrl || '', images: mergeTaskImages(item, getPartnerUpdates(item).flatMap(getTaskImages))
-    });
+    };
+    completedEntries.push(...taskHistoryEntries(entry, item));
   });
 
   const filteredEntries = memberFilter === 'all'
@@ -2869,7 +2873,7 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
     : completedEntries.filter(entry => entry.ownerUid === memberFilter || entry.assigneeIds?.includes(memberFilter));
 
   const monthGroups = filteredEntries.reduce((groups, entry) => {
-    const monthKey = String(entry.date || entry.completedAt || '').slice(0, 7) || '日付未設定';
+    const monthKey = String(entry.historyDate || entry.date || entry.completedAt || '').slice(0, 7) || '日付未設定';
     if (!groups[monthKey]) groups[monthKey] = [];
     groups[monthKey].push(entry);
     return groups;
@@ -2939,7 +2943,7 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
           String(b.completedAt || b.date || '').localeCompare(String(a.completedAt || a.date || ''))
         );
         const dayGroups = entries.reduce((groups, entry) => {
-          const dayKey = String(entry.date || entry.completedAt || '').slice(0, 10) || '日付未設定';
+          const dayKey = String(entry.historyDate || entry.date || entry.completedAt || '').slice(0, 10) || '日付未設定';
           if (!groups[dayKey]) groups[dayKey] = [];
           groups[dayKey].push(entry);
           return groups;
@@ -2948,7 +2952,7 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
         const isOpen = openMonths[monthKey] === true;
 
         const renderEntry = (entry) => (
-          <div key={entry.type + '-' + entry.id} className="p-3">
+          <div key={entry.type + '-' + entry.id + '-' + entry.historyKind + '-' + entry.historyDate} className="p-3">
             <div className="min-w-0">
               <div className="flex items-start justify-between gap-2">
                 <div className="text-sm font-bold text-gray-800 break-words">{entry.title}</div>
@@ -2956,6 +2960,7 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
                   {entry.type === 'partner' ? 'パートナー' : 'メンバー'}
                 </span>
               </div>
+              <div className="mt-1 text-xs font-bold text-green-700">{entry.historyLabel}</div>
               <div className="mt-1 text-[10px] text-gray-500">
                 {entry.type === 'partner' && entry.partnerName ? entry.partnerName + ' ・ ' : ''}
                 担当: {entry.assigneeNames.length ? entry.assigneeNames.join('・') : entry.ownerName}
@@ -2968,7 +2973,7 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
                 <div className="mt-2 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600 whitespace-pre-wrap break-words">{entry.content}</div>
               )}
               <ImageGallery item={entry}/>
-              {(entry.type === 'partner' || isAdmin || entry.ownerUid === currentUserUid) && (
+              {entry.historyKind !== 'daily' && (entry.type === 'partner' || isAdmin || entry.ownerUid === currentUserUid) && (
                 <ActionIconButton action="delete" type="button" onClick={() => handleDelete(entry)} disabled={deletingKey !== null} aria-label={`${entry.title}の終了履歴を削除`} className=""/>
               )}
             </div>
