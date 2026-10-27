@@ -66,7 +66,6 @@ import {
   Save, 
   LogOut, 
   ClipboardList,
-  Handshake,
   Settings, 
   Table, 
   UserPlus,
@@ -3544,20 +3543,20 @@ const BottomNav = ({ activeTab, setActiveTab, setSelectedDate, currentUser, role
   const menuRef = useRef(null);
   const primary = [
     { id:'calendar', label:'カレンダー', Icon:CalendarIcon },
-    { id:'daily', label:'日別タスク', Icon:CheckSquare },
-    { id:'partner', label:'パートナー', Icon:Handshake },
+    ...(canManageShift ? [{ id:'team-shift', label:'シフト', Icon:Table }] : []),
+    { id:'daily', label:'タスク', Icon:CheckSquare },
     { id:'inventory', label:'在庫管理', Icon:Package }
   ];
   const secondary = [
-    ...(canManageShift ? [{ id:'team-shift', label:'シフト管理', description:'勤務・休みの予定を確認', Icon:Table }] : []),
     { id:'completed', label:'終了履歴', description:'終了したタスクを確認', Icon:ClipboardList },
     { id:'receipt', label:'レシート取込（テスト中）', description:'撮影・読取して仕入れ表用にコピー', Icon:Camera },
     ...(canManageSettings ? [{ id:'settings', label:'設定', description:'メンバー管理・アプリの設定', Icon:Settings }] : [])
   ];
   const moreActive = secondary.some(item => item.id === activeTab);
   const closeMenu = () => menuRef.current?.close();
+  const isPrimaryActive = id => id === 'daily' ? ['daily','partner'].includes(activeTab) : activeTab === id;
   const navigate = tab => {
-    if (tab === activeTab) { closeMenu(); return; }
+    if (tab === activeTab || (tab === 'daily' && activeTab === 'partner')) { closeMenu(); return; }
     if (!confirmDiscardEdits()) return;
     if (tab === 'daily') setSelectedDate(japanToday());
     setActiveTab(tab);
@@ -3573,7 +3572,7 @@ const BottomNav = ({ activeTab, setActiveTab, setSelectedDate, currentUser, role
   return <>
     <nav aria-label="メインメニュー" className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 pb-safe z-20 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
       <div className="flex min-h-[68px] w-full">
-        {primary.map(({id,label,Icon})=><button key={id} type="button" aria-current={activeTab===id?'page':undefined} onClick={()=>navigate(id)} className={navClass(activeTab===id)}><Icon className="w-6 h-6" aria-hidden="true"/><span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">{label}</span>{activeTab===id&&<span className="absolute top-0 w-1/2 h-0.5 bg-blue-600 rounded-b-full"/>}</button>)}
+        {primary.map(({id,label,Icon})=><button key={id} type="button" aria-current={isPrimaryActive(id)?'page':undefined} onClick={()=>navigate(id)} className={navClass(isPrimaryActive(id))}><Icon className="w-6 h-6" aria-hidden="true"/><span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">{label}</span>{isPrimaryActive(id)&&<span className="absolute top-0 w-1/2 h-0.5 bg-blue-600 rounded-b-full"/>}</button>)}
         <button type="button" aria-haspopup="dialog" aria-expanded={menuOpen} aria-controls="more-navigation" onClick={()=>{menuRef.current?.showModal();setMenuOpen(true);}} className={navClass(moreActive||menuOpen)}><span aria-hidden="true" className="h-6 flex items-center text-2xl font-black leading-none tracking-widest">•••</span><span className="text-[10px] sm:text-xs font-bold">その他</span>{moreActive&&<span className="absolute top-0 w-1/2 h-0.5 bg-blue-600 rounded-b-full"/>}</button>
       </div>
     </nav>
@@ -4176,6 +4175,8 @@ export default function App() {
                 </button>
               </div>
             </div>
+
+            {['daily','partner'].includes(activeTab) && <section className="shrink-0 border-b border-gray-200 bg-white px-3 py-3"><div className="mx-auto max-w-3xl"><h2 className="mb-2 text-base font-bold text-gray-800">タスク</h2><div role="group" aria-label="タスクの種類" className="grid grid-cols-2 gap-2">{[['daily','日別タスク'],['partner','パートナータスク']].map(([id,label])=><button key={id} type="button" aria-pressed={activeTab===id} onClick={()=>{if(activeTab===id || !confirmDiscardEdits())return;if(id==='daily')setSelectedDate(japanToday());setActiveTab(id);}} className={`min-h-11 rounded-xl border px-3 text-sm font-bold active:scale-[0.98] ${activeTab===id?'border-blue-600 bg-blue-600 text-white':'border-gray-300 bg-white text-gray-600'}`}>{label}</button>)}</div></div></section>}
 
             {activeTab === 'help' ? (
               <HelpView currentUser={currentUser}/>
