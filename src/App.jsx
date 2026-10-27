@@ -3582,6 +3582,8 @@ const BottomNav = ({ inventorySection, setInventorySection, activeTab, setActive
   const secondary = [
     { id:'completed', label:'終了履歴', description:'終了したタスクを確認', Icon:ClipboardList },
     { id:'receipt', label:'レシート取込（テスト中）', description:'撮影・読取して仕入れ表用にコピー', Icon:Camera },
+    { id:'meter-daily', label:'毎朝検針', description:'積算メーターの原本を開いて入力（別タブ）', Icon:FileSpreadsheet, href:'https://docs.google.com/spreadsheets/d/1Kt-cUPgl5qt5eMzCMPljymBO3YnGIv8y/edit?gid=1296269581#gid=1296269581' },
+    { id:'meter-monthly', label:'毎月検針', description:'部門メーターの原本を開いて入力（別タブ）', Icon:FileSpreadsheet, href:'https://docs.google.com/spreadsheets/d/1KtqHPMkyLzYUlqoLkXsu7xR4viL59pvP/edit?gid=615530499#gid=615530499' },
     ...(canManageSettings ? [{ id:'settings', label:'設定', description:'メンバー管理・アプリの設定', Icon:Settings }] : [])
   ];
   const moreActive = secondary.some(item => item.id === activeTab);
@@ -3623,7 +3625,7 @@ const BottomNav = ({ inventorySection, setInventorySection, activeTab, setActive
     <dialog id="more-navigation" ref={menuRef} aria-labelledby="more-navigation-heading" onClose={()=>setMenuOpen(false)} onClick={event=>{if(event.target===event.currentTarget)closeMenu();}} className="fixed inset-x-0 top-auto bottom-0 m-0 mx-auto w-full max-w-xl max-h-[85dvh] overflow-y-auto rounded-t-3xl border-0 bg-white p-0 text-gray-800 shadow-2xl backdrop:bg-black/40">
       <div className="p-4 sm:p-6 space-y-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
         <div className="flex items-center justify-between"><h2 id="more-navigation-heading" className="text-lg font-bold">その他のメニュー</h2><button type="button" autoFocus onClick={closeMenu} aria-label="メニューを閉じる" className="min-h-11 min-w-11 flex items-center justify-center rounded-full bg-gray-100 active:bg-gray-200"><X size={22}/></button></div>
-        <div className="grid grid-cols-2 gap-3">{secondary.map(({id,label,description,Icon})=><button key={id} type="button" aria-current={activeTab===id?'page':undefined} onClick={()=>navigate(id)} className={`min-h-28 rounded-2xl border p-4 text-left flex flex-col items-start gap-2 active:bg-blue-100 ${activeTab===id?'border-blue-500 bg-blue-50 text-blue-800':'border-gray-200 bg-gray-50 text-gray-800'}`}><Icon size={26} aria-hidden="true"/><span className="text-base font-bold">{label}</span><span className="text-xs text-gray-600">{description}</span></button>)}</div>
+        <div className="grid grid-cols-2 gap-3">{secondary.map(({id,label,description,Icon,href})=>{const Entry=href?'a':'button';return <Entry key={id} type={href?undefined:'button'} href={href} target={href?'_blank':undefined} rel={href?'noopener noreferrer':undefined} aria-current={activeTab===id?'page':undefined} onClick={()=>href?closeMenu():navigate(id)} className={`min-h-28 rounded-2xl border p-4 text-left flex flex-col items-start gap-2 active:bg-blue-100 ${activeTab===id?'border-blue-500 bg-blue-50 text-blue-800':'border-gray-200 bg-gray-50 text-gray-800'}`}><Icon size={26} aria-hidden="true"/><span className="text-base font-bold">{label}</span><span className="text-xs text-gray-600">{description}</span></Entry>;})}</div>
       </div>
     </dialog>
   </>;
