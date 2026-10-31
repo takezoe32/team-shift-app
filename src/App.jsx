@@ -1,3 +1,4 @@
+import InventoryAccessQr from './components/InventoryAccessQr';
 import CalendarPeriodBars, { CalendarPeriodSpace } from './components/CalendarPeriodBars';
 import { calendarPeriods } from './calendarPeriods.mjs';
 import { compareCalendarTasks } from './calendarTaskSort.mjs';
@@ -3550,6 +3551,7 @@ const InventoryView = ({ section = 'list', onSectionChange, inventoryItems = [],
   return <div ref={inventoryScrollRef} className="flex-1 overflow-y-auto bg-gray-50 pb-[84px]">
     <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-4">
       <div className="flex items-center gap-3"><div className="w-11 h-11 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center"><Package size={24}/></div><div><h2 className="text-xl font-black text-gray-800">{section==='register'?'商品登録':section==='history'?'在庫変動履歴':'在庫一覧'}</h2><p className="text-xs text-gray-500">日別タスクで商品を選ぶと在庫が1個減ります。</p></div></div>
+      {section === 'list' && <InventoryAccessQr/>}
       {section !== 'history' && <section className="rounded-2xl border border-gray-200 bg-white p-4 space-y-3">
         <div className="flex items-center justify-between gap-2"><h3 className="text-sm font-black text-gray-700">バーコード・QRコード・型番で商品を確認</h3><button type="button" disabled={isSaving} onClick={()=>setScannerOpen(true)} className="shrink-0 inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-indigo-600 px-3 text-xs font-bold text-white"><Camera size={16}/>カメラで読取</button></div>
         <label className="block text-xs font-bold text-gray-600">{section==='list'?'バーコード番号・型番で検索':'バーコード番号（任意）'}<input value={section==='list'?inventoryQuery:newBarcode} disabled={isSaving} onChange={e=>section==='list'?changeInventoryQuery(e.target.value):changeBarcode(e.target.value)} inputMode={section==='list'?'text':'numeric'} autoComplete="off" placeholder={section==='list'?'例：abc-12345（1文字から候補を表示）':'バーコードを読み取るか入力'} className="mt-1 w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base" maxLength={80}/></label>
