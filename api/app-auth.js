@@ -1,3 +1,6 @@
+import { backupAction } from './_lib/daily-backup.js';
+import { sendAdminAlert, mailReady, ALERT_TO } from './_lib/admin-alert.js';
+import { verifyIncidentToken } from './_lib/incident-auth.js';
 import { Buffer } from 'node:buffer';
 import { createSign } from 'node:crypto';
 import { OAuth2Client } from 'google-auth-library';
@@ -22,7 +25,7 @@ async function verifyGoogle(credential) {
   const ticket = await new OAuth2Client(CLIENT_ID).verifyIdToken({idToken:credential,audience:CLIENT_ID});
   return ticket.getPayload();
 }
-export function createAppAuthHandler({env=globalThis.process.env,configure=configuration,makeStore=makeLineStore,verify=verifyGoogle,mint=firebaseCustomToken,now=Date.now}={}) {
+export function createAppAuthHandler({env=globalThis.process.env,configure=configuration,makeStore=makeLineStore,verify=verifyGoogle,mint=firebaseCustomToken,now=Date.now,manageBackup=backupAction,notify=sendAdminAlert,verifyIncident=verifyIncidentToken}={}) {
   return async (req,res) => {
     res.setHeader('Cache-Control','no-store');
     res.setHeader('X-Content-Type-Options','nosniff');
@@ -31,9 +34,28 @@ export function createAppAuthHandler({env=globalThis.process.env,configure=confi
       verifyRequest(req,false);
       const config=configure(env);
       if (!config.ready || (env.VERCEL_ENV && env.VERCEL_ENV!=='production')) throw fault(503,'ログインのサーバー設定を確認してください。');
+      if (req.body?.action==='incident') {
+        if (!['data_read_failed','app_error'].includes(req.body.code)) throw fault(400,'通知の種類が不正です。');
+        await verifyIncident(String(req.headers.authorization || '').replace(/^Bearer /,''));
+        const result=await notify({code:req.body.code,config,env,now});
+        return res.status(200).json({received:true,configured:result.configured});
+      }
       if (typeof req.body?.credential!=='string' || req.body.credential.length>10000 || !req.body.credential) throw fault(400,'Googleログインをやり直してください。');
       let identity;
       try { identity=await verify(req.body.credential); } catch { throw fault(401,'Googleログインをやり直してください。'); }
+      if (!identity?.email_verified || !identity.sub || !identity.email) throw fault(401,'Googleログインをやり直してください。');
+      const action=req.body.action;
+      if (['backup-status','backup-now','backup-preview','backup-restore','alert-status','alert-test'].includes(action)) {
+        if (!config.admins?.includes(identity.email.trim().toLowerCase())) throw fault(403,'管理者のGoogleアカウントで確認してください。');
+        if (action==='alert-status') return res.status(200).json({configured:mailReady(env),to:ALERT_TO});
+        if (action==='alert-test') {
+          const result=await notify({code:'test',config,env,now});
+          if(!result.configured)throw fault(503,'VercelにALERT_SMTP_PASSWORDの設定が必要です。');
+          return res.status(200).json(result);
+        }
+        return res.status(200).json(await manageBackup({body:req.body,config,now}));
+      }
+      if (action && action!=='login') throw fault(400,'操作を確認してください。');
       const member=registeredMember(await makeStore(env).read('app_data/shared_state'),identity);
       return res.status(200).json({customToken:mint(config.service,member,now()),user:member});
     } catch(error) {
