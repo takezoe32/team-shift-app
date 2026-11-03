@@ -38,10 +38,14 @@ function MeterReadingsForm({currentUser}){
  };
  const switchDate=next=>{if(next&&next!==date&&confirmEditDiscard(dirty,saving)){setValues({});setSnapshot(null);setLoading(true);setError('');setMessage('');setVerify(false);setDate(next);}};
  const reload=()=>{if(confirmEditDiscard(dirty,saving)){setValues({});setSnapshot(null);setLoading(true);setError('');setMessage('');setVerify(false);setRefresh(v=>v+1);}};
- const sendMapSnapshot=()=>mapFrame.current?.contentWindow?.postMessage({type:'meter-map-snapshot',date,previousDate:snapshot?.previousDate,previous:snapshot?.previous,values,formulas:snapshot?.formulas,saving},window.location.origin);
+ const sendMapSnapshot=()=>mapFrame.current?.contentWindow?.postMessage({type:'meter-map-snapshot',date,previousDate:snapshot?.previousDate,previous:snapshot?.previous,values,formulas:snapshot?.formulas,saving,meterMap:snapshot?.meterMap,canManageMap:snapshot?.canManageMap},window.location.origin);
  useEffect(()=>{
   const listener=e=>{if(e.origin!==window.location.origin||e.source!==mapFrame.current?.contentWindow||!snapshot)return;
    if(e.data?.type==='meter-map-ready'){sendMapSnapshot();return;}
+   if(e.data?.type==='meter-map-save-layout'){
+    if(!snapshot.canManageMap)return;
+    fetch('/api/meter-readings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'save-map',appUid:currentUser.id,version:e.data.version,points:e.data.points})}).then(async r=>{const data=await r.json();if(!r.ok)throw new Error(data.error||'配置を保存できませんでした。');setSnapshot(s=>({...s,...data}));mapFrame.current?.contentWindow?.postMessage({type:'meter-map-layout-result',...data},window.location.origin);}).catch(err=>{mapFrame.current?.contentWindow?.postMessage({type:'meter-map-layout-result',error:err.message},window.location.origin);});return;
+   }
    if(e.data?.type!=='meter-map-review'||saving||!e.data.edits||typeof e.data.edits!=='object')return;
    try{const next={...values};for(const [id,value] of Object.entries(e.data.edits)){if(!METER_FIELDS.some(f=>f.id===id)||snapshot.formulas[id]||typeof value!=='string')throw new Error('検針項目を確認してください。');next[id]=value;}const changes=meterChanges(next,snapshot.current);if(!Object.keys(changes).length)throw new Error('変更した検針値がありません。');setValues(next);setError('');setReview(true);}catch(err){setError(err.message);}
   };window.addEventListener('message',listener);sendMapSnapshot();return()=>window.removeEventListener('message',listener);
@@ -68,4 +72,3 @@ function MeterReadingsForm({currentUser}){
   {review&&<dialog ref={dialog} aria-labelledby="meter-review-heading" onCancel={e=>{e.preventDefault();if(!saving)close();}} onClose={()=>setReview(false)} className="fixed inset-0 m-auto max-h-[85dvh] w-[calc(100%-2rem)] max-w-xl overflow-auto rounded-2xl border border-gray-200 bg-white p-5 shadow-xl backdrop:bg-black/40"><h2 id="meter-review-heading" className="text-lg font-bold">検針値の保存確認</h2><p className="mt-2 text-sm">{date.replaceAll('-','/')}：変更した{changed.length}項目を原本に保存します。</p><div className="my-4 divide-y divide-gray-200">{changed.map(f=>{const diff=meterDifference(values[f.id],snapshot.previous[f.id],f.unit);return <div key={f.id} className="py-3 text-sm"><p className="font-bold">{f.section==='main'?'':'H-'}{Number(date.slice(5,7))}・{f.group}／{f.label}</p><p className="mt-1">当日：{showNumber(snapshot.current[f.id],f.unit)} → <strong>{values[f.id]} {f.unit}</strong></p><p className="mt-1 text-xs text-gray-500">前日：{showNumber(snapshot.previous[f.id],f.unit)} ／ 前日比 {diff?.text||'未計算'}</p></div>;})}</div><div className="flex justify-end gap-2"><button type="button" className={control} disabled={saving} onClick={close}>入力に戻る</button><button type="button" className={primary} disabled={saving} onClick={save}>{saving?'保存中…':'原本に保存する'}</button></div></dialog>}
  </div>;
 }
-
