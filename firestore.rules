@@ -1,0 +1,36 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function state() {
+      return get(/databases/$(database)/documents/app_data/shared_state).data;
+    }
+    function member() {
+      return request.auth != null
+        && request.auth.token.get('appMember', false) == true
+        && request.auth.uid in state().get('users', {})
+        && state().users[request.auth.uid].get('email', '').lower() == request.auth.token.get('appEmail', '');
+    }
+    function role() { return state().users[request.auth.uid].get('role', 'staff'); }
+    function admin() {
+      return role() == 'admin' || state().get('roles', {}).get(role(), {}).get('level', 0) >= 40;
+    }
+    function writer() {
+      return role() != 'viewer' && state().get('roles', {}).get(role(), {}).get('readOnly', false) != true;
+    }
+    function safeMemberUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let usersChanged = changed.hasAny(['users']);
+      return !changed.hasAny(['roles', 'roleNames', 'userOrder', 'lineLinkedMembers'])
+        && (!usersChanged || (
+          request.resource.data.users.diff(resource.data.users).affectedKeys().hasOnly([request.auth.uid])
+          && request.resource.data.users[request.auth.uid].diff(resource.data.users[request.auth.uid]).affectedKeys().hasOnly(['name','picture'])
+        ));
+    }
+    match /app_data/shared_state {
+      allow get: if member();
+      allow update: if member() && writer() && (admin() || safeMemberUpdate());
+      allow create, delete, list: if false;
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}

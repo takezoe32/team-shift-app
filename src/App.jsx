@@ -60,7 +60,8 @@ import { hasInventoryProductDetails, inventoryProductLabel, validateInventoryRep
 import LabelOcrCapture from './components/LabelOcrCapture';
 import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { GoogleOAuthProvider, GoogleLogin, googleLogout } from '@react-oauth/google';
-import { jwtDecode } from 'jwt-decode';
+import { getAuth, onAuthStateChanged, signInWithCustomToken, signOut, setPersistence, browserLocalPersistence } from 'firebase/auth';
+import { sharedDataError, appAuthError } from './appAuth.mjs';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, onSnapshot, setDoc as firestoreSetDoc, updateDoc as firestoreUpdateDoc, deleteField, arrayUnion, runTransaction as firestoreRunTransaction } from 'firebase/firestore';
 
@@ -108,6 +109,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const firebaseAuth = getAuth(app);
 const CLOUDINARY_CLOUD_NAME = 'hfkn6ad1';
 const CLOUDINARY_UPLOAD_PRESET = 'teamshift_tasks';
 const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
@@ -332,7 +334,7 @@ const checkIsAdmin = (user, roles) => {
   return (roles[user.role].level || 0) >= 40;
 };
 
-const LoginScreen = ({ onGoogleLoginSuccess, authError }) => (
+const LoginScreen = ({ onGoogleLoginSuccess, authError, busy }) => (
   <div className="flex-1 flex flex-col items-center justify-center bg-gray-50 p-6 min-h-screen">
     <div className="w-full max-w-sm bg-white p-8 rounded-2xl shadow-lg text-center space-y-6">
       <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto">
@@ -361,11 +363,11 @@ const LoginScreen = ({ onGoogleLoginSuccess, authError }) => (
       )}
 
       <div className="pt-2 flex justify-center">
-        <GoogleLogin
+        {busy ? <p role="status">ログインを確認中…</p> : <GoogleLogin
           onSuccess={onGoogleLoginSuccess}
           onError={() => alert('Google ログインに失敗しました')}
           useOneTap
-        />
+        />}
       </div>
       <a href="/privacy.html" className="block text-xs text-blue-700 underline">プライバシーポリシー</a>
     </div>
@@ -3681,6 +3683,12 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState(japanToday());
   useJapanDay(setSelectedDate);
   const [authError, setAuthError] = useState('');
+  const [firebaseUser, setFirebaseUser] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [loginBusy, setLoginBusy] = useState(false);
+  const [dataError, setDataError] = useState('');
+  const [dataRetry, setDataRetry] = useState(0);
+  const loginInProgressRef = useRef(false);
   
   const [shiftTypes, setShiftTypes] = useState(DEFAULT_SHIFT_TYPES);
   const [roles, setRoles] = useState(INITIAL_ROLES);
@@ -3780,15 +3788,35 @@ export default function App() {
     }
   };
 
+  // Local profile caches never grant database access. Firebase restores a verified session.
+  useEffect(() => {
+    let active = true;
+    const unsubscribe = onAuthStateChanged(firebaseAuth, user => {
+      if (!active) return;
+      setIsLoaded(false);
+      setDataError('');
+      setFirebaseUser(user);
+      setAuthReady(true);
+      if (!user) {
+        setCurrentUser(null);
+        currentUserRef.current = null;
+        writeIdentity = { user: null, roles: {} };
+        loginRestoreCompletedRef.current = false;
+      }
+    }, () => { if (active) { setAuthReady(true); setAuthError('ログイン状態を確認できません。画面を再読み込みしてください。'); } });
+    return () => { active = false; unsubscribe(); };
+  }, []);
+
   // Firestore Realtime Listener
   useEffect(() => {
+    if (!firebaseUser) return;
     const docRef = doc(db, 'app_data', 'shared_state');
     const unsubscribe = onSnapshot(docRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data();
-        let savedIdentity = currentUserRef.current;
-        if (!savedIdentity) { try { savedIdentity = JSON.parse(localStorage.getItem('google_user') || 'null'); } catch { /* No restored session. */ } }
-        writeIdentity = { user: (savedIdentity?.email ? Object.values(data.users || {}).find(user => user.email?.toLowerCase() === savedIdentity.email.toLowerCase()) : null) || savedIdentity, roles: withViewerRole(data.roles || INITIAL_ROLES) };
+        const verifiedMember = data.users?.[firebaseUser.uid];
+        if (!verifiedMember) { setDataError('登録メンバーの情報が見つかりません。管理者に確認してください。'); return; }
+        writeIdentity = { user: { ...verifiedMember, id: firebaseUser.uid }, roles: withViewerRole(data.roles || INITIAL_ROLES) };
         let currentUsers = { ...(data.users || {}) };
         let currentShifts = { ...(data.teamData?.shifts || {}) };
         let currentTasks = { ...(data.teamData?.tasks || {}) };
@@ -3973,43 +4001,27 @@ export default function App() {
         setRoles(withViewerRole(data.roles || INITIAL_ROLES));
         setRoleNames({ ...(data.roleNames || DEFAULT_ROLE_NAMES), viewer: '閲覧のみ' });
 
-        // Firestoreの読み込み後にだけ保存済みログインを復元する。
-        // 重複IDが残っていた場合も、正規ユーザーへ自動的に付け替える。
-        const savedUserRaw = localStorage.getItem('google_user');
-        if (savedUserRaw) {
-          try {
-            const savedUser = JSON.parse(savedUserRaw);
-            const savedEmail = (savedUser.email || '').trim().toLowerCase();
-            const restoredUser = Object.values(currentUsers).find(
-              u => (u.email || '').trim().toLowerCase() === savedEmail
-            );
-            if (restoredUser) {
-              // 初回のログイン復元時だけ初期画面を決める。
-              // 以降のFirestore更新では、日別タスクの保存・削除などで
-              // 現在の画面がカレンダーへ戻らないようにする。
-              setCurrentUser(restoredUser);
-              currentUserRef.current = restoredUser;
-              if (!loginRestoreCompletedRef.current) {
-                setActiveTab(new URLSearchParams(window.location.search).has('line_link') ? 'help' : localStorage.getItem('teamshift_skip_help_on_login') === 'true' ? 'calendar' : 'help');
-                loginRestoreCompletedRef.current = true;
-              }
-              localStorage.setItem('google_user', JSON.stringify(restoredUser));
-            } else {
-              localStorage.removeItem('google_user');
-            }
-          } catch {
-            localStorage.removeItem('google_user');
-          }
+        // Restore the canonical member selected by the server, not a localStorage identity.
+        const restoredUser = { ...currentUsers[firebaseUser.uid], id: firebaseUser.uid };
+        setCurrentUser(restoredUser);
+        currentUserRef.current = restoredUser;
+        if (!loginRestoreCompletedRef.current) {
+          setActiveTab(new URLSearchParams(window.location.search).has('line_link') ? 'help' : localStorage.getItem('teamshift_skip_help_on_login') === 'true' ? 'calendar' : 'help');
+          loginRestoreCompletedRef.current = true;
         }
+        localStorage.setItem('google_user', JSON.stringify(restoredUser));
+        setDataError('');
+        setIsLoaded(true);
+      } else {
+        setDataError(sharedDataError({ code: 'not-found' }));
       }
-      setIsLoaded(true);
     }, (error) => {
       console.error("Firestore Listen Error:", error);
-      setIsLoaded(true);
+      setDataError(sharedDataError(error));
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [firebaseUser, dataRetry]);
 
   const deleteUserCompletely = (uid) => {
     const updatedUsers = { ...users };
@@ -4040,93 +4052,31 @@ export default function App() {
     saveToFirestore({ userOrder: updatedOrder, teamData: updatedTeamData });
   };
 
-  const handleGoogleLoginSuccess = (credentialResponse) => {
+  const handleGoogleLoginSuccess = async (credentialResponse) => {
+    if (loginInProgressRef.current) return;
+    loginInProgressRef.current = true;
+    setLoginBusy(true);
     setAuthError('');
-    lastDebugActionRef.current = 'login.start';
-
-    if (!isLoaded) {
-      setAuthError('メンバー情報を読み込み中です。少し待ってからもう一度ログインしてください。');
-      return;
+    try {
+      const response = await fetch('/api/app-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ credential: credentialResponse.credential }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'ログインできませんでした。');
+      await setPersistence(firebaseAuth, browserLocalPersistence);
+      await signInWithCustomToken(firebaseAuth, result.customToken);
+      // Secondary integrations retain their own scoped server sessions.
+      void establishReportSession(credentialResponse.credential).catch(() => {});
+      void fetch('/api/line-login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'session', appUid: result.user.id, credential: credentialResponse.credential }) }).catch(() => {});
+    } catch (error) {
+      setAuthError(appAuthError(error));
+    } finally {
+      loginInProgressRef.current = false;
+      setLoginBusy(false);
     }
-
-    void establishReportSession(credentialResponse.credential).catch(() => {});
-    const decoded = jwtDecode(credentialResponse.credential);
-    const loginEmail = (decoded.email || '').trim().toLowerCase();
-    void writeDebugLog({ level: 'INFO', event: 'login.start', user: { id: decoded.sub || '', email: loginEmail, name: decoded.name || '' }, details: { googleSub: decoded.sub || '' } });
-
-    if (!loginEmail) {
-      setAuthError('Googleアカウントのメールアドレスを取得できませんでした。');
-      return;
-    }
-
-    const userList = Object.values(users);
-    const matchedUsers = userList.filter(
-      u => (u.email || '').trim().toLowerCase() === loginEmail
-    );
-
-    const isFirstUser = userList.length === 0;
-
-    if (!isFirstUser && matchedUsers.length === 0) {
-      setAuthError(`メールアドレス (${loginEmail}) は登録されていません。管理者に登録を依頼してください。`);
-      return;
-    }
-
-    let loggedInUser;
-
-    if (isFirstUser) {
-      loggedInUser = {
-        id: decoded.sub,
-        name: decoded.name,
-        email: loginEmail,
-        picture: decoded.picture,
-        role: 'admin',
-        canManageShift: true
-      };
-      const updatedUsers = { [loggedInUser.id]: loggedInUser };
-      const updatedOrder = [loggedInUser.id];
-      setUsers(updatedUsers);
-      setUserOrder(updatedOrder);
-      saveUsersToFirestore(updatedUsers, users);
-      saveToFirestore({ userOrder: updatedOrder });
-    } else {
-      // 同じメールが複数残っていても、userOrderに登録されているIDを優先。
-      // これにより古い重複IDで新しいシフトが作られるのを防ぐ。
-      const matchedUser =
-        matchedUsers.find(u => userOrder.includes(u.id)) ||
-        matchedUsers.find(u => !u.id.startsWith('u_')) ||
-        matchedUsers[0];
-
-      // ログイン時はGoogleプロフィール名で設定名を上書きしない。
-      // 名前は設定画面で登録・編集した users[].name をそのまま使用する。
-      loggedInUser = {
-        ...matchedUser,
-        picture: decoded.picture
-      };
-
-      const updatedUsers = {
-        ...users,
-        [matchedUser.id]: {
-          ...matchedUser,
-          picture: decoded.picture
-        }
-      };
-      setUsers(updatedUsers);
-      writeIdentity = { user: loggedInUser, roles };
-      if (!isReadOnlyUser(loggedInUser, roles)) saveUsersToFirestore(updatedUsers, users);
-    }
-
-    writeIdentity = { user: loggedInUser, roles };
-    setCurrentUser(loggedInUser);
-    void fetch('/api/line-login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'session', appUid: loggedInUser.id, credential: credentialResponse.credential }) }).catch(() => {});
-    setActiveTab(new URLSearchParams(window.location.search).has('line_link') ? 'help' : localStorage.getItem('teamshift_skip_help_on_login') === 'true' ? 'calendar' : 'help');
-    currentUserRef.current = loggedInUser;
-    lastDebugActionRef.current = 'login.success';
-    void writeDebugLog({ level: 'INFO', event: 'login.success', user: loggedInUser, details: { matchedUserId: loggedInUser.id } });
-    localStorage.setItem('google_user', JSON.stringify(loggedInUser));
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (!confirmDiscardEdits()) return;
+    try { await signOut(firebaseAuth); } catch { setDataError('ログアウトできませんでした。再試行してください。'); return; }
     void endReportSession().catch(() => {});
     void fetch('/api/line-login', { method: 'DELETE', headers: { 'Content-Type': 'application/json' } }).catch(() => {});
     googleLogout();
@@ -4134,6 +4084,7 @@ export default function App() {
     currentUserRef.current = null;
     writeIdentity = { user: null, roles: {} };
     setAuthError('');
+    setDataError('');
     localStorage.removeItem('google_user');
   };
 
@@ -4151,7 +4102,9 @@ export default function App() {
     return levelB - levelA || a.localeCompare(b);
   }).map(id => users[id]).filter(Boolean);
 
-  if (!isLoaded) return <div className="flex-1 bg-gray-50 flex items-center justify-center min-h-screen">Loading...</div>;
+  if (!authReady) return <div role="status" className="min-h-screen flex items-center justify-center bg-gray-50">ログイン状態を確認中…</div>;
+  if (dataError && firebaseUser) return <main className="min-h-screen bg-gray-50 flex items-center justify-center p-6"><section className="max-w-lg rounded-2xl bg-white p-6 shadow space-y-4"><h1 className="text-xl font-bold">保存データを読み込めません</h1><p role="alert" className="text-red-700">{dataError}</p><p className="text-sm text-gray-600">読み込みが完了するまで、データの新規作成・保存は行いません。</p><div className="flex gap-3"><button className="rounded-lg bg-blue-600 text-white px-4 py-3" onClick={() => { setIsLoaded(false); setDataError(''); setDataRetry(value => value + 1); }}>再試行</button><button className="rounded-lg border px-4 py-3" onClick={handleLogout}>ログアウト</button></div></section></main>;
+  if (firebaseUser && !isLoaded) return <div role="status" className="min-h-screen flex items-center justify-center bg-gray-50">保存データを読み込み中…</div>;
 
   const deleteSharedTask = async (dateStr, ownerUid, taskId) => {
     const ref = doc(db, 'app_data', 'shared_state');
@@ -4227,7 +4180,7 @@ export default function App() {
   return (
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
       {!currentUser ? (
-        <LoginScreen onGoogleLoginSuccess={handleGoogleLoginSuccess} authError={authError} />
+        <LoginScreen onGoogleLoginSuccess={handleGoogleLoginSuccess} authError={authError} busy={loginBusy} />
       ) : (
         <div className="app-shell min-h-screen bg-gray-100 flex flex-col w-full">
           <div className="w-full flex-1 flex flex-col bg-white min-h-screen relative overflow-hidden font-sans">
