@@ -3,14 +3,14 @@ import { randomUUID } from 'node:crypto';
 import { fieldsOf, makeBackupStore } from './daily-backup.js';
 import { decodeFields, fault } from './report-auth.js';
 import { tokyoDate } from '../../src/dailyReport.mjs';
-export const ALERT_TO='mitsutake.takezoe@plandosee.co.jp', ALERT_FROM='tlf.operations.crew@gmail.com';
+export const ALERT_TO='mitsutake.takezoe@plandosee.co.jp', ALERT_FROM=ALERT_TO;
 const names={backup_failed:'毎日のバックアップに失敗しました',report_failed:'日報の自動保存に失敗しました',data_read_failed:'アプリの保存データを読み込めませんでした',app_error:'アプリで処理エラーを検知しました',test:'通知メールの送信テスト'};
 const prefix='projects/team-shift-app/databases/(default)/documents/';
 const fallback=new Map();
 export const mailReady=env=>!!env.ALERT_SMTP_PASSWORD;
-export function makeMailer(env){
+export function makeMailer(env,makeTransport=options=>nodemailer.createTransport(options)){
  if(!mailReady(env))throw fault(503,'VercelにALERT_SMTP_PASSWORDの設定が必要です。');
- const transport=nodemailer.createTransport({host:'smtp.gmail.com',port:465,secure:true,auth:{user:ALERT_FROM,pass:env.ALERT_SMTP_PASSWORD.replace(/\s/g,'')},connectionTimeout:10000,greetingTimeout:10000,socketTimeout:15000});
+ const transport=makeTransport({host:'smtp.gmail.com',port:465,secure:true,auth:{user:ALERT_FROM,pass:env.ALERT_SMTP_PASSWORD.replace(/\s/g,'')},connectionTimeout:10000,greetingTimeout:10000,socketTimeout:15000});
  return message=>transport.sendMail(message);
 }
 export async function sendAdminAlert({code,config,env=globalThis.process.env,store,send,now=Date.now,scheduled=false}){

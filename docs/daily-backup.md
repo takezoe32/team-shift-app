@@ -16,7 +16,7 @@
 - 復元直前の状態を退避し、確認画面を開いてから原本に変更があれば中止します。復元後はメンバー・権限も過去の状態に戻ります。実データの復元はテストのためには実行しません。
 
 ## 通知メールの初期設定
-- 送信元：tlf.operations.crew@gmail.com
+- 送信元：mitsutake.takezoe@plandosee.co.jp（通知先と同一）
 - 宛先：mitsutake.takezoe@plandosee.co.jp（ユーザー確認済み）
 - 送信元Gmailで2段階認証を設定し、Googleアカウントの「アプリ パスワード」で送信用のパスワードを発行します：https://myaccount.google.com/apppasswords
 - Vercel → team-shift-app → Settings → Environment Variables に `ALERT_SMTP_PASSWORD` をSecret、Production用として追加します。値はGmailのアプリパスワードです。通常のGoogleログインパスワードを使わず、チャットやGitHubへ貼り付けません。

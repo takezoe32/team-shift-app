@@ -2,7 +2,7 @@ import { Buffer } from 'node:buffer';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { runDailyBackup, loadBackup, backupAction, makeBackupStore, SOURCE, COLLECTION } from '../api/_lib/daily-backup.js';
-import { sendAdminAlert, ALERT_TO } from '../api/_lib/admin-alert.js';
+import { sendAdminAlert, ALERT_TO, ALERT_FROM, makeMailer } from '../api/_lib/admin-alert.js';
 import { createCronHandler } from '../api/daily-report-cron.js';
 import { createAppAuthHandler } from '../api/app-auth.js';
 const prefix='projects/team-shift-app/databases/(default)/documents/';
@@ -117,4 +117,10 @@ test('signed incident identity rejects forged, expired, wrong audience and nonme
  assert.equal((await verifyIncidentToken(token(payload),fetcher)).sub,'member');
  for(const p of [{...payload,appMember:false},{...payload,aud:'other'},{...payload,iss:'https://evil.test'},{...payload,iat:payload.iat-10000,exp:payload.iat-3600}])await assert.rejects(verifyIncidentToken(token(p),fetcher));
  await assert.rejects(verifyIncidentToken(token(payload).slice(0,-20)+'forged',fetcher));assert.equal(fetches,1);
+});
+
+test('company account is both SMTP authenticated sender and notification recipient',async()=>{
+ let options,message;const send=makeMailer({ALERT_SMTP_PASSWORD:'test only value'},value=>{options=value;return {sendMail:async value=>{message=value;}};});
+ await sendAdminAlert({code:'test',env:{},send,now});
+ assert.equal(ALERT_FROM,'mitsutake.takezoe@plandosee.co.jp');assert.equal(options.auth.user,ALERT_FROM);assert.equal(message.from,ALERT_FROM);assert.equal(message.to,ALERT_FROM);assert.equal(options.secure,true);assert.equal(options.auth.pass,'testonlyvalue');
 });
