@@ -63,7 +63,7 @@ function fixture() {
   };
   const handler = createCronHandler({ env, configure: () => ({ ready: true }), makeStore: () => store, makeClient: () => client,
     now: () => Date.parse('2026-10-15T15:42:00Z'), log: v => state.logs.push(v),
-    run: args => runDailyReport({ ...args, saveReport, loadWeather: async () => null }) });
+    backup: async () => ({id:'2026-10-16'}), notify: async () => ({sent:true}), run: args => runDailyReport({ ...args, saveReport, loadWeather: async () => null }) });
   return { state, handler, store, client, saveReport };
 }
 

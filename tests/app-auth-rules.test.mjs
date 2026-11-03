@@ -44,8 +44,23 @@ test('admin can manage members and ordinary task fields remain intact',async()=>
 });
 test('no client can list, delete shared document, or read private integration documents',async()=>{
  const db=client('admin');await denied(getDocs(collection(db,'app_data')));await denied(deleteDoc(doc(db,path)));await denied(getDocFromServer(doc(db,'_server_integrations/daily_report_drive')));
+ for(const path of ['_server_backups/2026-11-04','_server_backups/2026-11-04/parts/000','_server_alerts/2026-11-04-backup_failed']) { await denied(getDocFromServer(doc(db,path))); await denied(updateDoc(doc(db,path),{status:'forged'})); }
 });
 test('member removal and demotion take effect with an existing token',async()=>{
  const db=client('member');await getDocFromServer(doc(db,path));const removed=initial();delete removed.users.member;await seed(removed);await denied(getDocFromServer(doc(db,path)));
  const demoted=initial();demoted.users.member.role='viewer';await seed(demoted);await denied(updateDoc(doc(db,path),{'calendarNote.text':'not allowed'}));await seed();
+});
+import { makeBackupStore, runDailyBackup, loadBackup, backupAction } from '../api/_lib/daily-backup.js';
+test('real Firestore REST commit round-trips backup and restore through the local emulator',async()=>{
+ const fields={users:{mapValue:{fields:{admin:{mapValue:{fields:{email:{stringValue:'admin@example.com'}}}}}}},value:{stringValue:'original'},largeInteger:{integerValue:'9007199254740993'}};
+ const api=host+'/v1/projects/team-shift-app/databases/(default)/documents';
+ const seeded=await fetch(api+'/app_data/shared_state',{method:'PATCH',headers:{Authorization:'Bearer owner','Content-Type':'application/json'},body:JSON.stringify({fields})});assert.equal(seeded.status,200);
+ const store=makeBackupStore({service:{}},(url,options)=>{assert.ok(url.startsWith('https://firestore.googleapis.com/v1/projects/team-shift-app/databases/(default)/documents'));return fetch(url.replace('https://firestore.googleapis.com',host),{...options,headers:{...options.headers,Authorization:'Bearer owner'}});},()=>({getAccessToken:async()=>'emulator-only'}));
+ const clock=()=>Date.parse('2026-11-04T00:00:00+09:00');
+ const result=await runDailyBackup({store,now:clock});assert.equal(result.id,'2026-11-04');assert.deepEqual((await loadBackup(store,result.id)).fields,fields);
+ assert.equal((await runDailyBackup({store,now:clock})).skipped,true);
+ const update=await fetch(api+'/app_data/shared_state',{method:'PATCH',headers:{Authorization:'Bearer owner','Content-Type':'application/json'},body:JSON.stringify({fields:{...fields,value:{stringValue:'changed'}}})});assert.equal(update.status,200);
+ const preview=await backupAction({store,now:clock,body:{action:'backup-preview',backupId:result.id}});
+ const restored=await backupAction({store,now:clock,body:{action:'backup-restore',backupId:result.id,expectedUpdateTime:preview.expectedUpdateTime,checksum:preview.checksum,confirm:'RESTORE '+result.id}});
+ assert.equal(restored.restored,true);assert.deepEqual((await store.get('app_data/shared_state')).fields,fields);assert.equal((await loadBackup(store,restored.safetyId)).fields.value.stringValue,'changed');
 });

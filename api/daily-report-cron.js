@@ -1,3 +1,5 @@
+import { runDailyBackup } from './_lib/daily-backup.js';
+import { sendAdminAlert } from './_lib/admin-alert.js';
 import { Buffer } from 'node:buffer';
 import { timingSafeEqual } from 'node:crypto';
 import { configuration, oauth, privateStore } from './_lib/report-auth.js';
@@ -8,7 +10,7 @@ export function previousTokyoDate(now) {
   return tokyoDate(Number(now) - 86400000);
 }
 
-export function createCronHandler({ env = globalThis.process.env, configure = configuration, makeClient = oauth, makeStore = privateStore, run = runDailyReport, now = Date.now, log = console.info } = {}) {
+export function createCronHandler({ env = globalThis.process.env, configure = configuration, makeClient = oauth, makeStore = privateStore, run = runDailyReport, backup = runDailyBackup, notify = sendAdminAlert, now = Date.now, log = console.info } = {}) {
   return async function handler(req, res) {
     res.setHeader('Cache-Control', 'no-store');
     if (req.method !== 'GET') { res.setHeader('Allow', 'GET'); return res.status(405).json({ error: 'GETのみ対応しています。' }); }
@@ -18,17 +20,41 @@ export function createCronHandler({ env = globalThis.process.env, configure = co
     if (env.VERCEL_ENV !== 'production') return res.status(403).json({ error: '本番環境のみ実行できます。' });
     // Capture the date once; request parameters cannot select today or other days.
     const date = previousTokyoDate(now());
-    try {
-      const config = configure();
-      if (!config.ready) return res.status(503).json({ date, error: '初回サーバー設定が必要です。' });
-      const result = await run({ config, store: makeStore(config), client: makeClient(config), date, automatic: true, now });
-      log(JSON.stringify({ event: 'daily-report-cron', date, status: result.skipped ? 'skipped' : 'saved', weatherWarning: result.weatherWarning || '' }));
-      return res.status(200).json({ ok: true, date, skipped: !!result.skipped });
-    } catch (error) {
-      const status = error.status || 500;
-      log(JSON.stringify({ event: 'daily-report-cron', date, status: 'failed', httpStatus: status, code: error.code === 'RECONNECT_REQUIRED' ? error.code : '' }));
-      return res.status(status).json({ date, error: '日報の自動保存に失敗しました。管理者が実行ログと連携状態を確認してください。' });
+    let config;
+    const outcome={};
+    async function reportFailure(code) {
+      try { const alert=await notify({code,config,env,now,scheduled:true}); log(JSON.stringify({event:'admin-alert',code,...alert})); }
+      catch { log(JSON.stringify({event:'admin-alert',code,status:'failed'})); }
     }
+    try {
+      config = configure(env);
+      if (!config.ready) throw new Error('configuration');
+    } catch {
+      await reportFailure('backup_failed');
+      return res.status(503).json({date,error:'サーバー設定を確認してください。'});
+    }
+    try {
+      const result=await backup({config,now});
+      outcome.backup={ok:true,id:result.id,skipped:!!result.skipped};
+      log(JSON.stringify({event:'daily-backup',...outcome.backup}));
+    } catch(error) {
+      outcome.backup={ok:false};
+      log(JSON.stringify({event:'daily-backup',status:'failed',code:error.code||''}));
+      await reportFailure('backup_failed');
+    }
+    let reportStatus=200;
+    try {
+      const result = await run({ config, store: makeStore(config), client: makeClient(config), date, automatic: true, now });
+      outcome.report={ok:true,skipped:!!result.skipped};
+      log(JSON.stringify({ event: 'daily-report-cron', date, status: result.skipped ? 'skipped' : 'saved', weatherWarning: result.weatherWarning || '' }));
+    } catch(error) {
+      reportStatus=error.status||500;
+      outcome.report={ok:false};
+      log(JSON.stringify({ event: 'daily-report-cron', date, status: 'failed', httpStatus: reportStatus, code: error.code === 'RECONNECT_REQUIRED' ? error.code : '' }));
+      await reportFailure('report_failed');
+    }
+    if(!outcome.backup.ok||!outcome.report.ok)return res.status(reportStatus===200?503:reportStatus).json({date,...outcome,error:'自動処理の一部に失敗しました。実行ログと連携状態を確認してください。'});
+    return res.status(200).json({ok:true,date,skipped:outcome.report.skipped,...outcome});
   };
 }
 

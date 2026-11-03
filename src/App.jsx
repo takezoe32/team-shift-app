@@ -1,3 +1,4 @@
+import { reportAppIncident } from './appIncident.mjs';
 import InventoryAccessQr from './components/InventoryAccessQr';
 import CalendarPeriodBars, { CalendarPeriodSpace } from './components/CalendarPeriodBars';
 import { calendarPeriods } from './calendarPeriods.mjs';
@@ -1996,6 +1997,7 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
       </div>
       <div className="p-4 space-y-6 max-w-3xl mx-auto">
         {String(users[currentUserUid]?.email || '').toLowerCase() === 'mitsutake.takezoe@plandosee.co.jp' && <LineTaskPanel users={sortedUsers}/>}
+        {String(users[currentUserUid]?.email || '').toLowerCase() === 'mitsutake.takezoe@plandosee.co.jp' && <a href="#data-safety" onClick={event => { if (!confirmDiscardEdits()) event.preventDefault(); }} className="block rounded-xl border border-blue-200 bg-blue-50 p-4 font-bold text-blue-800">データ保護・バックアップ・不具合通知 →</a>}
 
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
           <div className="flex justify-between items-center border-b pb-2 mb-4">
@@ -3721,12 +3723,14 @@ export default function App() {
 
   useEffect(() => {
     const handleWindowError = (event) => {
+      void reportAppIncident(firebaseAuth, 'app_error');
       void writeDebugLog({
         level: 'ERROR', event: 'window.error', user: currentUserRef.current,
         details: { lastAction: lastDebugActionRef.current, message: event?.message || '', source: event?.filename || '', line: event?.lineno || 0, column: event?.colno || 0, stack: event?.error?.stack || '' }
       });
     };
     const handleUnhandledRejection = (event) => {
+      void reportAppIncident(firebaseAuth, 'app_error');
       const reason = event?.reason;
       void writeDebugLog({
         level: 'ERROR', event: 'unhandledrejection', user: currentUserRef.current,
@@ -3753,6 +3757,7 @@ export default function App() {
       await setDoc(docRef, updates, { merge: true });
     } catch (error) {
       console.error("Firestore Save Error:", error);
+      void reportAppIncident(firebaseAuth, 'app_error');
     }
   };
 
@@ -4017,6 +4022,7 @@ export default function App() {
       }
     }, (error) => {
       console.error("Firestore Listen Error:", error);
+      void reportAppIncident(firebaseAuth, 'data_read_failed');
       setDataError(sharedDataError(error));
     });
 
