@@ -16,11 +16,10 @@ function MeterReadingsForm({currentUser}){
  const [frameBox,setFrameBox]=useState({top:64,height:'calc(100dvh - 140px)'});
  useEffect(()=>{
   const root=workspace.current,header=root?.previousElementSibling,nav=document.querySelector('nav[aria-label="メインメニュー"]');
-  const oldBody=document.body.style.overflow,oldRoot=document.documentElement.style.overflow;
-  document.body.style.overflow='hidden';document.documentElement.style.overflow='hidden';window.scrollTo(0,0);
+  window.scrollTo(0,0);
   const fit=()=>{const vv=window.visualViewport,top=Math.max(vv?.offsetTop||0,header?.getBoundingClientRect().bottom||0);const height=Math.max(150,(vv?.height||window.innerHeight)+(vv?.offsetTop||0)-top-(nav?.getBoundingClientRect().height||0));setFrameBox(v=>v.top===top&&v.height===height?v:{top,height});};
   const observer=new ResizeObserver(fit);if(header)observer.observe(header);if(nav)observer.observe(nav);window.addEventListener('resize',fit);window.visualViewport?.addEventListener('resize',fit);window.visualViewport?.addEventListener('scroll',fit);fit();
-  return()=>{observer.disconnect();window.removeEventListener('resize',fit);window.visualViewport?.removeEventListener('resize',fit);window.visualViewport?.removeEventListener('scroll',fit);document.body.style.overflow=oldBody;document.documentElement.style.overflow=oldRoot;};
+  return()=>{observer.disconnect();window.removeEventListener('resize',fit);window.visualViewport?.removeEventListener('resize',fit);window.visualViewport?.removeEventListener('scroll',fit);};
  },[]);
  const dialog=useRef(null),lock=useRef(false),latest=useRef(0);
  const dirty=METER_FIELDS.some(f=>Object.hasOwn(values,f.id)&&String(values[f.id])!==String(snapshot?.current[f.id]??''));
@@ -73,3 +72,4 @@ function MeterReadingsForm({currentUser}){
   {review&&<dialog ref={dialog} aria-labelledby="meter-review-heading" onCancel={e=>{e.preventDefault();if(!saving)close();}} onClose={()=>setReview(false)} className="fixed inset-0 m-auto max-h-[85dvh] w-[calc(100%-2rem)] max-w-xl overflow-auto rounded-2xl border border-gray-200 bg-white p-5 shadow-xl backdrop:bg-black/40"><h2 id="meter-review-heading" className="text-lg font-bold">検針値の保存確認</h2><p className="mt-2 text-sm">{date.replaceAll('-','/')}：変更した{changed.length}項目を原本に保存します。</p><div className="my-4 divide-y divide-gray-200">{changed.map(f=>{const diff=meterDifference(values[f.id],snapshot.previous[f.id],f.unit);return <div key={f.id} className="py-3 text-sm"><p className="font-bold">{f.section==='main'?'':'H-'}{Number(date.slice(5,7))}・{f.group}／{f.label}</p><p className="mt-1">当日：{showNumber(snapshot.current[f.id],f.unit)} → <strong>{values[f.id]} {f.unit}</strong></p><p className="mt-1 text-xs text-gray-500">前日：{showNumber(snapshot.previous[f.id],f.unit)} ／ 前日比 {diff?.text||'未計算'}</p></div>;})}</div><div className="flex justify-end gap-2"><button type="button" className={control} disabled={saving} onClick={close}>入力に戻る</button><button type="button" className={primary} disabled={saving} onClick={save}>{saving?'保存中…':'原本に保存する'}</button></div></dialog>}
  </div>;
 }
+
