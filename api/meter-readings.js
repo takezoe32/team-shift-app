@@ -3,6 +3,7 @@ import { configuration,cookies,unseal,seal,verifyRequest,privateStore,oauth,faul
 import { makeLineStore } from './_lib/line-store.js';
 import { meterSheets } from './_lib/meter-sheets.js';
 import { meterDate,meterChanges,canAccessMeters } from '../src/meterReadings.mjs';
+import { canManageMeterMap,validateMeterPoints,METER_MAP_ID } from '../src/meterMap.mjs';
 import { randomBytes } from 'node:crypto';
 export function createMeterHandler({configure=configuration,makeStore=privateStore,makeLocks=makeLineStore,makeClient=oauth,makeSheets=meterSheets,env=globalThis.process.env,now=Date.now}={}){
  return async(req,res)=>{
@@ -18,12 +19,29 @@ export function createMeterHandler({configure=configuration,makeStore=privateSto
    const store=makeStore(config),source=await store.source(),user=source.users?.[uid];
    if(!user||isReadOnlyUser(user,source.roles||{})||String(user.email||'').trim().toLowerCase()!==member.email)throw fault(403,'検針入力は登録メンバーのみ利用できます。');
    if(!canAccessMeters(user)||!canAccessMeters({email:member.email}))throw fault(403,'検針はplandosee.co.jpのアカウントのみ利用できます。');
+   const mapStore=makeLocks(env),mapPath='_server_integrations/meter_map';
+   const currentMap=await mapStore.read(mapPath);
+   const mapData=()=>({meterMap:currentMap||{map:METER_MAP_ID,version:0,points:[]},canManageMap:canManageMeterMap(user,source.roles)});
+   if(req.method==='POST'&&req.body?.action==='save-map'){
+    if(!canManageMeterMap(user,source.roles))throw fault(403,'マップの登録・変更は管理者のみ行えます。');
+    let points;try{points=validateMeterPoints(req.body.points);}catch(e){throw fault(400,e.message);}
+    if(!Number.isSafeInteger(req.body.version)||req.body.version<0)throw fault(400,'配置の更新状態を確認してください。');
+    const path='app_data/shared_state';
+    const meterMap=await mapStore.transact([path,mapPath],records=>{
+     const fresh=records[path],freshUser=fresh?.users?.[uid];
+     if(!freshUser||!canManageMeterMap(freshUser,fresh.roles)||isReadOnlyUser(freshUser,fresh.roles)||String(freshUser.email||'').trim().toLowerCase()!==member.email)throw fault(403,'マップの登録・変更は管理者のみ行えます。');
+     if((records[mapPath]?.version||0)!==req.body.version)throw fault(409,'他の管理者が配置を更新しました。原本を再読込して最新の配置を確認してください。');
+     const layout={map:METER_MAP_ID,version:req.body.version+1,points,updatedAt:new Date(now()).toISOString(),updatedBy:uid};
+     return {writes:[{path:mapPath,value:layout}],result:layout};
+    });
+    return res.status(200).json({meterMap,canManageMap:true});
+   }
    const date=req.method==='GET'?query.get('date'):req.body?.date;try{meterDate(date);}catch(e){throw fault(400,e.message);}
    const connection=await store.get();if(!connection?.refreshToken||connection.needsReconnect)throw fault(503,'管理者が日報のGoogle Drive連携を確認してください。');
    const client=makeClient(config);client.setCredentials({refresh_token:connection.refreshToken});
    const access=(await client.getAccessToken()).token;if(!access)throw fault(503,'Google Driveの連携を確認してください。');
    const sheets=makeSheets(access);
-   const response=snapshot=>({...snapshot,revision:seal({purpose:'meter-snapshot',uid,date,expires:now()+3600000,snapshot},config.secret)});
+   const response=snapshot=>({...snapshot,...mapData(),revision:seal({purpose:'meter-snapshot',uid,date,expires:now()+3600000,snapshot},config.secret)});
    if(req.method==='GET')return res.status(200).json(response(await sheets.read(date)));
    if(req.body?.action!=='save')throw fault(400,'操作を確認してください。');
    let baseline;try{baseline=unseal(req.body.revision,config.secret);}catch{throw fault(409,'原本を読み込み直してから確認してください。');}
