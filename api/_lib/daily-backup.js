@@ -4,7 +4,7 @@ import { gzipSync, gunzipSync } from 'node:zlib';
 import { GoogleAuth } from 'google-auth-library';
 import { fault, decodeFields } from './report-auth.js';
 import { tokyoDate } from '../../src/dailyReport.mjs';
-export const SOURCE='app_data/shared_state', COLLECTION='_server_backups';
+export const SOURCE='app_data/shared_state', COLLECTION='_server_backups', METER_MAP='_server_integrations/meter_map';
 const prefix='projects/team-shift-app/databases/(default)/documents/';
 const root='https://firestore.googleapis.com/v1/'+prefix.slice(0,-1);
 const field=value=>typeof value==='number'?{integerValue:String(value)}:{stringValue:String(value)};
@@ -29,12 +29,18 @@ const name=path=>prefix+path;
 export const createWrite=(path,fields)=>({update:{name:name(path),fields},currentDocument:{exists:false}});
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 export function validBackupId(id){return typeof id==='string'&&(/^(\d{4}-\d{2}-\d{2}|before-restore-\d{13}-[a-f0-9-]{36})$/.test(id));}
-export function packSource(source,kind,now) {
+function packMeterMap(map){
+ if(!map?.fields)return {};
+ // Stored as JSON text so the checksum stays stable regardless of how Firestore orders map keys.
+ const text=JSON.stringify(map.fields);if(text.length>500000)throw fault(503,'検針マップの容量を確認してください。','BACKUP_SIZE');
+ return {meterMapFields:text,meterMapChecksum:sha(Buffer.from(text)),meterMapUpdateTime:map.updateTime||''};
+}
+export function packSource(source,kind,now,map=null) {
  if(!source?.fields||(kind==='daily'&&!Object.keys(source.fields.users?.mapValue?.fields||{}).length))throw fault(503,'メンバーのある共有原本を確認できません。既存バックアップは保持します。','BACKUP_SOURCE');
  const bytes=Buffer.from(JSON.stringify(source.fields)),compressed=gzipSync(bytes),encoded=compressed.toString('base64');
  const parts=encoded.match(/.{1,400000}/g)||[];
  if(bytes.length>16000000||parts.length>32)throw fault(503,'バックアップの容量を確認してください。','BACKUP_SIZE');
- return {parts,manifest:{version:1,kind,createdAt:new Date(now).toISOString(),sourceUpdateTime:source.updateTime||'',checksum:sha(bytes),byteLength:bytes.length,partCount:parts.length,codec:'gzip-base64-firestore-fields'}};
+ return {parts,manifest:{version:1,kind,createdAt:new Date(now).toISOString(),sourceUpdateTime:source.updateTime||'',checksum:sha(bytes),byteLength:bytes.length,partCount:parts.length,codec:'gzip-base64-firestore-fields',...packMeterMap(map)}};
 }
 export async function loadBackup(store,id) {
  if(!validBackupId(id))throw fault(400,'バックアップを選択してください。');
@@ -45,10 +51,16 @@ export async function loadBackup(store,id) {
  let bytes,fields;
  try{bytes=gunzipSync(Buffer.from(parts.map(p=>p.fields.payload.stringValue).join(''),'base64'),{maxOutputLength:16000000});fields=JSON.parse(bytes.toString());}catch{throw fault(503,'バックアップを読み取れません。','BACKUP_INVALID');}
  if(bytes.length!==meta.byteLength||sha(bytes)!==meta.checksum)throw fault(503,'バックアップの検証に失敗しました。','BACKUP_INVALID');
- return {id,meta,fields};
+ let meterMap=null;
+ if(meta.meterMapFields!==undefined){
+  // Backups made before the shared meter map was included have no map and never touch it on restore.
+  if(typeof meta.meterMapFields!=='string'||sha(Buffer.from(meta.meterMapFields))!==meta.meterMapChecksum)throw fault(503,'検針マップのバックアップ検証に失敗しました。','BACKUP_INVALID');
+  try{meterMap=JSON.parse(meta.meterMapFields);}catch{throw fault(503,'検針マップのバックアップを読み取れません。','BACKUP_INVALID');}
+ }
+ return {id,meta,fields,meterMap};
 }
-async function saveSnapshot(store,source,id,kind,now){
- const {parts,manifest}=packSource(source,kind,now),base=COLLECTION+'/'+id;
+async function saveSnapshot(store,source,id,kind,now,map){
+ const {parts,manifest}=packSource(source,kind,now,map),base=COLLECTION+'/'+id;
  const writes=parts.map((payload,i)=>createWrite(base+'/parts/'+String(i).padStart(3,'0'),{payload:field(payload)}));
  writes.push(createWrite(base,fieldsOf(manifest)));
  try{await store.commit(writes);}catch(error){if(error.status!==409)throw error;await loadBackup(store,id);return {id,skipped:true};}
@@ -65,19 +77,26 @@ export async function runDailyBackup({config,store=makeBackupStore(config),now=D
  const instant=now(),id=tokyoDate(instant),existing=await store.get(COLLECTION+'/'+id);
  let result;
  if(existing){await loadBackup(store,id);result={id,skipped:true};}
- else result=await saveSnapshot(store,await store.get(SOURCE),id,'daily',instant);
+ else result=await saveSnapshot(store,await store.get(SOURCE),id,'daily',instant,await store.get(METER_MAP));
  // Retention only runs after a complete, checksum-verified copy exists for today.
  const removed=await pruneBackups(store,instant);return {...result,removed};
 }
 function counts(fields){const d=decodeFields(fields),days=Object.values(d.teamData?.tasks||{});return {members:Object.keys(d.users||{}).length,memberTasks:days.reduce((sum,day)=>sum+Object.values(day||{}).reduce((n,t)=>n+(Array.isArray(t)?t.length:0),0),0),partnerTasks:(d.partnerItems||[]).length,inventory:(d.inventoryItems||[]).length};}
+const meterPoints=map=>map?(decodeFields(map).points||[]).length:null;
 export async function backupAction({body,config,store=makeBackupStore(config),now=Date.now}){
  if(body.action==='backup-now')return runDailyBackup({config,store,now});
  if(body.action==='backup-status')return {backups:(await store.list()).map(row=>({id:row.name.split('/').pop(),...decodeFields(row.fields)})).filter(row=>validBackupId(row.id)).sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).map(({id,createdAt,kind,byteLength})=>({id,createdAt,kind,byteLength}))};
  const backup=await loadBackup(store,body.backupId),current=await store.get(SOURCE);
- if(body.action==='backup-preview')return {id:backup.id,createdAt:backup.meta.createdAt,checksum:backup.meta.checksum,expectedUpdateTime:current?.updateTime||null,counts:counts(backup.fields)};
+ if(body.action==='backup-preview')return {id:backup.id,createdAt:backup.meta.createdAt,checksum:backup.meta.checksum,expectedUpdateTime:current?.updateTime||null,counts:{...counts(backup.fields),meterPoints:meterPoints(backup.meterMap)}};
  if(body.action!=='backup-restore'||body.confirm!=='RESTORE '+backup.id||body.checksum!==backup.meta.checksum||body.expectedUpdateTime!==(current?.updateTime||null))throw fault(409,'復元内容を再確認してください。');
- let safetyId=null;
- if(current){safetyId='before-restore-'+now()+'-'+randomUUID();await saveSnapshot(store,current,safetyId,'before-restore',now());}
- await store.commit([{update:{name:name(SOURCE),fields:backup.fields},currentDocument:current?{updateTime:current.updateTime}:{exists:false}}]);
+ const currentMap=await store.get(METER_MAP);let safetyId=null;
+ if(current){safetyId='before-restore-'+now()+'-'+randomUUID();await saveSnapshot(store,current,safetyId,'before-restore',now(),currentMap);}
+ const writes=[{update:{name:name(SOURCE),fields:backup.fields},currentDocument:current?{updateTime:current.updateTime}:{exists:false}}];
+ if(backup.meterMap){
+  // A newer version makes admin screens opened before the restore reload instead of overwriting it.
+  const version=Math.max(Number(decodeFields(currentMap?.fields).version)||0,Number(decodeFields(backup.meterMap).version)||0)+1;
+  writes.push({update:{name:name(METER_MAP),fields:{...backup.meterMap,version:{integerValue:String(version)}}},currentDocument:currentMap?{updateTime:currentMap.updateTime}:{exists:false}});
+ }
+ await store.commit(writes);
  return {restored:true,id:backup.id,safetyId};
 }

@@ -1,7 +1,7 @@
 import { Buffer } from 'node:buffer';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { runDailyBackup, loadBackup, backupAction, makeBackupStore, SOURCE, COLLECTION } from '../api/_lib/daily-backup.js';
+import { runDailyBackup, loadBackup, backupAction, makeBackupStore, SOURCE, COLLECTION, METER_MAP } from '../api/_lib/daily-backup.js';
 import { sendAdminAlert, ALERT_TO, ALERT_FROM, makeMailer } from '../api/_lib/admin-alert.js';
 import { createCronHandler } from '../api/daily-report-cron.js';
 import { createAppAuthHandler } from '../api/app-auth.js';
@@ -123,4 +123,35 @@ test('company account is both SMTP authenticated sender and notification recipie
  let options,message;const send=makeMailer({ALERT_SMTP_PASSWORD:'test only value'},value=>{options=value;return {sendMail:async value=>{message=value;}};});
  await sendAdminAlert({code:'test',env:{},send,now});
  assert.equal(ALERT_FROM,'mitsutake.takezoe@plandosee.co.jp');assert.equal(options.auth.user,ALERT_FROM);assert.equal(message.from,ALERT_FROM);assert.equal(message.to,ALERT_FROM);assert.equal(options.secure,true);assert.equal(options.auth.pass,'testonlyvalue');
+});
+const mapFields=(version,names)=>({map:{stringValue:'hotel-1f-20261103'},version:{integerValue:String(version)},points:{arrayValue:{values:names.map((name,i)=>({mapValue:{fields:{n:{integerValue:String(i+1)},name:{stringValue:name},x:{doubleValue:0.25},y:{doubleValue:0.75},fields:{arrayValue:{values:[{stringValue:'electric-reading'}]}}}}}))}},updatedBy:{stringValue:'admin'}});
+const restoreBody=p=>({action:'backup-restore',backupId:p.id,expectedUpdateTime:p.expectedUpdateTime,checksum:p.checksum,confirm:'RESTORE '+p.id});
+test('daily backup verifies and keeps the shared meter map, and a missing map is recorded as absent',async()=>{
+ const f=fixture();f.put(METER_MAP,mapFields(3,['電気室','ガス']));await runDailyBackup({store:f.store,now});
+ const backup=await loadBackup(f.store,'2026-11-04');assert.deepEqual(backup.meterMap,mapFields(3,['電気室','ガス']));
+ assert.equal((await backupAction({store:f.store,now,body:{action:'backup-preview',backupId:'2026-11-04'}})).counts.meterPoints,2);
+ const g=fixture();await runDailyBackup({store:g.store,now});assert.equal((await loadBackup(g.store,'2026-11-04')).meterMap,null);
+ assert.equal((await backupAction({store:g.store,now,body:{action:'backup-preview',backupId:'2026-11-04'}})).counts.meterPoints,null);
+});
+test('a corrupted meter map copy fails verification',async()=>{
+ const f=fixture();f.put(METER_MAP,mapFields(1,['電気室']));await runDailyBackup({store:f.store,now});
+ f.records.get(COLLECTION+'/2026-11-04').fields.meterMapFields.stringValue='{}';await assert.rejects(loadBackup(f.store,'2026-11-04'),e=>e.code==='BACKUP_INVALID');
+});
+test('restore returns the meter map with a newer version and keeps the current map in the safety copy',async()=>{
+ const f=fixture();f.put(METER_MAP,mapFields(2,['電気室','ガス']));await runDailyBackup({store:f.store,now});f.put(METER_MAP,mapFields(5,[]));
+ const p=await backupAction({store:f.store,now,body:{action:'backup-preview',backupId:'2026-11-04'}}),result=await backupAction({store:f.store,now,body:restoreBody(p)});
+ assert.deepEqual((await f.store.get(METER_MAP)).fields,{...mapFields(2,['電気室','ガス']),version:{integerValue:'6'}});
+ assert.deepEqual((await loadBackup(f.store,result.safetyId)).meterMap,mapFields(5,[]));
+});
+test('restoring an older backup without a meter map leaves the current map untouched',async()=>{
+ const f=fixture();await runDailyBackup({store:f.store,now});f.put(METER_MAP,mapFields(4,['電気室']));const before=await f.store.get(METER_MAP);
+ const p=await backupAction({store:f.store,now,body:{action:'backup-preview',backupId:'2026-11-04'}});await backupAction({store:f.store,now,body:restoreBody(p)});
+ assert.deepEqual(await f.store.get(METER_MAP),before);
+});
+test('a meter map change racing with restore rejects the whole restore',async()=>{
+ const f=fixture();f.put(METER_MAP,mapFields(1,['電気室']));await runDailyBackup({store:f.store,now});const source=await f.store.get(SOURCE);
+ const p=await backupAction({store:f.store,now,body:{action:'backup-preview',backupId:'2026-11-04'}});
+ const store={...f.store,commit:async batch=>{if(batch.some(w=>w.update?.name===prefix+METER_MAP))f.put(METER_MAP,mapFields(2,['新しい配置']));return f.store.commit(batch);}};
+ await assert.rejects(backupAction({store,now,body:restoreBody(p)}));
+ assert.deepEqual(await f.store.get(SOURCE),source);assert.equal((await f.store.get(METER_MAP)).fields.version.integerValue,'2');
 });
