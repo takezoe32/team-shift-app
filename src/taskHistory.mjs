@@ -1,4 +1,5 @@
 import { japanToday } from './japanTime.mjs';
+import { isRecurringTask } from './periodTask.mjs';
 
 // Preserve source date/id for complete-task deletion.
 export function taskHistoryEntries(base, task) {
@@ -7,7 +8,7 @@ export function taskHistoryEntries(base, task) {
     ...base,
     historyKind: 'complete',
     historyDate: base.completedAt ? japanToday(base.completedAt) || base.date : base.date,
-    historyLabel: task.periodStartDate && task.periodEndDate ? '全期間終了' : 'タスク終了',
+    historyLabel: isRecurringTask(task) ? '繰り返し終了' : task.periodStartDate && task.periodEndDate ? '全期間終了' : 'タスク終了',
   });
   for (const [day, record] of Object.entries(task.dailyWork || {})) {
     if (!record || !/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;

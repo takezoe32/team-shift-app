@@ -1,4 +1,5 @@
 import { reportCompletionTime, reportWorkText } from './dailyReportWork.mjs';
+import { isRecurringTask, taskOnDay } from './periodTask.mjs';
 import { partnerAssigneeIds } from './partnerAssignees.mjs';
 import { getTaskImages } from './taskImages.mjs';
 export const MEDIA_FOLDER_ID = '1ZH9lLBsZE0wtXvA_Cdq48Hl7PY3Ld-gw';
@@ -38,7 +39,7 @@ export function collectDailyReport(source, date) {
     if (task.completed && !completedDate && !dailyRecord) { unknownDates++; return; }
     const finished = !!dailyRecord || (task.completed && completedDate === date);
     // Recreating an older report includes tasks completed after that day's end.
-    const pending = (!task.completed || completedDate > date) && (!task.periodStartDate || task.periodStartDate <= date) && scheduledDate && scheduledDate <= date && (!tokyoDate(task.createdAt) || tokyoDate(task.createdAt) <= date);
+    const pending = (!task.completed || completedDate > date) && (!task.periodStartDate || task.periodStartDate <= date) && scheduledDate && scheduledDate <= date && (!tokyoDate(task.createdAt) || tokyoDate(task.createdAt) <= date) && (!isRecurringTask(task) || taskOnDay(task, scheduledDate, date));
     if (!finished && !pending) return;
     const ids = dailyRecord?.assigneeIds?.length ? dailyRecord.assigneeIds : type === 'partner' ? partnerAssigneeIds(task) : (task.assigneeIds?.length ? task.assigneeIds : [ownerUid]);
     const subject = String(task.subject || (type === 'partner' ? task.partnerName : '') || '').trim();

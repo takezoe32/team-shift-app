@@ -1,5 +1,5 @@
 import TaskPeriodPanel from './TaskPeriodPanel';
-import { taskOnDay } from '../periodTask.mjs';
+import { taskOnDay, isTaskPast } from '../periodTask.mjs';
 import { japanDateTime } from '../japanTime.mjs';
 import DateInput from './DateInput';
 import { completionActorName } from '../taskCompletionActor.mjs';
@@ -15,7 +15,7 @@ export default function ViewerWorkspace({ inventorySection = 'list', inventoryMo
   const names = ids => ids.map(id => users.find(user => user.id === id)?.name || '担当者不明').join('・');
   const allTasks = Object.entries(teamData.tasks || {}).flatMap(([taskDate, owners]) => Object.entries(owners || {}).flatMap(([uid, tasks]) => (tasks || []).filter(task => task.visibility !== 'private').map(task => ({ ...task, taskDate, assigneeIds: task.assigneeIds?.length ? task.assigneeIds : [uid], recordKey: taskDate + uid + task.id }))));
   const partners = (partnerItems || []).map(item => ({ ...item, taskDate: item.date, assigneeIds: partnerAssigneeIds(item), recordKey: 'partner' + item.id }));
-  const records = (tab === 'partner' ? partners : tab === 'completed' ? [...allTasks, ...partners].filter(item => item.completed) : allTasks.filter(item => taskOnDay(item, item.taskDate, date) || (!item.completed && item.taskDate < date)))
+  const records = (tab === 'partner' ? partners : tab === 'completed' ? [...allTasks, ...partners].filter(item => item.completed) : allTasks.filter(item => taskOnDay(item, item.taskDate, date) || isTaskPast(item, item.taskDate, date)))
     .filter(item => !query || [item.subject, item.text, item.content, item.partnerName, names(item.assigneeIds)].join(' ').includes(query))
     .sort((a, b) => (tab === 'completed' ? String(b.completedAt || '').localeCompare(String(a.completedAt || '')) : String(a.taskDate || '').localeCompare(String(b.taskDate || '')) || String(a.time || '').localeCompare(String(b.time || ''))));
   const title = { daily: '日別タスク', partner: 'パートナータスク', completed: '終了履歴', inventory: '在庫一覧' }[tab] || '閲覧';

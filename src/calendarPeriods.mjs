@@ -1,8 +1,8 @@
-import { isPeriodTask } from './periodTask.mjs';
+import { isPeriodTask, isRecurringTask } from './periodTask.mjs';
 export function calendarPeriods(teamData = {}, partnerItems = []) {
   const members = Object.entries(teamData.tasks || {}).flatMap(([date, owners]) => Object.entries(owners || {}).flatMap(([owner, tasks]) => (tasks || []).filter(Boolean).map(task => ({ ...task, key: `member:${owner}:${task.id}`, sourceDate: date, ownerUid: owner, kind: 'member' }))));
   return [...members, ...partnerItems.filter(Boolean).map(task => ({ ...task, key: `partner:${task.id}`, kind: 'partner' }))]
-    .filter(task => !task.completed && task.visibility !== 'private' && isPeriodTask(task))
+    .filter(task => !task.completed && task.visibility !== 'private' && isPeriodTask(task) && !isRecurringTask(task))
     .sort((a,b) => a.periodStartDate.localeCompare(b.periodStartDate) || a.key.localeCompare(b.key));
 }
 export function periodWeekRows(periods, day) {

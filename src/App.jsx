@@ -14,7 +14,8 @@ import useJapanDay from './useJapanDay';
 import ReceiptImport from './components/ReceiptImport';
 import { TaskContent } from './components/TaskReadPreview';
 import TaskPeriodPanel from './components/TaskPeriodPanel';
-import { isPeriodTask, taskOnDay, periodTaskChanges, taskDisplayDay, isTaskPast, isDailyWorkFinished } from './periodTask.mjs';
+import TaskRepeatFields from './components/TaskRepeatFields';
+import { isPeriodTask, taskOnDay, periodTaskChanges, taskDisplayDay, isTaskPast, isDailyWorkFinished, isRecurringTask, normalizeRepeat, repeatLabel } from './periodTask.mjs';
 import { japanToday, japanTime, japanDateTime, calendarDate } from './japanTime.mjs';
 import DateInput from './components/DateInput';
 import { taskCompletionActor, completionActorName } from './taskCompletionActor.mjs';
@@ -537,7 +538,7 @@ const CalendarView = ({ calendarNote, saveCalendarNote, currentDate, changeMonth
   }
   const activePartnerItems=(partnerItems||[]).filter(i=>!i.completed&&!isDailyWorkFinished(i,todayStr)).sort((a,b)=>compareCalendarPartners(a,b,calendarPartnerSort,todayStr));
   const datesToShow=Object.keys(teamData.tasks || {}).filter(sourceDate => sourceDate <= selectedCalendarTaskDate || Object.values(teamData.tasks[sourceDate] || {}).some(tasks => tasks.some(task => taskOnDay(task,sourceDate,selectedCalendarTaskDate)))).sort();
-  const selectedTasks=datesToShow.flatMap(taskDate=>(sortedUsers||[]).flatMap(member=>(teamData.tasks[taskDate]?.[member.id]||[]).filter(t=>t.visibility!=='private'&&!t.completed&&!(selectedCalendarTaskDate===todayStr&&isDailyWorkFinished(t,todayStr))&&(!t.periodStartDate || t.periodStartDate<=selectedCalendarTaskDate)).map(task=>({...task,ownerUid:member.id,member,taskDate,assigneeIds:Array.isArray(task.assigneeIds)&&task.assigneeIds.length?task.assigneeIds:[member.id]}))));
+  const selectedTasks=datesToShow.flatMap(taskDate=>(sortedUsers||[]).flatMap(member=>(teamData.tasks[taskDate]?.[member.id]||[]).filter(t=>t.visibility!=='private'&&!t.completed&&!(selectedCalendarTaskDate===todayStr&&isDailyWorkFinished(t,todayStr))&&(!t.periodStartDate || t.periodStartDate<=selectedCalendarTaskDate)&&(!isRecurringTask(t)||taskOnDay(t,taskDate,selectedCalendarTaskDate))).map(task=>({...task,ownerUid:member.id,member,taskDate,assigneeIds:Array.isArray(task.assigneeIds)&&task.assigneeIds.length?task.assigneeIds:[member.id]}))));
   const startPartnerEdit=()=>{const [h='',m='']=String(detailPartner?.time||'').split(':');setPartnerEditName(detailPartner?.partnerName||'');setPartnerEditSubject(detailPartner?.subject||'');setPartnerEditImportant(detailPartner?.important === true);setPartnerEditAssigneeIds(partnerAssigneeIds(detailPartner));setPartnerEditDate(detailPartner?.date||'');setPartnerEditHour(h);setPartnerEditMinute(m);setPartnerEditEndTime(detailPartner?.endTime||'');setPartnerEditNote('');setPartnerEditImages([]);setCalendarUploadProgress(null);setIsEditingPartner(true);};
   useEditGuard(isEditingTask || isEditingPartner, isSaving);
   const closeTaskDetail = () => { if (confirmEditDiscard(isEditingTask, isSaving)) { setDetailTask(null); setIsEditingTask(false); } };
@@ -603,7 +604,7 @@ const CalendarView = ({ calendarNote, saveCalendarNote, currentDate, changeMonth
     if (!detailPartner || calendarSavingRef.current) return;
     const title = detailPartner.subject || detailPartner.partnerName || 'パートナータスク';
     const message = action === 'complete'
-      ? `「${title}」${isPeriodTask(detailPartner) ? 'の期間全体' : ''}を終了しますか？\n終了履歴に移動します。`
+      ? `「${title}」${isRecurringTask(detailPartner) ? 'の繰り返し' : isPeriodTask(detailPartner) ? 'の期間全体' : ''}を終了しますか？\n終了履歴に移動します。`
       : `「${title}」を削除しますか？\n申し送り・添付の記録も一覧から削除され、元に戻せません。`;
     if (!window.confirm(message)) return;
     calendarSavingRef.current = true;
@@ -1256,7 +1257,7 @@ const DailyTaskItem = ({ task, selectedDate, selectedUserUid, currentUserUid, cu
                 : 'bg-gray-100 border-gray-300 text-gray-400'
           }`}
         >
-          <span className="text-sm font-bold">{task.completed ? '✓ 終了済' : isPeriodTask(task) ? '期間全体を終了' : 'タスクを終了'}</span>
+          <span className="text-sm font-bold">{task.completed ? '✓ 終了済' : isRecurringTask(task) ? '繰り返しを終了' : isPeriodTask(task) ? '期間全体を終了' : 'タスクを終了'}</span>
         </button>
         <div className="col-span-2 row-start-1 min-w-0 w-full break-words sm:col-span-1 sm:col-start-2">
           <ImportantBadge important={task.important}/>{task.completed && <span className="inline-flex items-center gap-1 rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-[9px] font-black mb-1"><CheckSquare size={11}/>終了済み</span>}
@@ -1362,6 +1363,7 @@ const DailyDetailView = ({
   const [newTaskSubject, setNewTaskSubject] = useState('');
   const [newTaskDate, setNewTaskDate] = useState(null);
   const [newTaskPeriodEnd, setNewTaskPeriodEnd] = useState('');
+  const [newTaskRepeat, setNewTaskRepeat] = useState(null);
   const taskRegistrationDate = newTaskDate ?? selectedDate;
   const [newTaskImportant, setNewTaskImportant] = useState(false);
   const [newTaskText, setNewTaskText] = useState('');
@@ -1387,7 +1389,7 @@ const DailyDetailView = ({
   const [isSavingPersonalMemo, setIsSavingPersonalMemo] = useState(false);
   const [isDeletingPersonalMemo, setIsDeletingPersonalMemo] = useState(false);
   // Keep the guard mounted in both the guided and detailed input forms.
-  const hasNewTaskDraft = !!(newTaskPeriodEnd || newTaskDate !== null || newTaskSubject.trim() || newTaskText.trim() || newTaskImportant || newTaskEndTime || newTaskProductId || newTaskProductQuantity !== '1' || newTaskVisibility !== 'public' || newTaskImages.length || newAssigneeIds !== null);
+  const hasNewTaskDraft = !!(newTaskPeriodEnd || newTaskRepeat || newTaskDate !== null || newTaskSubject.trim() || newTaskText.trim() || newTaskImportant || newTaskEndTime || newTaskProductId || newTaskProductQuantity !== '1' || newTaskVisibility !== 'public' || newTaskImages.length || newAssigneeIds !== null);
   useEditGuard(hasNewTaskDraft || isUploading, isUploading);
 
   const currentUser = users[currentUserUid];
@@ -1403,7 +1405,7 @@ const DailyDetailView = ({
         .flatMap(([ownerUid, tasks]) => (tasks || [])
           .filter(task => {
             if (task?.visibility === 'private' || !canViewTask(task, ownerUid)) return false;
-            if ((selectedDate === japanToday() && isDailyWorkFinished(task, selectedDate)) || task.completed || taskOnDay(task, dateStr, selectedDate) || (task.periodStartDate && task.periodStartDate > selectedDate)) return false;
+            if ((selectedDate === japanToday() && isDailyWorkFinished(task, selectedDate)) || task.completed || isRecurringTask(task) || taskOnDay(task, dateStr, selectedDate) || (task.periodStartDate && task.periodStartDate > selectedDate)) return false;
             const assignees = Array.isArray(task.assigneeIds) && task.assigneeIds.length
               ? task.assigneeIds
               : [ownerUid];
@@ -1532,6 +1534,7 @@ const DailyDetailView = ({
   const handleAddTask = async () => {
     if (!taskRegistrationDate) { alert('日付を選択してください。'); return; }
     if (newTaskPeriodEnd && newTaskPeriodEnd < taskRegistrationDate) { alert('作業期間の終了日は開始日以降を選択してください。'); return; }
+    if (newTaskVisibility !== 'private' && newTaskRepeat && !normalizeRepeat(newTaskRepeat)) { alert('繰り返しの曜日を1つ以上選んでください。'); return; }
     if (newTaskVisibility === 'private' ? (!newTaskText.trim() && !newTaskImage) : !newTaskSubject.trim()) { alert(newTaskVisibility === 'private' ? '内容または画像を追加してください。' : 'どこで？どんな内容？を入力してください。'); return; }
     if (addTaskSavingRef.current) return;
     addTaskSavingRef.current = true;
@@ -1546,11 +1549,11 @@ const DailyDetailView = ({
       }
       const productQuantity = Number(newTaskProductQuantity);
       if (newTaskProductId && (!Number.isInteger(productQuantity) || productQuantity < 1)) { alert('使用数量は1以上の整数を入力してください。'); return; }
-      await addTask(taskRegistrationDate, selectedUserUid, newTaskText.trim(), imageUrl, imageName, imagePublicId, imageBytes, newTaskVisibility, newTaskVisibility === 'private' ? '' : newTaskSubject.trim(), newTaskVisibility === 'private' ? '' : newTaskEndTime, newTaskVisibility === 'private' ? '' : newTaskProductId, newTaskProductId ? productQuantity : 1, images, assignees, newTaskVisibility !== 'private' && newTaskImportant, newTaskVisibility === 'private' ? '' : newTaskPeriodEnd);
+      await addTask(taskRegistrationDate, selectedUserUid, newTaskText.trim(), imageUrl, imageName, imagePublicId, imageBytes, newTaskVisibility, newTaskVisibility === 'private' ? '' : newTaskSubject.trim(), newTaskVisibility === 'private' ? '' : newTaskEndTime, newTaskVisibility === 'private' ? '' : newTaskProductId, newTaskProductId ? productQuantity : 1, images, assignees, newTaskVisibility !== 'private' && newTaskImportant, newTaskVisibility === 'private' ? '' : newTaskPeriodEnd, newTaskVisibility === 'private' ? null : normalizeRepeat(newTaskRepeat));
       setTaskUploadProgress({stage:'done'});
       setNewAssigneeIds(null);
       setNewTaskVisibility('public');
-      setNewTaskDate(null); setNewTaskPeriodEnd('');
+      setNewTaskDate(null); setNewTaskPeriodEnd(''); setNewTaskRepeat(null);
       setNewTaskSubject('');
       setNewTaskImportant(false);
       setNewTaskText('');
@@ -1626,12 +1629,12 @@ steps={[
 {newTaskVisibility !== 'private' && <label className="block font-bold">どこで？どんな内容？（必須）<input type="text" value={newTaskSubject} onChange={e => setNewTaskSubject(e.target.value)} placeholder="例：1階ロビーの電球交換" className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label>}
 <label className="block font-bold">{newTaskVisibility === 'private' ? '個人メモ（内容か写真が必要）' : '詳しい内容（任意）'}<textarea rows={4} value={newTaskText} onChange={e => setNewTaskText(e.target.value)} placeholder="例：1階ロビーの電球を交換する" className="w-full mt-2 border border-gray-300 rounded-xl p-3 text-base"/></label>
 {newTaskVisibility !== 'private' && <fieldset className="my-4"><legend className="font-bold text-base">担当者（複数選べます）</legend><p className="text-sm text-gray-500 my-2">担当する人の名前をすべて選んでください。</p><div className="flex flex-wrap gap-2">{sortedUsers.map(user => <label key={user.id} className={`flex items-center gap-2 min-h-12 px-3 border-2 rounded-xl text-base ${taskAssigneeIds.includes(user.id) ? 'bg-blue-50 border-blue-500' : 'border-gray-200'}`}><input type="checkbox" checked={taskAssigneeIds.includes(user.id)} onChange={e => setNewAssigneeIds(e.target.checked ? [...taskAssigneeIds, user.id] : taskAssigneeIds.filter(id => id !== user.id))}/>{user.name}</label>)}</div></fieldset>}
-<label className="block text-sm font-bold">日付<DateInput aria-label="タスクの登録日" value={taskRegistrationDate} onChange={e => setNewTaskDate(e.target.value)} disabled={isUploading} required className="block w-full min-h-12 mt-1 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label>{newTaskVisibility !== 'private' && <label className="block text-sm font-bold">作業期間の終了日（複数日の場合）<DateInput min={taskRegistrationDate} value={newTaskPeriodEnd} onChange={e=>setNewTaskPeriodEnd(e.target.value)} disabled={isUploading} className="block min-h-12 w-full mt-1 border rounded-xl bg-white p-3 text-base"/></label>}
+<label className="block text-sm font-bold">日付<DateInput aria-label="タスクの登録日" value={taskRegistrationDate} onChange={e => setNewTaskDate(e.target.value)} disabled={isUploading} required className="block w-full min-h-12 mt-1 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label>{newTaskVisibility !== 'private' && <TaskRepeatFields repeat={newTaskRepeat} onRepeat={setNewTaskRepeat} periodEnd={newTaskPeriodEnd} onPeriodEnd={setNewTaskPeriodEnd} min={taskRegistrationDate} disabled={isUploading}/>}
 {newTaskVisibility !== 'private' && <QuarterHourTime label="終了予定時間" value={newTaskEndTime} onChange={setNewTaskEndTime} disabled={isUploading}/>}
 <ImagePicker files={newTaskImages} onChange={setNewTaskImages} disabled={isUploading}/>
 </>, validate:() => !taskRegistrationDate ? '日付を選択してください。' : newTaskVisibility !== 'private' && !taskAssigneeIds.length ? '担当者を1人以上選んでください。' : newTaskVisibility !== 'private' && !newTaskSubject.trim() ? 'どこで？どんな内容？を入力してください。' : newTaskVisibility === 'private' && !newTaskText.trim() && !newTaskImage ? '個人メモか写真を追加してください。' : ''}
 ]}
-summary={[[ '重要', newTaskVisibility !== 'private' && newTaskImportant ? '重要' : 'なし' ], [ '登録日', taskRegistrationDate ], ['作業期間の終了日', newTaskPeriodEnd || '単日タスク'], ['担当', newTaskVisibility === 'private' ? users[selectedUserUid]?.name : taskAssigneeIds.map(id => users[id]?.name).filter(Boolean).join('・')], ['公開範囲', newTaskVisibility === 'private' ? '自分だけの個人メモ' : 'みんなに公開'], ['どこで？どんな内容？', newTaskSubject], ['内容', newTaskText], ['終了予定', newTaskEndTime], ['使用する商品', newTaskProductId ? inventoryProductLabel(inventoryItems.find(item => item.id === newTaskProductId) || {}) + ' × ' + newTaskProductQuantity : 'なし'], ['写真・動画', newTaskImages.length + '件']]}
+summary={[[ '重要', newTaskVisibility !== 'private' && newTaskImportant ? '重要' : 'なし' ], [ '登録日', taskRegistrationDate ], ['繰り返し・期間', newTaskVisibility !== 'private' && newTaskRepeat ? repeatLabel(newTaskRepeat) + '（終了日なし）' : newTaskPeriodEnd ? '〜' + newTaskPeriodEnd : '単日タスク'], ['担当', newTaskVisibility === 'private' ? users[selectedUserUid]?.name : taskAssigneeIds.map(id => users[id]?.name).filter(Boolean).join('・')], ['公開範囲', newTaskVisibility === 'private' ? '自分だけの個人メモ' : 'みんなに公開'], ['どこで？どんな内容？', newTaskSubject], ['内容', newTaskText], ['終了予定', newTaskEndTime], ['使用する商品', newTaskProductId ? inventoryProductLabel(inventoryItems.find(item => item.id === newTaskProductId) || {}) + ' × ' + newTaskProductQuantity : 'なし'], ['写真・動画', newTaskImages.length + '件']]}
 />}
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <span className="text-xs font-black text-gray-600">このタスクを</span>
@@ -1643,7 +1646,7 @@ summary={[[ '重要', newTaskVisibility !== 'private' && newTaskImportant ? '重
             <div className="space-y-2 mb-2">
               {newTaskVisibility !== 'private' && <ImportantToggle value={newTaskImportant} onChange={setNewTaskImportant} disabled={isUploading}/>}
               {newTaskVisibility !== 'private' && <label className="block text-sm font-bold">どこで？どんな内容？（必須）<input type="text" value={newTaskSubject} onChange={e=>setNewTaskSubject(e.target.value)} placeholder="例：1階ロビーの電球交換" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm" disabled={isUploading}/></label>}
-              <label className="block text-sm font-bold">日付<DateInput aria-label="タスクの登録日" value={taskRegistrationDate} onChange={e => setNewTaskDate(e.target.value)} disabled={isUploading} required className="block w-full min-h-12 mt-1 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label>{newTaskVisibility !== 'private' && <label className="block text-sm font-bold">作業期間の終了日（複数日の場合）<DateInput min={taskRegistrationDate} value={newTaskPeriodEnd} onChange={e=>setNewTaskPeriodEnd(e.target.value)} disabled={isUploading} className="block min-h-12 w-full mt-1 border rounded-xl bg-white p-3 text-base"/></label>}
+              <label className="block text-sm font-bold">日付<DateInput aria-label="タスクの登録日" value={taskRegistrationDate} onChange={e => setNewTaskDate(e.target.value)} disabled={isUploading} required className="block w-full min-h-12 mt-1 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label>{newTaskVisibility !== 'private' && <TaskRepeatFields repeat={newTaskRepeat} onRepeat={setNewTaskRepeat} periodEnd={newTaskPeriodEnd} onPeriodEnd={setNewTaskPeriodEnd} min={taskRegistrationDate} disabled={isUploading}/>}
               {newTaskVisibility !== 'private' && <label className="flex items-center gap-2 text-xs text-gray-600"><span className="font-bold">終了予定時刻</span><div className="flex items-center gap-1"><select aria-label="終了予定時刻の時" value={newTaskEndTime ? newTaskEndTime.split(':')[0] : ''} onChange={e=>setNewTaskEndTime(e.target.value ? e.target.value+':'+((newTaskEndTime||'').split(':')[1]||'00') : '')} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" disabled={isUploading}><option value="">時</option>{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(v=><option key={v} value={v}>{v}</option>)}</select><span>:</span><select aria-label="終了予定時刻の分" value={newTaskEndTime ? newTaskEndTime.split(':')[1] : ''} onChange={e=>setNewTaskEndTime(((newTaskEndTime||'').split(':')[0]||'00')+':'+e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" disabled={isUploading}><option value="">分</option>{['00','15','30','45'].map(v=><option key={v} value={v}>{v}</option>)}</select></div></label>}
               {newTaskVisibility !== 'private' && <div className="space-y-2"><label className="block text-xs text-gray-600"><span className="block font-bold mb-1">使用する商品（任意）</span><select value={newTaskProductId} onChange={e=>setNewTaskProductId(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white" disabled={isUploading}><option value="">商品を選択しない</option>{inventoryItems.map(item=><option key={item.id} value={item.id} disabled={Number(item.stock||0)<=0}>{item.kind ? item.kind + '：' : ''}{inventoryProductLabel(item)}{item.usageLocation ? '／使用箇所：' + item.usageLocation : ''}（在庫 {Number(item.stock||0)} 個）</option>)}</select></label><div className="flex gap-2"><button type="button" onClick={()=>setProductScannerOpen(true)} disabled={isUploading} className="min-h-10 px-3 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-bold inline-flex items-center gap-1"><Camera size={15}/>バーコード読取</button><label className="flex-1 text-xs text-gray-600 flex items-center gap-2">使用数量<input type="number" min="1" step="1" value={newTaskProductQuantity} onChange={e=>setNewTaskProductQuantity(e.target.value)} className="min-h-10 w-20 rounded-lg border border-gray-200 px-2 text-center text-sm"/></label></div>{productScanMessage && <p className="text-xs text-blue-700">{productScanMessage}</p>}</div>}
             </div>
@@ -2359,6 +2362,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
   const [endTime, setEndTime] = useState('');
   const [partnerName, setPartnerName] = useState('');
   const [partnerPeriodEnd, setPartnerPeriodEnd] = useState('');
+  const [partnerRepeat, setPartnerRepeat] = useState(null);
   const [subject, setSubject] = useState('');
   const [partnerImportant, setPartnerImportant] = useState(false);
   const [partnerAssignees, setPartnerAssignees] = useState([]);
@@ -2381,7 +2385,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
   const deletingPartnerRef = useRef(false);
   const [deletingPartnerId, setDeletingPartnerId] = useState(null);
   const [savedPartnerDate, setSavedPartnerDate] = useState(date);
-  const hasPartnerDraft = !!(partnerPeriodEnd || editingItemId || editingPartnerName || newPartnerName.trim() || partnerName || subject.trim() || content.trim() || partnerImportant || partnerAssignees.length || timeHour || timeMinute || endTime || newPartnerImages.length || date !== savedPartnerDate);
+  const hasPartnerDraft = !!(partnerPeriodEnd || partnerRepeat || editingItemId || editingPartnerName || newPartnerName.trim() || partnerName || subject.trim() || content.trim() || partnerImportant || partnerAssignees.length || timeHour || timeMinute || endTime || newPartnerImages.length || date !== savedPartnerDate);
   useEditGuard(hasPartnerDraft || isSaving || isAddingName, isSaving || isAddingName);
   const revealPartnerForm = () => requestAnimationFrame(() => {
     partnerFormRef.current?.scrollIntoView({ block: 'start', behavior: 'instant' });
@@ -2395,7 +2399,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
     try {
       await deletePartnerItem(item.id);
       if (editingItemId === item.id) {
-        setEditingItemId(null); setPartnerPeriodEnd(''); setPartnerName(''); setSubject(''); setPartnerImportant(false); setContent(''); setNewPartnerImages([]);
+        setEditingItemId(null); setPartnerPeriodEnd(''); setPartnerRepeat(null); setPartnerName(''); setSubject(''); setPartnerImportant(false); setContent(''); setNewPartnerImages([]);
       }
     } catch (error) {
       alert(`削除できませんでした。\n${error.message || 'もう一度お試しください。'}`);
@@ -2437,6 +2441,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
 
   const handleSave = async () => {
     if (partnerPeriodEnd && partnerPeriodEnd < date) { alert('作業期間の終了日は開始日以降を選択してください。'); return; }
+    if (partnerRepeat && !normalizeRepeat(partnerRepeat)) { alert('繰り返しの曜日を1つ以上選んでください。'); return; }
     if (!partnerName || !subject.trim() || !assigneeUid || !date || !time) {
       alert('パートナー名・件名・担当者・日付・開始時間を入力してください。');
       return;
@@ -2450,13 +2455,13 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
     try {
       const addedImages = await uploadTaskAttachments(newPartnerImages, setPartnerUploadProgress);
       const currentItem = editingItemId ? (partnerItems || []).find(item => item.id === editingItemId) : null;
-      if (Object.keys(currentItem?.dailyWork || {}).some(day => !partnerPeriodEnd || day < date || day > partnerPeriodEnd)) throw new Error('作業終了の記録がある日を期間から外すことはできません。');
+      if (Object.keys(currentItem?.dailyWork || {}).some(day => partnerRepeat ? day < date : !partnerPeriodEnd || day < date || day > partnerPeriodEnd)) throw new Error('作業終了の記録がある日を期間から外すことはできません。');
       const images = mergeTaskImages(currentItem, addedImages);
       const { imageUrl = '', imageName = '', imagePublicId = '', imageBytes = 0 } = images.find(media=>media.mediaType !== 'video' && media.mediaType !== 'file') || {};
       const hasNewUpdate = !!(content.trim() || addedImages.length);
       const newUpdate = hasNewUpdate ? createPartnerUpdate(content.trim(), currentUser, addedImages, editingItemId ? 'handoff' : 'initial') : null;
       const updates = newUpdate ? [newUpdate] : [];
-      const itemData = { images, periodStartDate: partnerPeriodEnd ? date : '', periodEndDate: partnerPeriodEnd || '', partnerName, important: partnerImportant, subject: subject.trim(), assigneeUid, assigneeIds: partnerAssignees, date, time, endTime, content: content.trim() || currentItem?.content || '', updates, createdByUid: editingItemId ? (currentItem?.createdByUid || '') : (currentUser?.id || ''), createdByName: editingItemId ? (currentItem?.createdByName || '') : (currentUser?.name || ''), ...(imageUrl ? { imageUrl, imageName, imagePublicId, imageBytes, imageUploadedAt: new Date().toISOString() } : {}) };
+      const itemData = { images, periodStartDate: partnerPeriodEnd || partnerRepeat ? date : '', periodEndDate: partnerRepeat ? '' : partnerPeriodEnd || '', repeat: normalizeRepeat(partnerRepeat), partnerName, important: partnerImportant, subject: subject.trim(), assigneeUid, assigneeIds: partnerAssignees, date, time, endTime, content: content.trim() || currentItem?.content || '', updates, createdByUid: editingItemId ? (currentItem?.createdByUid || '') : (currentUser?.id || ''), createdByName: editingItemId ? (currentItem?.createdByName || '') : (currentUser?.name || ''), ...(imageUrl ? { imageUrl, imageName, imagePublicId, imageBytes, imageUploadedAt: new Date().toISOString() } : {}) };
       if (editingItemId) {
         const savedItemId = editingItemId;
         await debugLog?.('INFO', action + '.firestore.update.start', { itemId: savedItemId, itemData });
@@ -2480,7 +2485,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
       setContent('');
       setSubject(''); setPartnerImportant(false);
       setTimeHour(''); setTimeMinute(''); setEndTime('');
-      setPartnerName(''); setPartnerPeriodEnd('');
+      setPartnerName(''); setPartnerPeriodEnd(''); setPartnerRepeat(null);
       setPartnerAssignees([]);
       setNewPartnerImages([]);
       return true;
@@ -2501,7 +2506,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
   const finishPartner = async item => {
     if (partnerActionRef.current) return;
     partnerActionRef.current = true; setChangingPartnerId(item.id);
-    try { if (isPeriodTask(item) && !item.completed && !window.confirm('期間全体のタスクを終了しますか？本日の作業終了とは別の操作です。')) return; if (item.completed) await togglePartnerItem(item.id); else await completePartnerItem(item.id); }
+    try { if (isPeriodTask(item) && !item.completed && !window.confirm(isRecurringTask(item) ? '繰り返しのタスクを終了しますか？今後の予定も表示されなくなります。本日の作業終了とは別の操作です。' : '期間全体のタスクを終了しますか？本日の作業終了とは別の操作です。')) return; if (item.completed) await togglePartnerItem(item.id); else await completePartnerItem(item.id); }
     catch (error) { alert('終了状態を保存できませんでした。' + (error.message || 'もう一度お試しください。')); }
     finally { partnerActionRef.current = false; setChangingPartnerId(null); }
   };
@@ -2518,7 +2523,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
                 <button type="button" disabled={changingPartnerId !== null} onClick={() => finishPartner(item)}
                   className={`col-span-2 row-start-3 sm:col-span-1 sm:row-start-1 sm:col-start-1 shrink-0 min-w-16 min-h-12 px-3 rounded-xl border-2 flex items-center justify-center ${item.completed ? 'border-green-500 bg-green-500 text-white' : 'border-green-600 bg-green-600 text-white hover:bg-green-700'}`}
                   title={item.completed ? '未完了に戻す' : "タスクを終了"}>
-                  <span className="text-sm font-bold">{item.completed ? '✓ 終了済' : isPeriodTask(item) ? '期間全体を終了' : 'タスクを終了'}</span>
+                  <span className="text-sm font-bold">{item.completed ? '✓ 終了済' : isRecurringTask(item) ? '繰り返しを終了' : isPeriodTask(item) ? '期間全体を終了' : 'タスクを終了'}</span>
                 </button>
                 <div className="col-start-1 row-start-1 sm:col-start-2 min-w-0 text-left sm:text-center">
                   <div className={`text-[10px] font-bold ${item.completed ? 'text-gray-400 line-through' : 'text-blue-600'}`}>{item.date?.replace(/-/g, '/')}</div>
@@ -2537,7 +2542,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
                   <ActionIconButton action="edit" type="button" disabled={isSaving || deletingPartnerId !== null} aria-label={`${item.subject || 'パートナータスク'}を編集`} onClick={() => {
                     if (editingItemId && editingItemId !== item.id && !confirmEditDiscard(true, isSaving)) return;
                     setEditingItemId(item.id);
-                    setPartnerName(item.partnerName || ''); setPartnerPeriodEnd(item.periodEndDate || '');
+                    setPartnerName(item.partnerName || ''); setPartnerPeriodEnd(item.periodEndDate || ''); setPartnerRepeat(normalizeRepeat(item.repeat));
                     setPartnerImportant(item.important === true);
                     setSubject(item.subject || (item.content || '').split(/\r?\n/)[0] || '');
                     setPartnerAssignees(partnerAssigneeIds(item));
@@ -2575,7 +2580,7 @@ steps={[
 <label className="block font-bold">どこ？で何を？（必須）<input type="text" value={subject} onChange={e => setSubject(e.target.value)} placeholder="例：1階ロビーでエアコン点検" className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label>
 </>, validate:() => !partnerName.trim() || !subject.trim() ? 'パートナー名と「どこ？で何を？」を入力してください。' : ''},
 {title:'いつ、誰が担当しますか？', content:<>
-<label className="block font-bold">日付（必須）<DateInput value={date} onChange={e => setDate(e.target.value)} placeholder="" className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label><label className="block font-bold">作業期間の終了日（複数日の場合）<DateInput min={date} value={partnerPeriodEnd} onChange={e=>setPartnerPeriodEnd(e.target.value)} disabled={isSaving} className="w-full min-h-12 mt-1 border rounded-xl bg-white p-3 text-base"/></label>
+<label className="block font-bold">日付（必須）<DateInput value={date} onChange={e => setDate(e.target.value)} placeholder="" className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label><TaskRepeatFields repeat={partnerRepeat} onRepeat={setPartnerRepeat} periodEnd={partnerPeriodEnd} onPeriodEnd={setPartnerPeriodEnd} min={date} disabled={isSaving} labelClassName="block font-bold" inputClassName="w-full min-h-12 mt-1 border rounded-xl bg-white p-3 text-base"/>
 <fieldset><legend className="font-bold">開始時間（必須・15分刻み）</legend><div className="flex items-center gap-2 mt-2"><select aria-label="開始時間の時" value={timeHour} onChange={e => setTimeHour(e.target.value)} className="flex-1 min-h-14 border border-gray-300 rounded-xl p-3 text-base bg-white"><option value="">時を選択</option>{Array.from({length:24}, (_, h) => String(h).padStart(2, '0')).map(h => <option key={h} value={h}>{h}時</option>)}</select><select aria-label="開始時間の分" value={timeMinute} onChange={e => setTimeMinute(e.target.value)} className="flex-1 min-h-14 border border-gray-300 rounded-xl p-3 text-base bg-white"><option value="">分を選択</option>{['00', '15', '30', '45'].map(m => <option key={m} value={m}>{m}分</option>)}</select></div></fieldset>
 <AssigneePicker users={sortedUsers} value={partnerAssignees} onChange={setPartnerAssignees} disabled={isSaving}/>
 <QuarterHourTime label="終了予定時間" value={endTime} onChange={setEndTime}/>
@@ -2589,7 +2594,7 @@ summary={[[ '重要', partnerImportant ? '重要' : 'なし' ], [ 'パートナ�
               <span className="text-[10px] font-bold text-blue-700">パートナー予定を編集中</span>
               <button type="button" onClick={() => {
                 if (!confirmEditDiscard(true, isSaving)) return;
-                setEditingItemId(null); setPartnerPeriodEnd(''); setPartnerName(''); setSubject(''); setPartnerImportant(false); setPartnerAssignees([]); setSavedPartnerDate(japanToday()); setDate(japanToday()); setTimeHour(''); setTimeMinute(''); setEndTime(''); setContent(''); setNewPartnerImages([]);
+                setEditingItemId(null); setPartnerPeriodEnd(''); setPartnerRepeat(null); setPartnerName(''); setSubject(''); setPartnerImportant(false); setPartnerAssignees([]); setSavedPartnerDate(japanToday()); setDate(japanToday()); setTimeHour(''); setTimeMinute(''); setEndTime(''); setContent(''); setNewPartnerImages([]);
               }} className="text-[10px] font-bold text-gray-500 hover:text-gray-800">キャンセル</button>
             </div>
           )}
@@ -2772,7 +2777,7 @@ summary={[[ '重要', partnerImportant ? '重要' : 'なし' ], [ 'パートナ�
 
             {editingItemId && <PartnerUpdateHistory currentUserUid={currentUser.id} item={editingPartnerItem} onChange={operation => updatePartnerItem(editingPartnerItem.id, { handoffOperation: operation })}/>}
             <label className="block">
-<label className="block text-sm font-bold">作業期間の終了日（複数日の場合）<DateInput min={date} value={partnerPeriodEnd} onChange={e=>setPartnerPeriodEnd(e.target.value)} disabled={isSaving} className="w-full min-h-12 mt-1 border rounded-xl bg-white p-3 text-base"/></label>
+<TaskRepeatFields repeat={partnerRepeat} onRepeat={setPartnerRepeat} periodEnd={partnerPeriodEnd} onPeriodEnd={setPartnerPeriodEnd} min={date} disabled={isSaving} inputClassName="w-full min-h-12 mt-1 border rounded-xl bg-white p-3 text-base"/>
               <span className="text-[10px] font-bold text-gray-500">{editingItemId ? '今回の申し送り・追記（任意）' : '詳しい内容（任意）'}</span>
               <textarea
                 value={content}
@@ -4483,7 +4488,7 @@ export default function App() {
                     alert('担当者または管理者が終了できます。');
                     return;
                   }
-                  if (isPeriodTask(targetTask) && !targetTask.completed && !window.confirm('期間全体のタスクを終了しますか？本日の作業だけを終了する場合は「本日の作業終了」を押してください。')) return;
+                  if (isPeriodTask(targetTask) && !targetTask.completed && !window.confirm(isRecurringTask(targetTask) ? '繰り返しのタスクを終了しますか？今後の予定も表示されなくなります。本日の作業だけを終了する場合は「本日の作業終了」を押してください。' : '期間全体のタスクを終了しますか？本日の作業だけを終了する場合は「本日の作業終了」を押してください。')) return;
                   const nextCompleted = !targetTask.completed;
                   if (isPeriodTask(targetTask)) { await setPeriodMemberCompletion(dateStr, ownerUid, taskId, nextCompleted); return; }
                   const nextCompletedAt = nextCompleted ? new Date().toISOString() : null;
@@ -4633,7 +4638,7 @@ export default function App() {
             ) : activeTab === 'daily' ? (
               <DailyDetailView 
                 inventoryItems={inventoryItems}
-                addTask={async (dateStr, targetUid, text, imageUrl = '', imageName = '', imagePublicId = '', imageBytes = 0, visibility = 'public', subject = '', endTime = '', productId = '', productQuantity = 1, images = [], assigneeIds = [targetUid], important = false, periodEndDate = '') => {
+                addTask={async (dateStr, targetUid, text, imageUrl = '', imageName = '', imagePublicId = '', imageBytes = 0, visibility = 'public', subject = '', endTime = '', productId = '', productQuantity = 1, images = [], assigneeIds = [targetUid], important = false, periodEndDate = '', repeat = null) => {
                   if (periodEndDate && periodEndDate < dateStr) throw new Error('作業期間を確認してください。');
                   const selectedAssignees = newTaskAssignees(assigneeIds, targetUid, visibility, sortedUsers.map(user => user.id));
                   const product = productId ? inventoryItems.find(item => item.id === productId) : null;
@@ -4664,8 +4669,9 @@ export default function App() {
                             updates: [createPartnerUpdate(text, currentUser, images.length ? images : imageUrl ? { imageUrl, imageName, imagePublicId, imageBytes } : null, 'initial')],
                             completed: false,
                             createdAt: new Date().toISOString(),
-                            periodStartDate: periodEndDate ? dateStr : '',
-                            periodEndDate: periodEndDate || '',
+                            periodStartDate: periodEndDate || normalizeRepeat(repeat) ? dateStr : '',
+                            periodEndDate: normalizeRepeat(repeat) ? '' : periodEndDate || '',
+                            ...(normalizeRepeat(repeat) ? { repeat: normalizeRepeat(repeat) } : {}),
                             ownerUid: targetUid,
                             assigneeIds: selectedAssignees,
                             visibility: visibility === 'private' ? 'private' : 'public',
@@ -4743,7 +4749,7 @@ export default function App() {
                     return;
                   }
 
-                  if (isPeriodTask(targetTask) && !targetTask.completed && !window.confirm('期間全体のタスクを終了しますか？本日の作業だけを終了する場合は「本日の作業終了」を押してください。')) return;
+                  if (isPeriodTask(targetTask) && !targetTask.completed && !window.confirm(isRecurringTask(targetTask) ? '繰り返しのタスクを終了しますか？今後の予定も表示されなくなります。本日の作業だけを終了する場合は「本日の作業終了」を押してください。' : '期間全体のタスクを終了しますか？本日の作業だけを終了する場合は「本日の作業終了」を押してください。')) return;
                   const nextCompleted = !targetTask.completed;
                   if (isPeriodTask(targetTask)) { await setPeriodMemberCompletion(dateStr, targetUid, taskId, nextCompleted); return; }
                   const nextCompletedAt = nextCompleted ? new Date().toISOString() : null;
