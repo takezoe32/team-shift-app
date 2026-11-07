@@ -4,6 +4,7 @@ import DateInput from './DateInput';
 import { useEditGuard,confirmEditDiscard } from '../editGuard';
 import { japanToday } from '../japanTime.mjs';
 import { METER_FIELDS,canAccessMeters,meterChanges,meterDifference } from '../meterReadings.mjs';
+import { meterFrameBox } from '../meterFrame.mjs';
 const control='min-h-11 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-800 disabled:opacity-50';
 const primary=control+' bg-blue-600! text-white! border-blue-600!';
 const showNumber=(value,unit='')=>value===null||value===undefined?'未記録':Number(value).toLocaleString('ja-JP',{maximumFractionDigits:8})+(unit?' '+unit:'');
@@ -17,7 +18,9 @@ function MeterReadingsForm({currentUser}){
  useEffect(()=>{
   const root=workspace.current,header=root?.previousElementSibling,nav=document.querySelector('nav[aria-label="メインメニュー"]');
   window.scrollTo(0,0);
-  const fit=()=>{const vv=window.visualViewport,top=Math.max(vv?.offsetTop||0,header?.getBoundingClientRect().bottom||0);const height=Math.max(150,(vv?.height||window.innerHeight)+(vv?.offsetTop||0)-top-(nav?.getBoundingClientRect().height||0));setFrameBox(v=>v.top===top&&v.height===height?v:{top,height});};
+  // While the keyboard is open the workspace keeps its size, so the map and input pane stay as they were.
+  let sizing={};
+  const fit=()=>{const vv=window.visualViewport;sizing=meterFrameBox(sizing,{width:vv?.width||window.innerWidth,height:vv?.height||window.innerHeight,offsetTop:vv?.offsetTop||0,headerBottom:header?.getBoundingClientRect().bottom||0,navHeight:nav?.getBoundingClientRect().height||0});const {top,height}=sizing.box;setFrameBox(v=>v.top===top&&v.height===height?v:{top,height});};
   const observer=new ResizeObserver(fit);if(header)observer.observe(header);if(nav)observer.observe(nav);window.addEventListener('resize',fit);window.visualViewport?.addEventListener('resize',fit);window.visualViewport?.addEventListener('scroll',fit);fit();
   return()=>{observer.disconnect();window.removeEventListener('resize',fit);window.visualViewport?.removeEventListener('resize',fit);window.visualViewport?.removeEventListener('scroll',fit);};
  },[]);
