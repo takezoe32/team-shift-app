@@ -1,9 +1,8 @@
 // Size of the meter workspace (map + input pane) on screen.
 // When the on-screen keyboard opens, the visible height drops sharply while the width stays the same.
-// The map and the input pane then keep their size (contentHeight), and the workspace itself becomes
-// a scroll box that fits the area above the keyboard, so both can be scrolled into view while typing.
+// The workspace then fits the area above the keyboard, and the map page inside keeps its pre-keyboard size
+// (contentHeight) and scrolls by itself, so the map and the input pane do not shrink while typing.
 export const KEYBOARD_MIN_HEIGHT = 120;
-const REVEAL_MARGIN = 12;
 
 const keyboardOpen = (base, width, height) => !!base && Math.abs(width - base.width) < 2 && height < base.height - KEYBOARD_MIN_HEIGHT;
 
@@ -17,9 +16,3 @@ export function meterFrameBox(state = {}, { width, height, offsetTop = 0, header
   return { base: { width, height }, full, keyboard: false, box: { top, height: full, contentHeight: full } };
 }
 
-// How far to scroll the workspace so the focused input is visible inside it (0 when it already is).
-export function revealDelta(view, target, margin = REVEAL_MARGIN) {
-  if (target.bottom > view.bottom - margin) return Math.min(target.bottom - view.bottom + margin, target.top - view.top - margin);
-  if (target.top < view.top + margin) return target.top - view.top - margin;
-  return 0;
-}

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { meterFrameBox, revealDelta } from '../src/meterFrame.mjs';
+import { meterFrameBox } from '../src/meterFrame.mjs';
 const phone = { width: 390, height: 844, offsetTop: 0, headerBottom: 64, navHeight: 76, navTop: 768 };
 test('the workspace fills the visible area between the header and the menu', () => {
   const s = meterFrameBox({}, phone);
@@ -26,10 +26,4 @@ test('small height changes such as the address bar and rotation still resize the
   const before = meterFrameBox({}, phone);
   assert.deepEqual(meterFrameBox(before, { ...phone, height: 790 }).box, { top: 64, height: 650, contentHeight: 650 });
   assert.deepEqual(meterFrameBox(before, { ...phone, width: 844, height: 390 }).box, { top: 64, height: 250, contentHeight: 250 });
-});
-test('the focused input is scrolled into the visible part of the workspace', () => {
-  const view = { top: 64, bottom: 464 };
-  assert.equal(revealDelta(view, { top: 200, bottom: 240 }), 0);
-  assert.equal(revealDelta(view, { top: 500, bottom: 540 }), 88);
-  assert.equal(revealDelta(view, { top: 40, bottom: 80 }), -36);
 });

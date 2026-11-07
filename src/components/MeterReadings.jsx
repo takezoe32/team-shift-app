@@ -4,7 +4,7 @@ import DateInput from './DateInput';
 import { useEditGuard,confirmEditDiscard } from '../editGuard';
 import { japanToday } from '../japanTime.mjs';
 import { METER_FIELDS,canAccessMeters,meterChanges,meterDifference } from '../meterReadings.mjs';
-import { meterFrameBox,revealDelta } from '../meterFrame.mjs';
+import { meterFrameBox } from '../meterFrame.mjs';
 const control='min-h-11 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-800 disabled:opacity-50';
 const primary=control+' bg-blue-600! text-white! border-blue-600!';
 const showNumber=(value,unit='')=>value===null||value===undefined?'未記録':Number(value).toLocaleString('ja-JP',{maximumFractionDigits:8})+(unit?' '+unit:'');
@@ -15,17 +15,14 @@ function MeterReadingsForm({currentUser}){
  const [date,setDate]=useState(japanToday),[snapshot,setSnapshot]=useState(null),[values,setValues]=useState({}),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState(''),[verify,setVerify]=useState(false),[refresh,setRefresh]=useState(0),[review,setReview]=useState(false);
  const mapFrame=useRef(null),workspace=useRef(null);
  const [frameBox,setFrameBox]=useState({top:64,height:'calc(100dvh - 140px)'});
- const revealFocus=useRef(null);
  useEffect(()=>{
   const root=workspace.current,header=root?.previousElementSibling,nav=document.querySelector('nav[aria-label="メインメニュー"]');
   window.scrollTo(0,0);
-  // While the keyboard is open the map and input pane keep their size, and the workspace scrolls above the keyboard.
+  // While the keyboard is open the workspace fits above it; the map page keeps its own size and scrolls inside itself.
   let sizing={};
-  const reveal=()=>{const frame=mapFrame.current,input=frame?.contentDocument?.activeElement;if(!sizing.keyboard||!root||input?.tagName!=='INPUT')return;const f=frame.getBoundingClientRect(),r=input.getBoundingClientRect(),view={top:sizing.box.top,bottom:sizing.box.top+sizing.box.height};root.scrollTop+=revealDelta(view,{top:f.top+r.top,bottom:f.top+r.bottom});};
-  revealFocus.current=()=>requestAnimationFrame(reveal);
-  const fit=()=>{const vv=window.visualViewport,navRect=nav?.getBoundingClientRect();sizing=meterFrameBox(sizing,{width:vv?.width||window.innerWidth,height:vv?.height||window.innerHeight,offsetTop:vv?.offsetTop||0,headerBottom:header?.getBoundingClientRect().bottom||0,navHeight:navRect?.height||0,navTop:navRect?navRect.top:Infinity});const {top,height,contentHeight}=sizing.box;setFrameBox(v=>v.top===top&&v.height===height&&v.contentHeight===contentHeight?v:{top,height,contentHeight});if(!sizing.keyboard&&root)root.scrollTop=0;};
+  const fit=()=>{const vv=window.visualViewport,navRect=nav?.getBoundingClientRect();sizing=meterFrameBox(sizing,{width:vv?.width||window.innerWidth,height:vv?.height||window.innerHeight,offsetTop:vv?.offsetTop||0,headerBottom:header?.getBoundingClientRect().bottom||0,navHeight:navRect?.height||0,navTop:navRect?navRect.top:Infinity});const {top,height,contentHeight}=sizing.box;setFrameBox(v=>v.top===top&&v.height===height&&v.contentHeight===contentHeight?v:{top,height,contentHeight});};
   const observer=new ResizeObserver(fit);if(header)observer.observe(header);if(nav)observer.observe(nav);window.addEventListener('resize',fit);window.visualViewport?.addEventListener('resize',fit);window.visualViewport?.addEventListener('scroll',fit);fit();
-  return()=>{revealFocus.current=null;observer.disconnect();window.removeEventListener('resize',fit);window.visualViewport?.removeEventListener('resize',fit);window.visualViewport?.removeEventListener('scroll',fit);};
+  return()=>{observer.disconnect();window.removeEventListener('resize',fit);window.visualViewport?.removeEventListener('resize',fit);window.visualViewport?.removeEventListener('scroll',fit);};
  },[]);
  const dialog=useRef(null),lock=useRef(false),latest=useRef(0);
  const dirty=METER_FIELDS.some(f=>Object.hasOwn(values,f.id)&&String(values[f.id])!==String(snapshot?.current[f.id]??''));
@@ -69,18 +66,18 @@ function MeterReadingsForm({currentUser}){
  });
  const changed=METER_FIELDS.filter(f=>Object.hasOwn(values,f.id)&&String(values[f.id])!==String(snapshot?.current[f.id]??''));
  const keyboard=frameBox.contentHeight>frameBox.height;
- // Once the scroll box is laid out above the keyboard, bring the input being typed into view.
- useEffect(()=>{if(keyboard)revealFocus.current?.();},[keyboard,frameBox]);
- return <div ref={workspace} style={{position:'fixed',top:frameBox.top,height:frameBox.height,left:0,right:0,zIndex:10,overflowY:keyboard?'auto':'hidden',overscrollBehavior:'contain'}} className="mx-auto w-full max-w-[1800px] bg-white">
-  <div style={{height:frameBox.contentHeight??'100%'}} className="flex min-h-0 flex-col overflow-hidden px-2 pb-1">
+ // Tell the map page how tall it was before the keyboard opened (0 = keyboard closed) so it keeps that size and scrolls.
+ const lockedFrameHeight=useRef(0);
+ const sendKeyboard=()=>{const frame=mapFrame.current;if(!frame)return;if(keyboard&&!lockedFrameHeight.current)lockedFrameHeight.current=frame.offsetHeight+frameBox.contentHeight-frameBox.height;if(!keyboard)lockedFrameHeight.current=0;frame.contentWindow?.postMessage({type:'meter-map-keyboard',height:lockedFrameHeight.current},window.location.origin);};
+ useEffect(sendKeyboard);
+ return <div ref={workspace} style={{position:'fixed',top:frameBox.top,height:frameBox.height,left:0,right:0,zIndex:10}} className="mx-auto flex w-full max-w-[1800px] min-h-0 flex-col overflow-hidden bg-white px-2 pb-1">
   <section className="flex shrink-0 items-center gap-2 border-b border-gray-100 py-1"><h1 className="mr-auto text-sm font-black text-gray-800">毎朝検針</h1><label htmlFor="meter-date" className="sr-only">検針日</label><DateInput id="meter-date" aria-label="検針日" required min="2026-01-01" max="2026-12-31" value={date} disabled={loading||saving} onChange={e=>switchDate(e.target.value)} className="h-10 w-36 rounded-lg border border-gray-300 px-2"/><button type="button" className="h-10 rounded-lg border border-blue-200 px-3 text-sm font-bold text-blue-800 disabled:opacity-50" disabled={loading||saving} onClick={()=>switchDate(japanToday())}>今日</button></section>
   {loading&&<p role="status" className="shrink-0 p-2 text-sm text-blue-800">検針値を読み込んでいます…</p>}
   {error&&<div className="max-h-24 shrink-0 overflow-auto rounded-lg bg-red-50 p-2 text-xs text-red-800"><p role="alert">{error}</p><button type="button" className="mt-1 underline" disabled={loading||saving} onClick={reload}>再試行</button></div>}
   {message&&<p role="status" className="shrink-0 px-2 py-1 text-xs font-bold text-green-800">{message}</p>}
   {verify&&<section className="shrink-0 space-y-2 rounded-xl bg-blue-50 p-3"><p className="text-sm">{currentUser.name}さんのGoogleアカウントで本人確認してください。</p><GoogleLogin onSuccess={login} onError={()=>setError('Googleの本人確認をやり直してください。')}/></section>}
-  {snapshot&&<iframe ref={mapFrame} title="ホテル1階 検針マップ" src="/meter-map.html" onLoad={()=>{sendMapSnapshot();mapFrame.current?.contentWindow?.addEventListener('focusin',()=>revealFocus.current?.());}} className="block min-h-0 w-full flex-1 border-0"/>}
+  {snapshot&&<iframe ref={mapFrame} title="ホテル1階 検針マップ" src="/meter-map.html" onLoad={()=>{sendMapSnapshot();sendKeyboard();}} className="block min-h-0 w-full flex-1 border-0"/>}
   {review&&<dialog ref={dialog} aria-labelledby="meter-review-heading" onCancel={e=>{e.preventDefault();if(!saving)close();}} onClose={()=>setReview(false)} className="fixed inset-0 m-auto max-h-[85dvh] w-[calc(100%-2rem)] max-w-xl overflow-auto rounded-2xl border border-gray-200 bg-white p-5 shadow-xl backdrop:bg-black/40"><h2 id="meter-review-heading" className="text-lg font-bold">検針値の保存確認</h2><p className="mt-2 text-sm">{date.replaceAll('-','/')}：変更した{changed.length}項目を原本に保存します。</p><div className="my-4 divide-y divide-gray-200">{changed.map(f=>{const diff=meterDifference(values[f.id],snapshot.previous[f.id],f.unit);return <div key={f.id} className="py-3 text-sm"><p className="font-bold">{f.section==='main'?'':'H-'}{Number(date.slice(5,7))}・{f.group}／{f.label}</p><p className="mt-1">当日：{showNumber(snapshot.current[f.id],f.unit)} → <strong>{values[f.id]} {f.unit}</strong></p><p className="mt-1 text-xs text-gray-500">前日：{showNumber(snapshot.previous[f.id],f.unit)} ／ 前日比 {diff?.text||'未計算'}</p></div>;})}</div><div className="flex justify-end gap-2"><button type="button" className={control} disabled={saving} onClick={close}>入力に戻る</button><button type="button" className={primary} disabled={saving} onClick={save}>{saving?'保存中…':'原本に保存する'}</button></div></dialog>}
-  </div>
  </div>;
 }
 

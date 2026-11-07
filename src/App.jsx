@@ -4196,7 +4196,8 @@ export default function App() {
         <div className="app-shell min-h-screen bg-gray-100 flex flex-col w-full">
           <div className="w-full flex-1 flex flex-col bg-white min-h-screen relative overflow-hidden font-sans">
             
-            <div className="bg-white border-b border-gray-100 pt-safe px-6 py-3 flex justify-between items-center z-20 shrink-0 shadow-sm">
+            {/* The meter screen needs all the height it can get: hide the app name, help and account bar there (the bottom menu stays). */}
+            {activeTab === 'meter-daily' ? <div className="pt-safe shrink-0" aria-hidden="true"/> : <div className="bg-white border-b border-gray-100 pt-safe px-6 py-3 flex justify-between items-center z-20 shrink-0 shadow-sm">
               <div>
                 <div className="flex items-center gap-2">
                   <div className="flex flex-col text-[9px] sm:text-[10px] font-black text-gray-900 tracking-tight leading-[0.9] text-right">
@@ -4227,7 +4228,7 @@ export default function App() {
                   <LogOut className="text-gray-500 ml-1" size={15}/>
                 </button>
               </div>
-            </div>
+            </div>}
 
 
             {activeTab === 'help' ? (
