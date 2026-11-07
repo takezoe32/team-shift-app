@@ -12,14 +12,6 @@ const monthName=month=>Number(month.slice(5,7))+'月度';
 const MONTHS=Array.from({length:12},(_,i)=>'2026-'+String(i+1).padStart(2,'0'));
 // The monthly items on the map: only the meters that the daily book does not have (the rest is transferred on save).
 const MONTHLY_MAP_FIELDS=MONTHLY_INPUT_FIELDS.map(f=>({id:f.id,group:f.group,label:f.label,unit:f.unit}));
-// Prints the map page's print view (floor plan with numbers + list) from the app page itself:
-// the map is in an iframe, and a pop-up window would be blocked in the installed app on phones.
-function printMap(html){
- document.getElementById('meter-print')?.remove();
- const box=document.createElement('div');box.id='meter-print';box.innerHTML=html;document.body.append(box);
- const done=()=>{box.remove();window.removeEventListener('afterprint',done);};window.addEventListener('afterprint',done);
- const img=box.querySelector('img'),go=()=>setTimeout(()=>window.print(),100);if(img&&!img.complete)img.onload=go;else go();
-}
 const showNumber=(value,unit='')=>value===null||value===undefined?'未記録':Number(value).toLocaleString('ja-JP',{maximumFractionDigits:8})+(unit?' '+unit:'');
 // kind="monthly" is the 毎月検針 (monthly book); the default is the 毎朝検針.
 export default function MeterReadings({currentUser,kind='daily'}){
@@ -68,7 +60,6 @@ function MeterReadingsForm({currentUser,kind}){
  useEffect(()=>{
   const listener=e=>{if(e.origin!==window.location.origin||e.source!==mapFrame.current?.contentWindow||!snapshot)return;
    if(e.data?.type==='meter-map-ready'){sendMapSnapshot();return;}
-   if(e.data?.type==='meter-map-print'&&typeof e.data.html==='string'){printMap(e.data.html);return;}
    if(e.data?.type==='meter-map-save-layout'){
     if(!snapshot.canManageMap)return;
     fetch('/api/meter-readings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'save-map',appUid:currentUser.id,...(monthly?{kind}:{}),version:e.data.version,points:e.data.points})}).then(async r=>{const data=await r.json();if(!r.ok)throw new Error(data.error||'配置を保存できませんでした。');setSnapshot(s=>({...s,...data}));mapFrame.current?.contentWindow?.postMessage({type:'meter-map-layout-result',...data},window.location.origin);}).catch(err=>{mapFrame.current?.contentWindow?.postMessage({type:'meter-map-layout-result',error:err.message},window.location.origin);});return;
