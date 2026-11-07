@@ -16,6 +16,10 @@ export const MONTHLY_FIELDS = BLOCKS.flatMap(([block,group,header,top,fields])=>
 export const MONTHLY_INPUT_FIELDS = MONTHLY_FIELDS.filter(f=>!f.from);
 // Copied from the daily book on save.
 export const MONTHLY_SHARED_FIELDS = MONTHLY_FIELDS.filter(f=>f.from);
+// The 全日電力 meter went around (past 99,999.9) in October 2026: the daily book shows the meter (11/1: 575.5),
+// while the monthly book keeps counting, so from 11月度 on the transfer adds 100,000 (575.5 -> 100,575.5).
+export const MONTHLY_ROLLOVERS = {'m-electric':[{from:'2026-11',add:100000}]};
+export const monthlyOffset = (id,month) => (MONTHLY_ROLLOVERS[id]||[]).filter(r=>month>=r.from).reduce((sum,r)=>sum+r.add,0);
 const text = v => String(v??'').normalize('NFKC').replace(/\s/g,'');
 export function monthlyMonth(month){
  if(!/^\d{4}-\d{2}$/.test(month||''))throw new Error('有効な検針月を選んでください。');
@@ -56,7 +60,8 @@ export function monthlySnapshot(month,daily,monthly){
   }
   const d=METER_FIELDS.find(x=>x.id===f.from),sheet=meterSheet(daily.titles,d.section,m),row=meterRow(d.section,1);yearOk(sheet,d.section);
   if(daily.get(sheet,'B'+row).value!==1)throw new Error('毎朝検針の原本の1日の行が想定と異なります。');
-  sources[f.id]=num(daily.get(sheet,d.column+row).value);
+  const v=num(daily.get(sheet,d.column+row).value),offset=monthlyOffset(f.id,month);
+  sources[f.id]=v===null?null:Number((v+offset).toFixed(8));
  }
  return {month,previousMonth:previousMonth(month),current,previous,formulas,sources,sheet:title};
 }
@@ -71,7 +76,9 @@ export function monthlyChanges(values,snapshot){
 }
 // For each shared meter: write (differs), same (already in the book), missing (not in the daily book yet) or formula (protected cell).
 export function monthlyTransfers(snapshot){
- return MONTHLY_SHARED_FIELDS.map(f=>{const value=snapshot.sources?.[f.id]??null,now=snapshot.current?.[f.id]??null;return {id:f.id,field:f,value,current:now,state:snapshot.formulas?.[f.id]?'formula':value===null?'missing':value===now?'same':'write'};});
+ return MONTHLY_SHARED_FIELDS.map(f=>{const value=snapshot.sources?.[f.id]??null,now=snapshot.current?.[f.id]??null;const previous=snapshot.previous?.[f.id]??null;
+  // A value below the previous month (a meter that went around again, or a typo) is flagged on the confirmation screen.
+  return {id:f.id,field:f,value,current:now,previous,decreased:f.from!=='demand'&&value!==null&&previous!==null&&value<previous,state:snapshot.formulas?.[f.id]?'formula':value===null?'missing':value===now?'same':'write'};});
 }
 export const monthlyUpdates = (snapshot,changes) => Object.entries(changes).map(([id,value])=>{
  const f=MONTHLY_FIELDS.find(f=>f.id===id);
@@ -82,5 +89,6 @@ export const monthlyUpdates = (snapshot,changes) => Object.entries(changes).map(
 export function monthlySourceText(field,month){
  const {month:m}=monthlyMonth(month);
  if(field.from==='demand')return m===1?'前月の毎朝検針がありません':`毎朝検針 ${m-1}月の最大値`;
- return `毎朝検針 ${m}/1`;
+ const offset=monthlyOffset(field.id,month);
+ return `毎朝検針 ${m}/1`+(offset?`の値＋${offset.toLocaleString('ja-JP')}（メーター一周分）`:'');
 }

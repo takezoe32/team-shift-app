@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { MONTHLY_FIELDS,MONTHLY_INPUT_FIELDS,MONTHLY_SHARED_FIELDS,monthlyMonth,previousMonth,monthlySheet,monthlySnapshot,monthlyChanges,monthlyTransfers,monthlyUpdates,monthlyRow } from '../src/meterMonthly.mjs';
+import { MONTHLY_FIELDS,MONTHLY_INPUT_FIELDS,MONTHLY_SHARED_FIELDS,monthlyMonth,previousMonth,monthlySheet,monthlySnapshot,monthlyChanges,monthlyTransfers,monthlyUpdates,monthlyRow,monthlyOffset } from '../src/meterMonthly.mjs';
 import { validateMeterPoints,METER_MAP_PATHS } from '../src/meterMap.mjs';
 import { createMeterHandler } from '../api/meter-readings.js';
 import { monthlyMeterSheets } from '../api/_lib/meter-sheets.js';
@@ -37,12 +37,20 @@ test('毎月検針は21項目、入力は毎朝検針にない11項目、転記�
 });
 test('共通項目は毎朝検針の1日の値、デマンドは前月の最大値を転記する',()=>{
  const s=monthlySnapshot('2026-11',dailyBook(),monthlyBook());
- assert.equal(s.sources['m-electric'],11000+'D'.charCodeAt(0));assert.equal(s.sources['m-water-hibiya'],11000+'H'.charCodeAt(0));
+ assert.equal(s.sources['m-electric'],11000+'D'.charCodeAt(0)+100000);assert.equal(s.sources['m-water-hibiya'],11000+'H'.charCodeAt(0));
  assert.equal(s.sources['m-demand'],10.31);assert.equal(s.previous['m-training'],1000+'E'.charCodeAt(0));assert.equal(s.current['m-training'],null);
  const changes=monthlyChanges({'m-training':'12.5','m-garden':''},s);
  assert.equal(changes['m-training'],12.5);assert.equal(changes['m-demand'],10.31);assert.equal(changes['m-gas-kitchen'],11000+'T'.charCodeAt(0));assert.equal(Object.keys(changes).length,11);
  assert.deepEqual(monthlyUpdates(s,{'m-training':12.5,'m-gas-kitchen':1}),[{title:'2026年度　（令和8年）',address:'E27',value:12.5},{title:'2026年度　（令和8年）',address:'K62',value:1}]);
  assert.throws(()=>monthlyChanges({'m-electric':'1'},s),/更新できない/);assert.throws(()=>monthlyChanges({'m-training':'abc'},s),/数値/);
+});
+test('全日電力は11月度以降、メーター一周分の100,000を足して転記し、前月より小さい値は注意を出す',()=>{
+ const daily=dailyBook(),small={...daily,get:(t,a)=>t==='11'&&a==='D9'?{value:575.5}:daily.get(t,a)};
+ const nov=monthlySnapshot('2026-11',small,monthlyBook());assert.equal(nov.sources['m-electric'],100575.5);
+ assert.equal(monthlyTransfers(nov).find(t=>t.id==='m-electric').decreased,false);
+ assert.equal(monthlyOffset('m-electric','2026-10'),0);assert.equal(monthlyOffset('m-electric','2026-12'),100000);assert.equal(monthlyOffset('m-gas-main','2026-11'),0);
+ const low=monthlySnapshot('2026-11',daily,monthlyBook());low.previous['m-gas-main']=99999999;
+ assert.equal(monthlyTransfers(low).find(t=>t.id==='m-gas-main').decreased,true);
 });
 test('毎朝検針が未入力の項目・同じ値・数式セルは転記しない',()=>{
  const s=monthlySnapshot('2026-11',dailyBook({missing:true}),monthlyBook({formula:'K62'}));
@@ -102,7 +110,7 @@ test('APIは毎月検針の読込・保存と専用マップの保存を行う',
 const realDaily=process.env.METER_TEST_XLSX,realMonthly=process.env.METER_MONTHLY_TEST_XLSX;
 test('実原本：毎月検針の1〜9月度の共通項目は毎朝検針の1日の値・前月の最大値と一致する',{skip:!(realDaily&&realMonthly)},()=>{
  const d=xlsxCells(readFileSync(realDaily)),m=xlsxCells(readFileSync(realMonthly));
- const s=monthlySnapshot('2026-10',d,m);assert.equal(s.sources['m-electric'],d.get('10','D9').value);
+ const s=monthlySnapshot('2026-10',d,m);assert.equal(s.sources['m-electric'],d.get('10','D9').value);assert.equal(monthlySnapshot('2026-11',d,m).sources['m-electric'],typeof d.get('11','D9').value==='number'?d.get('11','D9').value+100000:null);
  const feb=monthlySnapshot('2026-02',d,m);for(const t of monthlyTransfers(feb))assert.equal(t.state,'same',t.id);
  const up=monthlyUpdates(s,monthlyChanges({'m-training':'1'},s));assert.doesNotThrow(()=>m.patch(up));
 });
