@@ -1,11 +1,12 @@
 import { isReadOnlyUser } from '../src/viewerPermission.mjs';
 import { configuration,cookies,unseal,seal,verifyRequest,privateStore,oauth,fault } from './_lib/report-auth.js';
 import { makeLineStore } from './_lib/line-store.js';
-import { meterSheets } from './_lib/meter-sheets.js';
+import { meterSheets,monthlyMeterSheets } from './_lib/meter-sheets.js';
 import { meterDate,meterChanges,canAccessMeters } from '../src/meterReadings.mjs';
-import { canManageMeterMap,validateMeterPoints,METER_MAP_ID } from '../src/meterMap.mjs';
+import { canManageMeterMap,validateMeterPoints,METER_MAP_ID,METER_MAP_PATHS } from '../src/meterMap.mjs';
+import { MONTHLY_INPUT_FIELDS,monthlyMonth,monthlyChanges } from '../src/meterMonthly.mjs';
 import { randomBytes } from 'node:crypto';
-export function createMeterHandler({configure=configuration,makeStore=privateStore,makeLocks=makeLineStore,makeClient=oauth,makeSheets=meterSheets,env=globalThis.process.env,now=Date.now}={}){
+export function createMeterHandler({configure=configuration,makeStore=privateStore,makeLocks=makeLineStore,makeClient=oauth,makeSheets=meterSheets,makeMonthlySheets=monthlyMeterSheets,env=globalThis.process.env,now=Date.now}={}){
  return async(req,res)=>{
   res.setHeader('Cache-Control','no-store');
   try{
@@ -19,12 +20,14 @@ export function createMeterHandler({configure=configuration,makeStore=privateSto
    const store=makeStore(config),source=await store.source(),user=source.users?.[uid];
    if(!user||isReadOnlyUser(user,source.roles||{})||String(user.email||'').trim().toLowerCase()!==member.email)throw fault(403,'検針入力は登録メンバーのみ利用できます。');
    if(!canAccessMeters(user)||!canAccessMeters({email:member.email}))throw fault(403,'検針はplandosee.co.jpのアカウントのみ利用できます。');
-   const mapStore=makeLocks(env),mapPath='_server_integrations/meter_map';
+   // kind=monthly is the 毎月検針 (monthly book, its own map); everything else is the 毎朝検針.
+   const monthly=(req.method==='GET'?query.get('kind'):req.body?.kind)==='monthly';
+   const mapStore=makeLocks(env),mapPath=METER_MAP_PATHS[monthly?'monthly':'daily'];
    const currentMap=await mapStore.read(mapPath);
    const mapData=()=>({meterMap:currentMap||{map:METER_MAP_ID,version:0,points:[]},canManageMap:canManageMeterMap(user,source.roles)});
    if(req.method==='POST'&&req.body?.action==='save-map'){
     if(!canManageMeterMap(user,source.roles))throw fault(403,'マップの登録・変更は管理者のみ行えます。');
-    let points;try{points=validateMeterPoints(req.body.points);}catch(e){throw fault(400,e.message);}
+    let points;try{points=validateMeterPoints(req.body.points,monthly?MONTHLY_INPUT_FIELDS:undefined);}catch(e){throw fault(400,e.message);}
     if(!Number.isSafeInteger(req.body.version)||req.body.version<0)throw fault(400,'配置の更新状態を確認してください。');
     const path='app_data/shared_state';
     const meterMap=await mapStore.transact([path,mapPath],records=>{
@@ -36,20 +39,20 @@ export function createMeterHandler({configure=configuration,makeStore=privateSto
     });
     return res.status(200).json({meterMap,canManageMap:true});
    }
-   const date=req.method==='GET'?query.get('date'):req.body?.date;try{meterDate(date);}catch(e){throw fault(400,e.message);}
+   const key=monthly?'month':'date',date=req.method==='GET'?query.get(key):req.body?.[key];try{if(monthly)monthlyMonth(date);else meterDate(date);}catch(e){throw fault(400,e.message);}
    const connection=await store.get();if(!connection?.refreshToken||connection.needsReconnect)throw fault(503,'管理者が日報のGoogle Drive連携を確認してください。');
    const client=makeClient(config);client.setCredentials({refresh_token:connection.refreshToken});
    const access=(await client.getAccessToken()).token;if(!access)throw fault(503,'Google Driveの連携を確認してください。');
-   const sheets=makeSheets(access);
-   const response=snapshot=>({...snapshot,...mapData(),revision:seal({purpose:'meter-snapshot',uid,date,expires:now()+3600000,snapshot},config.secret)});
+   const sheets=(monthly?makeMonthlySheets:makeSheets)(access),purpose=monthly?'meter-monthly-snapshot':'meter-snapshot';
+   const response=snapshot=>({...snapshot,...mapData(),revision:seal({purpose,uid,date,expires:now()+3600000,snapshot},config.secret)});
    if(req.method==='GET')return res.status(200).json(response(await sheets.read(date)));
    if(req.body?.action!=='save')throw fault(400,'操作を確認してください。');
    let baseline;try{baseline=unseal(req.body.revision,config.secret);}catch{throw fault(409,'原本を読み込み直してから確認してください。');}
-   if(baseline.purpose!=='meter-snapshot'||baseline.uid!==uid||baseline.date!==date||baseline.expires<=now())throw fault(409,'読込から時間が経過しています。原本を読み込み直して確認してください。');
-   let changes;try{changes=meterChanges(req.body.values,baseline.snapshot.current);}catch(e){throw fault(400,e.message);}
+   if(baseline.purpose!==purpose||baseline.uid!==uid||baseline.date!==date||baseline.expires<=now())throw fault(409,'読込から時間が経過しています。原本を読み込み直して確認してください。');
+   let changes;try{changes=monthly?monthlyChanges(req.body.values,baseline.snapshot):meterChanges(req.body.values,baseline.snapshot.current);}catch(e){throw fault(400,e.message);}
    if(!Object.keys(changes).length)throw fault(400,'変更した検針値がありません。');
-   const locks=makeLocks(env),path='_server_integrations/meter_daily_'+date,nonce=randomBytes(16).toString('hex');
-   await locks.transact([path],values=>{if(values[path]?.expires>now())throw fault(409,'同じ日の保存が進行中です。少し待ってから再実行してください。');return {writes:[{path,value:{...values[path],nonce,expires:now()+120000}}]};});
+   const locks=makeLocks(env),path='_server_integrations/meter_'+(monthly?'monthly_':'daily_')+date,nonce=randomBytes(16).toString('hex');
+   await locks.transact([path],values=>{if(values[path]?.expires>now())throw fault(409,'同じ'+(monthly?'月':'日')+'の保存が進行中です。少し待ってから再実行してください。');return {writes:[{path,value:{...values[path],nonce,expires:now()+120000}}]};});
    try{
     const fresh=await sheets.read(date);
     if(JSON.stringify(fresh)!==JSON.stringify(baseline.snapshot))throw fault(409,'原本が他の人によって変更されました。入力は残しています。「原本を再読込」で最新値と照合してから保存してください。');

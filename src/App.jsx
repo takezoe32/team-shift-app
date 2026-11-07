@@ -3633,7 +3633,7 @@ const BottomNav = ({ inventorySection, setInventorySection, activeTab, setActive
     { id:'receipt', label:'レシート取込（テスト中）', description:'撮影・読取して仕入れ表用にコピー', Icon:Camera },
     ...(canAccessMeters(currentUser) ? [
     { id:'meter-daily', label:'毎朝検針（テスト中）', description:'検針値を入力・前日比を確認して原本に保存', Icon:FileSpreadsheet },
-    { id:'meter-monthly', label:'毎月検針（テスト中）', description:'部門メーターの原本を開いて入力（別タブ）', Icon:FileSpreadsheet, href:'https://docs.google.com/spreadsheets/d/1KtqHPMkyLzYUlqoLkXsu7xR4viL59pvP/edit?gid=615530499#gid=615530499' },
+    { id:'meter-monthly', label:'毎月検針（テスト中）', description:'部門メーターを入力し、毎朝検針の値と合わせて原本に保存', Icon:FileSpreadsheet },
     ] : []),
     ...(canManageSettings ? [{ id:'settings', label:'設定', description:'メンバー管理・アプリの設定', Icon:Settings }] : [])
   ];
@@ -4197,7 +4197,7 @@ export default function App() {
           <div className="w-full flex-1 flex flex-col bg-white min-h-screen relative overflow-hidden font-sans">
             
             {/* The meter screen needs all the height it can get: hide the app name, help and account bar there (the bottom menu stays). */}
-            {activeTab === 'meter-daily' ? <div className="pt-safe shrink-0" aria-hidden="true"/> : <div className="bg-white border-b border-gray-100 pt-safe px-6 py-3 flex justify-between items-center z-20 shrink-0 shadow-sm">
+            {['meter-daily','meter-monthly'].includes(activeTab) ? <div className="pt-safe shrink-0" aria-hidden="true"/> : <div className="bg-white border-b border-gray-100 pt-safe px-6 py-3 flex justify-between items-center z-20 shrink-0 shadow-sm">
               <div>
                 <div className="flex items-center gap-2">
                   <div className="flex flex-col text-[9px] sm:text-[10px] font-black text-gray-900 tracking-tight leading-[0.9] text-right">
@@ -4310,6 +4310,8 @@ export default function App() {
               />
             ) : activeTab === 'meter-daily' ? (
               <MeterReadings key={currentUser.id} currentUser={currentUser}/>
+            ) : activeTab === 'meter-monthly' ? (
+              <MeterReadings key={currentUser.id+'-monthly'} currentUser={currentUser} kind="monthly"/>
             ) : activeTab === 'receipt' ? (
               <ReceiptImport key={currentUser.id} userId={currentUser.id} buyer={currentUser.name} onClose={()=>setActiveTab('calendar')}/>
             ) : activeTab === 'inventory' ? (

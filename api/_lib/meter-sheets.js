@@ -1,5 +1,6 @@
 import { Buffer } from 'node:buffer';
 import { METER_FILE_ID,METER_FIELDS,meterDate,previousMeterDate,meterSheet,meterRow } from '../../src/meterReadings.mjs';
+import { MONTHLY_FILE_ID,monthlyMonth,monthlySheet,monthlyDailySheets,monthlySnapshot,monthlyUpdates } from '../../src/meterMonthly.mjs';
 import { fault } from './report-auth.js';
 import { xlsxCells } from './xlsx-cells.js';
 const quote=title=>"'"+title.replaceAll("'","''")+"'";
@@ -20,22 +21,46 @@ function snapshotFrom(date,titles,get){
 }
 const updatesFor=(snapshot,changes)=>Object.entries(changes).map(([id,value])=>{const f=METER_FIELDS.find(f=>f.id===id);if(!f||snapshot.formulas[id]||typeof value!=='number'||!Number.isFinite(value))throw fault(409,'数式や入力対象外のセルは変更できません。');return {title:snapshot.sheets[f.section],address:f.column+meterRow(f.section,meterDate(snapshot.date).day),value};});
 const upstreamError=status=>{if([409,412].includes(status))throw fault(409,'原本が他の人によって変更されました。原本を再読込してから確認してください。');if([403,404].includes(status))throw fault(403,'検針原本にアクセスできません。日報のGoogle Drive連携アカウントに原本の編集権限があるか確認してください。');throw fault(503,'検針原本との通信に失敗しました。入力を残したまま再実行してください。');};
-export function nativeMeterSheets(token,fetcher=fetch){
- const root=`https://sheets.googleapis.com/v4/spreadsheets/${METER_FILE_ID}`;
+const dailyRanges=date=>titles=>{const d=meterDate(date),prev=previousMeterDate(date),targets=[];for(const section of ['main','h']){targets.push(meterSheet(titles,section,d.month));if(prev.startsWith(String(d.year)))targets.push(meterSheet(titles,section,Number(prev.slice(5,7))));}return [...new Set(targets)].map(title=>[title,'B1:T45']);};
+// A Google Sheets spreadsheet read through the Sheets API (only the requested ranges).
+// ranges(titles) -> [[title,'B1:T45'],...]; the result's get(title,address) returns {value,formula,blocked}.
+function nativeBook(token,fileId,fetcher){
+ const root=`https://sheets.googleapis.com/v4/spreadsheets/${fileId}`;
  const call=async(url,options={})=>{const r=await fetcher(url,{...options,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},signal:AbortSignal.timeout(20000)});if(!r.ok)upstreamError(r.status);return r.json();};
- return {async read(date){const d=meterDate(date),prev=previousMeterDate(date),meta=await call(root+'?fields=sheets.properties'),titles=meta.sheets.map(s=>s.properties.title),targets=[];for(const section of ['main','h']){targets.push(meterSheet(titles,section,d.month));if(prev.startsWith(String(d.year)))targets.push(meterSheet(titles,section,Number(prev.slice(5,7))));}
-  const params=new URLSearchParams({includeGridData:'true',fields:'sheets(properties(title,sheetId),data(startRow,startColumn,rowData(values(userEnteredValue,effectiveValue,formattedValue))))'});for(const title of new Set(targets))params.append('ranges',quote(title)+'!B1:T45');const result=await call(root+'?'+params),byTitle=Object.fromEntries(result.sheets.map(s=>[s.properties.title,s]));
-  return snapshotFrom(date,titles,(title,address)=>{const [,column,row]=address.match(/^([A-Z]+)(\d+)$/),ci=column.charCodeAt(0)-65;for(const grid of byTitle[title]?.data||[]){const cell=grid.rowData?.[Number(row)-1-(grid.startRow||0)]?.values?.[ci-(grid.startColumn||0)];if(cell)return {value:cell.effectiveValue?.numberValue??cell.effectiveValue?.stringValue??null,formula:!!cell.userEnteredValue?.formulaValue,blocked:!!(cell.userEnteredValue&&!Object.hasOwn(cell.userEnteredValue,'numberValue'))};}return {value:null};});
- },async write(snapshot,changes){const data=updatesFor(snapshot,changes).map(u=>({range:quote(u.title)+'!'+u.address,values:[[u.value]]}));if(data.length)await call(root+'/values:batchUpdate',{method:'POST',body:JSON.stringify({valueInputOption:'RAW',data})});}};
+ return {async read(ranges){const meta=await call(root+'?fields=sheets.properties'),titles=meta.sheets.map(s=>s.properties.title);
+  const params=new URLSearchParams({includeGridData:'true',fields:'sheets(properties(title,sheetId),data(startRow,startColumn,rowData(values(userEnteredValue,effectiveValue,formattedValue))))'});for(const [title,range] of ranges(titles))params.append('ranges',quote(title)+'!'+range);const result=await call(root+'?'+params),byTitle=Object.fromEntries(result.sheets.map(s=>[s.properties.title,s]));
+  return {titles,get:(title,address)=>{const [,column,row]=address.match(/^([A-Z]+)(\d+)$/),ci=column.charCodeAt(0)-65;for(const grid of byTitle[title]?.data||[]){const cell=grid.rowData?.[Number(row)-1-(grid.startRow||0)]?.values?.[ci-(grid.startColumn||0)];if(cell)return {value:cell.effectiveValue?.numberValue??cell.effectiveValue?.stringValue??null,formula:!!cell.userEnteredValue?.formulaValue,blocked:!!(cell.userEnteredValue&&!Object.hasOwn(cell.userEnteredValue,'numberValue'))};}return {value:null};}};
+ },async write(state,updates){const data=updates.map(u=>({range:quote(u.title)+'!'+u.address,values:[[u.value]]}));if(data.length)await call(root+'/values:batchUpdate',{method:'POST',body:JSON.stringify({valueInputOption:'RAW',data})});}};
 }
-export function meterSheets(token,fetcher=fetch){
- const url=`https://www.googleapis.com/drive/v2/files/${METER_FILE_ID}`;let cached=null;
+// A spreadsheet in Google Drive: an XLSX file (downloaded whole, written back as a new revision with If-Match) or a native Google Sheets file.
+// read() returns {format,titles,get} plus fileVersion/contentHash for XLSX; write(state,updates) needs the state of the latest read.
+function driveBook(token,fileId,fetcher){
+ const url=`https://www.googleapis.com/drive/v2/files/${fileId}`;let cached=null;
  const request=async(target,options={})=>{const r=await fetcher(target,{...options,headers:{Authorization:`Bearer ${token}`,...options.headers},signal:AbortSignal.timeout(25000)});if(!r.ok)upstreamError(r.status);return r;};
  const metadata=async()=>{const r=await request(url+'?supportsAllDrives=true&fields=id,mimeType,fileSize,etag,capabilities(canEdit)');return r.json();};
- return {async read(date){const meta=await metadata();if(meta.mimeType==='application/vnd.google-apps.spreadsheet')return nativeMeterSheets(token,fetcher).read(date);if(meta.mimeType!==XLSX)throw fault(409,'検針原本はXLSXまたはGoogleスプレッドシート形式である必要があります。');if(!meta.etag||Number(meta.fileSize)>5*1024*1024)throw fault(409,'原本の更新状態またはサイズを安全に確認できません。');
+ return {async read(ranges){const meta=await metadata();if(meta.mimeType==='application/vnd.google-apps.spreadsheet')return {format:'sheets',...await nativeBook(token,fileId,fetcher).read(ranges)};if(meta.mimeType!==XLSX)throw fault(409,'検針原本はXLSXまたはGoogleスプレッドシート形式である必要があります。');if(!meta.etag||Number(meta.fileSize)>5*1024*1024)throw fault(409,'原本の更新状態またはサイズを安全に確認できません。');
   const r=await request(url+'?alt=media&supportsAllDrives=true'),bytes=Buffer.from(await r.arrayBuffer());if(bytes.length>5*1024*1024)throw fault(409,'原本のサイズが対応上限を超えています。');let book;try{book=xlsxCells(bytes);}catch{throw fault(409,'このExcelの内部形式を安全に読み込めません。原本は変更していません。');}const after=await metadata();if(after.etag!==meta.etag)upstreamError(412);
-  const snapshot={...snapshotFrom(date,book.titles,book.get),format:'xlsx',fileVersion:meta.etag,contentHash:book.hash};cached={book,snapshot,editable:meta.capabilities?.canEdit??meta.editable};return snapshot;
- },async write(snapshot,changes){if(snapshot.format!=='xlsx')return nativeMeterSheets(token,fetcher).write(snapshot,changes);if(!cached||JSON.stringify(cached.snapshot)!==JSON.stringify(snapshot))throw fault(409,'原本を読み込み直してから保存してください。');if(cached.editable===false)throw fault(403,'検針原本の編集権限がありません。');let body;try{body=cached.book.patch(updatesFor(snapshot,changes));}catch{throw fault(409,'このExcelの指定セルを安全に更新できません。原本は変更していません。');}const latest=await metadata();if(latest.etag!==snapshot.fileVersion)upstreamError(412);
-  await request(`https://www.googleapis.com/upload/drive/v2/files/${METER_FILE_ID}?uploadType=media&newRevision=true&supportsAllDrives=true&fields=id,etag`,{method:'PUT',headers:{'Content-Type':XLSX,'If-Match':snapshot.fileVersion},body});cached=null;
+  cached={book,fileVersion:meta.etag,contentHash:book.hash,editable:meta.capabilities?.canEdit??meta.editable};return {format:'xlsx',titles:book.titles,get:book.get,fileVersion:meta.etag,contentHash:book.hash};
+ },async write(state,updates){if(state.format!=='xlsx')return nativeBook(token,fileId,fetcher).write(state,updates);if(!cached||cached.fileVersion!==state.fileVersion||cached.contentHash!==state.contentHash)throw fault(409,'原本を読み込み直してから保存してください。');if(cached.editable===false)throw fault(403,'検針原本の編集権限がありません。');let body;try{body=cached.book.patch(updates);}catch{throw fault(409,'このExcelの指定セルを安全に更新できません。原本は変更していません。');}const latest=await metadata();if(latest.etag!==state.fileVersion)upstreamError(412);
+  await request(`https://www.googleapis.com/upload/drive/v2/files/${fileId}?uploadType=media&newRevision=true&supportsAllDrives=true&fields=id,etag`,{method:'PUT',headers:{'Content-Type':XLSX,'If-Match':state.fileVersion},body});cached=null;
  }};
 }
+const plainBook=book=>({async read(ranges){return {format:'sheets',...await book.read(ranges)};},write:(state,updates)=>book.write(state,updates)});
+// 毎朝検針: the day's row and the previous day's row of the daily book.
+function dailyAdapter(book){
+ let last=null;
+ return {async read(date){const b=await book.read(dailyRanges(date)),snapshot={...snapshotFrom(date,b.titles,b.get),...(b.format==='xlsx'?{format:'xlsx',fileVersion:b.fileVersion,contentHash:b.contentHash}:{})};last=snapshot;return snapshot;},
+  async write(snapshot,changes){if(snapshot.format==='xlsx'&&JSON.stringify(last)!==JSON.stringify(snapshot))throw fault(409,'原本を読み込み直してから保存してください。');await book.write(snapshot,updatesFor(snapshot,changes));}};
+}
+export const nativeMeterSheets=(token,fetcher=fetch)=>dailyAdapter(plainBook(nativeBook(token,METER_FILE_ID,fetcher)));
+export const meterSheets=(token,fetcher=fetch)=>dailyAdapter(driveBook(token,METER_FILE_ID,fetcher));
+// 毎月検針: the month's row of the monthly book, plus the daily book's values that are transferred to it (read only).
+export function monthlyMeterSheets(token,fetcher=fetch,{daily=driveBook(token,METER_FILE_ID,fetcher),monthly=driveBook(token,MONTHLY_FILE_ID,fetcher)}={}){
+ let last=null;
+ const checked=run=>{try{return run();}catch(e){throw e.status?e:fault(409,e.message);}};
+ return {async read(month){checked(()=>monthlyMonth(month));
+   const d=await daily.read(titles=>checked(()=>monthlyDailySheets(titles,month)).map(title=>[title,'B1:T45'])),b=await monthly.read(titles=>[[checked(()=>monthlySheet(titles)),'B1:T110']]);
+   const snapshot={...checked(()=>monthlySnapshot(month,d,b)),...(b.format==='xlsx'?{format:'xlsx',fileVersion:b.fileVersion,contentHash:b.contentHash}:{format:'sheets'})};last=snapshot;return snapshot;
+  },async write(snapshot,changes){if(snapshot.format==='xlsx'&&JSON.stringify(last)!==JSON.stringify(snapshot))throw fault(409,'原本を読み込み直してから保存してください。');const updates=checked(()=>monthlyUpdates(snapshot,changes));await monthly.write(snapshot,updates);}};
+}
+export { nativeBook,driveBook };
