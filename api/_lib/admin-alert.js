@@ -4,7 +4,7 @@ import { fieldsOf, makeBackupStore } from './daily-backup.js';
 import { decodeFields, fault } from './report-auth.js';
 import { tokyoDate } from '../../src/dailyReport.mjs';
 export const ALERT_TO='mitsutake.takezoe@plandosee.co.jp', ALERT_FROM=ALERT_TO;
-const names={backup_failed:'毎日のバックアップに失敗しました',report_failed:'日報の自動保存に失敗しました',data_read_failed:'アプリの保存データを読み込めませんでした',app_error:'アプリで処理エラーを検知しました',test:'通知メールの送信テスト'};
+const names={backup_failed:'毎日のバックアップに失敗しました',report_failed:'日報の自動保存に失敗しました',data_read_failed:'アプリの保存データを読み込めませんでした',app_error:'アプリで処理エラーを検知しました',test:'通知メールの送信テスト',year_files_failed:'来年の検針・勤務表ファイルの自動作成に失敗しました',year_files_created:'来年の検針・勤務表ファイルを作成しました'};
 const prefix='projects/team-shift-app/databases/(default)/documents/';
 const fallback=new Map();
 export const mailReady=env=>!!env.ALERT_SMTP_PASSWORD;
@@ -13,7 +13,7 @@ export function makeMailer(env,makeTransport=options=>nodemailer.createTransport
  const transport=makeTransport({host:'smtp.gmail.com',port:465,secure:true,auth:{user:ALERT_FROM,pass:env.ALERT_SMTP_PASSWORD.replace(/\s/g,'')},connectionTimeout:10000,greetingTimeout:10000,socketTimeout:15000});
  return message=>transport.sendMail(message);
 }
-export async function sendAdminAlert({code,config,env=globalThis.process.env,store,send,now=Date.now,scheduled=false}){
+export async function sendAdminAlert({code,config,env=globalThis.process.env,store,send,now=Date.now,scheduled=false,detail=''}){
  store=store||(config?.service?makeBackupStore(config):null);
  if(!Object.hasOwn(names,code))throw fault(400,'通知の種類が不正です。');
  if(!mailReady(env)&&!send)return {configured:false,sent:false};
@@ -35,7 +35,7 @@ export async function sendAdminAlert({code,config,env=globalThis.process.env,sto
   }
  }
  try{
-  await (send||makeMailer(env))({from:ALERT_FROM,to:ALERT_TO,subject:'【管理課アプリ】'+names[code],text:names[code]+'。\n\n検知日時：'+new Date(instant).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'})+'（日本時間）\n確認先：https://team-shift-app.vercel.app/\nVercelの実行ログと、設定内の「データ保護」を確認してください。\n\nこのメールに業務データ・画像・認証情報は含みません。\nデータが削除されたことを示す通知ではありません。'});
+  await (send||makeMailer(env))({from:ALERT_FROM,to:ALERT_TO,subject:'【管理課アプリ】'+names[code],text:names[code]+'。'+(detail?'\n\n'+String(detail).slice(0,2000):'')+'\n\n検知日時：'+new Date(instant).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'})+'（日本時間）\n確認先：https://team-shift-app.vercel.app/\nVercelの実行ログと、設定内の「データ保護」を確認してください。\n\nこのメールに業務データ・画像・認証情報は含みません。\nデータが削除されたことを示す通知ではありません。'});
  }catch{throw fault(503,'管理者への通知メールを送信できませんでした。','ALERT_SEND_FAILED');}
  if(claimed&&!storageUnavailable){
   const doc=await store.get(path);

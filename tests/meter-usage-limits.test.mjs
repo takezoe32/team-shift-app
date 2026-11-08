@@ -57,12 +57,12 @@ test('3日連続の赤：前日までに続けて赤だった日数（最大2）
   assert.deepEqual(meterAlertStreaks({ previous: {}, earlier: {} }), {});
 });
 
-test('earlierMeterDates は前日のさらに2日前・3日前（2026年内のみ）', async () => {
+test('earlierMeterDates は前日のさらに2日前・3日前（1月初めは前年の日付）', async () => {
   const { earlierMeterDates } = await import('../src/meterReadings.mjs');
   assert.deepEqual(earlierMeterDates('2026-11-08'), ['2026-11-06', '2026-11-05']);
   assert.deepEqual(earlierMeterDates('2026-11-02'), ['2026-10-31', '2026-10-30']);
-  assert.deepEqual(earlierMeterDates('2026-01-03'), ['2026-01-01']);
-  assert.deepEqual(earlierMeterDates('2026-01-01'), []);
+  assert.deepEqual(earlierMeterDates('2027-01-03'), ['2027-01-01', '2026-12-31']);
+  assert.deepEqual(earlierMeterDates('2027-01-01'), ['2026-12-30', '2026-12-29']);
 });
 
 test('実際の原本：月をまたいでも2日前・3日前の検針値を読み、保存時の照合も通る', { skip: !input && 'METER_TEST_XLSX が未設定' }, async () => {

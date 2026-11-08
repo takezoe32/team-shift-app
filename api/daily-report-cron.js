@@ -5,12 +5,14 @@ import { timingSafeEqual } from 'node:crypto';
 import { configuration, oauth, privateStore } from './_lib/report-auth.js';
 import { runDailyReport } from './_lib/save-daily-report.js';
 import { tokyoDate } from '../src/dailyReport.mjs';
+import { runYearFiles } from './_lib/year-files.js';
+import { makeLineStore } from './_lib/line-store.js';
 
 export function previousTokyoDate(now) {
   return tokyoDate(Number(now) - 86400000);
 }
 
-export function createCronHandler({ env = globalThis.process.env, configure = configuration, makeClient = oauth, makeStore = privateStore, run = runDailyReport, backup = runDailyBackup, notify = sendAdminAlert, now = Date.now, log = console.info } = {}) {
+export function createCronHandler({ env = globalThis.process.env, configure = configuration, makeClient = oauth, makeStore = privateStore, run = runDailyReport, backup = runDailyBackup, notify = sendAdminAlert, now = Date.now, log = console.info, yearFiles = runYearFiles, makeLocks = makeLineStore } = {}) {
   return async function handler(req, res) {
     res.setHeader('Cache-Control', 'no-store');
     if (req.method !== 'GET') { res.setHeader('Allow', 'GET'); return res.status(405).json({ error: 'GETのみ対応しています。' }); }
@@ -22,8 +24,8 @@ export function createCronHandler({ env = globalThis.process.env, configure = co
     const date = previousTokyoDate(now());
     let config;
     const outcome={};
-    async function reportFailure(code) {
-      try { const alert=await notify({code,config,env,now,scheduled:true}); log(JSON.stringify({event:'admin-alert',code,...alert})); }
+    async function reportFailure(code,detail='') {
+      try { const alert=await notify({code,config,env,now,scheduled:true,detail}); log(JSON.stringify({event:'admin-alert',code,...alert})); }
       catch { log(JSON.stringify({event:'admin-alert',code,status:'failed'})); }
     }
     try {
@@ -52,6 +54,17 @@ export function createCronHandler({ env = globalThis.process.env, configure = co
       outcome.report={ok:false};
       log(JSON.stringify({ event: 'daily-report-cron', date, status: 'failed', httpStatus: reportStatus, code: error.code === 'RECONNECT_REQUIRED' ? error.code : '' }));
       await reportFailure('report_failed');
+    }
+    // From December 1: next year's meter folder/files and shift workbook (does nothing once they exist).
+    try {
+      const result=await yearFiles({config,env,now,day:tokyoDate(now()),makeStore,makeClient,makeLocks});
+      outcome.yearFiles={ok:true,skipped:!!result.skipped,year:result.year||null,created:result.created||[],warnings:result.warnings||[]};
+      log(JSON.stringify({event:'year-files',...outcome.yearFiles}));
+      if(outcome.yearFiles.created.length||outcome.yearFiles.warnings.length)await reportFailure('year_files_created',[...outcome.yearFiles.created.map(n=>'作成：'+n),...outcome.yearFiles.warnings.map(w=>'確認：'+w)].join('\n'));
+    } catch(error) {
+      outcome.yearFiles={ok:false};
+      log(JSON.stringify({event:'year-files',status:'failed',message:String(error.message||'').slice(0,200)}));
+      await reportFailure('year_files_failed',String(error.message||''));
     }
     if(!outcome.backup.ok||!outcome.report.ok)return res.status(reportStatus===200?503:reportStatus).json({date,...outcome,error:'自動処理の一部に失敗しました。実行ログと連携状態を確認してください。'});
     return res.status(200).json({ok:true,date,skipped:outcome.report.skipped,...outcome});

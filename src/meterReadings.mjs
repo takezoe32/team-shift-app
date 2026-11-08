@@ -1,7 +1,9 @@
 export const canAccessMeters = user => /^[^@\s]+@plandosee\.co\.jp$/.test(String(user?.email || '').trim().toLowerCase());
 export const METER_FILE_ID = '1Kt-cUPgl5qt5eMzCMPljymBO3YnGIv8y';
 export const METER_URL = `https://docs.google.com/spreadsheets/d/${METER_FILE_ID}/edit`;
+// The first year of the books; later years' files are made on December 1 (api/_lib/year-files.js).
 export const METER_YEAR = 2026;
+export const METER_LAST_YEAR = 2100;
 export const METER_GROUPS = {
  main: [
  ['電気', [['electric-reading','検針値','D'],['electric-demand','デマンド','F']]],
@@ -21,11 +23,11 @@ export const METER_FIELDS = Object.entries(METER_GROUPS).flatMap(([section,group
 export function meterDate(date) {
  if (!/^\d{4}-\d{2}-\d{2}$/.test(date||'')) throw new Error('有効な検針日を選んでください。');
  const [year,month,day]=date.split('-').map(Number), d=new Date(Date.UTC(year,month-1,day));
- if(year!==METER_YEAR||d.toISOString().slice(0,10)!==date) throw new Error('この原本の対象は2026年です。2026年の日付を選んでください。');
+ if(year<METER_YEAR||year>METER_LAST_YEAR||d.toISOString().slice(0,10)!==date) throw new Error('検針は2026年以降の日付を選んでください。');
  return {year,month,day};
 }
-// The two days before the previous day (for the 3-days-in-a-row usage check), within the book's year only.
-export function earlierMeterDates(date){const {year,month,day}=meterDate(date);return [2,3].map(n=>new Date(Date.UTC(year,month-1,day-n)).toISOString().slice(0,10)).filter(d=>d.startsWith(String(year)));}
+// The two days before the previous day (for the 3-days-in-a-row usage check); early January reaches last year's book.
+export function earlierMeterDates(date){const {year,month,day}=meterDate(date);return [2,3].map(n=>new Date(Date.UTC(year,month-1,day-n)).toISOString().slice(0,10));}
 export function previousMeterDate(date){const {year,month,day}=meterDate(date);return new Date(Date.UTC(year,month-1,day-1)).toISOString().slice(0,10);}
 export function meterSheet(titles,section,month){
  const matches=titles.filter(title=>{const n=title.normalize('NFKC').trim().toUpperCase();return section==='main'?/^\d{1,2}$/.test(n)&&Number(n)===month:/^H-\d{1,2}$/.test(n)&&Number(n.slice(2))===month;});

@@ -6,7 +6,7 @@ import { createMeterHandler } from '../api/meter-readings.js';
 import { seal } from '../api/_lib/report-auth.js';
 
 test('20項目、全半角のタブ名、月初、年境界、検針日の妥当性',()=>{
- assert.equal(METER_FIELDS.length,20);assert.equal(meterSheet(['01','H-01','10','Ｈ-10'],'h',10),'Ｈ-10');assert.equal(meterSheet(['01','H-01'],'main',1),'01');assert.throws(()=>meterSheet(['10','１０'],'main',10));assert.equal(previousMeterDate('2026-10-01'),'2026-09-30');assert.equal(previousMeterDate('2026-01-01'),'2025-12-31');assert.throws(()=>meterDate('2026-02-30'));assert.throws(()=>meterDate('2027-01-01'));assert.equal(meterRow('main',27),35);assert.equal(meterRow('h',27),37);
+ assert.equal(METER_FIELDS.length,20);assert.equal(meterSheet(['01','H-01','10','Ｈ-10'],'h',10),'Ｈ-10');assert.equal(meterSheet(['01','H-01'],'main',1),'01');assert.throws(()=>meterSheet(['10','１０'],'main',10));assert.equal(previousMeterDate('2026-10-01'),'2026-09-30');assert.equal(previousMeterDate('2026-01-01'),'2025-12-31');assert.throws(()=>meterDate('2026-02-30'));assert.deepEqual(meterDate('2027-01-01'),{year:2027,month:1,day:1});assert.throws(()=>meterDate('2025-12-31'));assert.equal(meterRow('main',27),35);assert.equal(meterRow('h',27),37);
 });
 test('前日比は増加、減少、ゼロ、小数、未記録を区別',()=>{
  assert.equal(meterDifference('123.5',120).text,'＋3.5');assert.equal(meterDifference('38.2',40,'℃').text,'−1.8 ℃');assert.equal(meterDifference('0',0).text,'±0');assert.equal(meterDifference('0.3',0.2).text,'＋0.1');assert.equal(meterDifference('20',null),null);assert.equal(meterDifference('',12),null);
@@ -52,3 +52,4 @@ test('検針は正確な社内ドメインだけ許可し、外部・類似・�
  for(const method of ['GET','POST']){const req=request(method);req.headers.cookie='__Host-teamshift_line_member='+seal({purpose:'line-member',uid,email:external,expires:now()+60000},secret);assert.equal((await invoke(h,req)).code,403);}
  assert.equal(writes.length,0);
 });
+test('2027年の原本がまだ無い日は409で知らせ、原本を読まない',async()=>{const {h}=handlerFixture(),req=request('GET');req.url='/api/meter-readings?appUid=u1&date=2027-01-05';const res=await invoke(h,req);assert.equal(res.code,409);assert.match(res.data.error,/2027年の検針原本がまだありません/);});

@@ -6,7 +6,8 @@ import { meterDate,meterChanges,canAccessMeters } from '../src/meterReadings.mjs
 import { canManageMeterMap,validateMeterPoints,METER_MAP_ID,METER_MAP_PATHS } from '../src/meterMap.mjs';
 import { MONTHLY_INPUT_FIELDS,monthlyMonth,monthlyChanges } from '../src/meterMonthly.mjs';
 import { randomBytes } from 'node:crypto';
-export function createMeterHandler({configure=configuration,makeStore=privateStore,makeLocks=makeLineStore,makeClient=oauth,makeSheets=meterSheets,makeMonthlySheets=monthlyMeterSheets,env=globalThis.process.env,now=Date.now}={}){
+import { readYearFiles } from './_lib/year-files.js';
+export function createMeterHandler({configure=configuration,makeStore=privateStore,makeLocks=makeLineStore,makeClient=oauth,makeSheets=(token,options)=>meterSheets(token,fetch,options),makeMonthlySheets=(token,options)=>monthlyMeterSheets(token,fetch,options),env=globalThis.process.env,now=Date.now}={}){
  return async(req,res)=>{
   res.setHeader('Cache-Control','no-store');
   try{
@@ -43,7 +44,10 @@ export function createMeterHandler({configure=configuration,makeStore=privateSto
    const connection=await store.get();if(!connection?.refreshToken||connection.needsReconnect)throw fault(503,'管理者が日報のGoogle Drive連携を確認してください。');
    const client=makeClient(config);client.setCredentials({refresh_token:connection.refreshToken});
    const access=(await client.getAccessToken()).token;if(!access)throw fault(503,'Google Driveの連携を確認してください。');
-   const sheets=(monthly?makeMonthlySheets:makeSheets)(access),purpose=monthly?'meter-monthly-snapshot':'meter-snapshot';
+   // Each year's books (made on December 1 for the next year); a year without them cannot be read yet.
+   const files=await readYearFiles(mapStore),year=Number(date.slice(0,4));
+   if(!files[year]?.daily||(monthly&&!files[year]?.monthly))throw fault(409,year+'年の検針原本がまだありません。前年の12月1日に自動で作成されます。');
+   const sheets=(monthly?makeMonthlySheets:makeSheets)(access,{files,year}),purpose=monthly?'meter-monthly-snapshot':'meter-snapshot';
    const response=snapshot=>({...snapshot,...mapData(),revision:seal({purpose,uid,date,expires:now()+3600000,snapshot},config.secret)});
    if(req.method==='GET')return res.status(200).json(response(await sheets.read(date)));
    if(req.body?.action!=='save')throw fault(400,'操作を確認してください。');
