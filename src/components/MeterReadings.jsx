@@ -5,6 +5,7 @@ import { useEditGuard,confirmEditDiscard } from '../editGuard';
 import { japanToday } from '../japanTime.mjs';
 import { METER_FIELDS,canAccessMeters,meterChanges,meterDifference } from '../meterReadings.mjs';
 import { meterFrameBox } from '../meterFrame.mjs';
+import { meterDraftKey,storeMeterDraft,restoreMeterDraft,clearMeterDraft,pruneMeterDrafts,browserStorage } from '../meterDraft.mjs';
 import { MONTHLY_INPUT_FIELDS,monthlyChanges,monthlyTransfers,monthlySourceText,previousMonth } from '../meterMonthly.mjs';
 const control='min-h-11 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-800 disabled:opacity-50';
 const primary=control+' bg-blue-600! text-white! border-blue-600!';
@@ -32,14 +33,19 @@ function MeterReadingsForm({currentUser,kind}){
   return()=>{observer.disconnect();window.removeEventListener('resize',fit);window.visualViewport?.removeEventListener('resize',fit);window.visualViewport?.removeEventListener('scroll',fit);};
  },[]);
  const dialog=useRef(null),lock=useRef(false),latest=useRef(0);
+ // Unsaved values are also kept on this device for the loaded day/month, so closing the screen does not lose them.
+ const draftKey=useRef('');
  const dirty=fields.some(f=>Object.hasOwn(values,f.id)&&String(values[f.id])!==String(snapshot?.current[f.id]??''));
  useEditGuard(dirty||review,saving);
  useEffect(()=>{
   const controller=new AbortController(),request=++latest.current;
-  fetch('/api/meter-readings?'+new URLSearchParams(monthly?{kind,month:date,appUid:currentUser.id}:{date,appUid:currentUser.id}),{signal:controller.signal}).then(async r=>{const data=await r.json();if(!r.ok)throw Object.assign(new Error(data.error),{status:r.status});return data;}).then(data=>{if(controller.signal.aborted||request!==latest.current)return;setSnapshot(data);setValues(Object.fromEntries(fields.map(f=>[f.id,String(data.current[f.id]??'')])));}).catch(e=>{if(controller.signal.aborted)return;setError(e.message||'原本を読み込めませんでした。');setVerify(e.status===401);}).finally(()=>{if(!controller.signal.aborted)setLoading(false);});
+  fetch('/api/meter-readings?'+new URLSearchParams(monthly?{kind,month:date,appUid:currentUser.id}:{date,appUid:currentUser.id}),{signal:controller.signal}).then(async r=>{const data=await r.json();if(!r.ok)throw Object.assign(new Error(data.error),{status:r.status});return data;}).then(data=>{if(controller.signal.aborted||request!==latest.current)return;const storage=browserStorage(),key=meterDraftKey(currentUser.id,kind,date);pruneMeterDrafts(storage);const restored=restoreMeterDraft(storage,key,data,fields),count=Object.keys(restored).length;draftKey.current=key;setSnapshot(data);setValues({...Object.fromEntries(fields.map(f=>[f.id,String(data.current[f.id]??'')])),...restored});if(count)setMessage('保存していない入力（'+count+'項目）をこの端末から戻しました。確認して原本に保存してください。');}).catch(e=>{if(controller.signal.aborted)return;setError(e.message||'原本を読み込めませんでした。');setVerify(e.status===401);}).finally(()=>{if(!controller.signal.aborted)setLoading(false);});
   return()=>controller.abort();
  },[date,currentUser.id,refresh,kind,monthly,fields]);
  useEffect(()=>{if(review&&!dialog.current?.open)dialog.current?.showModal();},[review]);
+ useEffect(()=>{if(snapshot&&draftKey.current)storeMeterDraft(browserStorage(),draftKey.current,values,snapshot,fields);},[values,snapshot,fields]);
+ // Only an explicit 「破棄」 (date switch / reload confirmed) drops the device draft; closing or reloading the page keeps it.
+ const discardDraft=()=>{if(dirty)clearMeterDraft(browserStorage(),draftKey.current);draftKey.current='';};
  const login=async response=>{
   if(lock.current)return;lock.current=true;setLoading(true);setError('');
   try{const r=await fetch('/api/line-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'session',appUid:currentUser.id,credential:response.credential})});const data=await r.json();if(!r.ok)throw new Error(data.error||'本人確認に失敗しました。');setSnapshot(null);setVerify(false);setMessage('');setRefresh(v=>v+1);}
@@ -53,8 +59,8 @@ function MeterReadingsForm({currentUser,kind}){
    setSnapshot(data);setValues(Object.fromEntries(fields.map(f=>[f.id,String(data.current[f.id]??'')])));setMessage(monthly?monthName(date)+'の検針値を毎月検針の原本に保存しました。':date.replaceAll('-','/')+' の検針値を原本に保存しました。');close();
   }catch(e){close();setError(e.message);}finally{lock.current=false;setSaving(false);}
  };
- const switchDate=next=>{if(next&&next!==date&&confirmEditDiscard(dirty,saving)){setValues({});setSnapshot(null);setLoading(true);setError('');setMessage('');setVerify(false);setDate(next);}};
- const reload=()=>{if(confirmEditDiscard(dirty,saving)){setValues({});setSnapshot(null);setLoading(true);setError('');setMessage('');setVerify(false);setRefresh(v=>v+1);}};
+ const switchDate=next=>{if(next&&next!==date&&confirmEditDiscard(dirty,saving)){discardDraft();setValues({});setSnapshot(null);setLoading(true);setError('');setMessage('');setVerify(false);setDate(next);}};
+ const reload=()=>{if(confirmEditDiscard(dirty,saving)){discardDraft();setValues({});setSnapshot(null);setLoading(true);setError('');setMessage('');setVerify(false);setRefresh(v=>v+1);}};
  // The map page keys values by a date: the monthly screen uses the 1st of the month and of the previous month.
  const sendMapSnapshot=()=>mapFrame.current?.contentWindow?.postMessage({type:'meter-map-snapshot',...(monthly?{date:date+'-01',previousDate:previousMonth(date)+'-01',previousLabel:'前月',previousText:monthName(previousMonth(date)),fields:MONTHLY_MAP_FIELDS}:{date,previousDate:snapshot?.previousDate}),previous:snapshot?.previous,current:snapshot?.current,values,formulas:snapshot?.formulas,saving,meterMap:snapshot?.meterMap,canManageMap:snapshot?.canManageMap},window.location.origin);
  useEffect(()=>{
