@@ -24,6 +24,8 @@ export function meterDate(date) {
  if(year!==METER_YEAR||d.toISOString().slice(0,10)!==date) throw new Error('この原本の対象は2026年です。2026年の日付を選んでください。');
  return {year,month,day};
 }
+// The two days before the previous day (for the 3-days-in-a-row usage check), within the book's year only.
+export function earlierMeterDates(date){const {year,month,day}=meterDate(date);return [2,3].map(n=>new Date(Date.UTC(year,month-1,day-n)).toISOString().slice(0,10)).filter(d=>d.startsWith(String(year)));}
 export function previousMeterDate(date){const {year,month,day}=meterDate(date);return new Date(Date.UTC(year,month-1,day-1)).toISOString().slice(0,10);}
 export function meterSheet(titles,section,month){
  const matches=titles.filter(title=>{const n=title.normalize('NFKC').trim().toUpperCase();return section==='main'?/^\d{1,2}$/.test(n)&&Number(n)===month:/^H-\d{1,2}$/.test(n)&&Number(n.slice(2))===month;});

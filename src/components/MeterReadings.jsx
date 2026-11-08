@@ -5,7 +5,7 @@ import { useEditGuard,confirmEditDiscard } from '../editGuard';
 import { japanToday } from '../japanTime.mjs';
 import { METER_FIELDS,canAccessMeters,meterChanges,meterDifference } from '../meterReadings.mjs';
 import { meterFrameBox } from '../meterFrame.mjs';
-import { meterUsageLimits } from '../meterUsageLimits.mjs';
+import { meterUsageLimits,meterAlertStreaks } from '../meterUsageLimits.mjs';
 import { meterDraftKey,storeMeterDraft,restoreMeterDraft,clearMeterDraft,pruneMeterDrafts,browserStorage } from '../meterDraft.mjs';
 import { MONTHLY_INPUT_FIELDS,monthlyChanges,monthlyTransfers,monthlySourceText,previousMonth } from '../meterMonthly.mjs';
 const control='min-h-11 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-800 disabled:opacity-50';
@@ -64,7 +64,7 @@ function MeterReadingsForm({currentUser,kind}){
  const switchDate=next=>{if(next&&next!==date&&confirmEditDiscard(dirty,saving)){discardDraft();setValues({});setSnapshot(null);setLoading(true);setError('');setMessage('');setVerify(false);setDate(next);}};
  const reload=()=>{if(confirmEditDiscard(dirty,saving)){discardDraft();setValues({});setSnapshot(null);setLoading(true);setError('');setMessage('');setVerify(false);setRefresh(v=>v+1);}};
  // The map page keys values by a date: the monthly screen uses the 1st of the month and of the previous month.
- const sendMapSnapshot=()=>mapFrame.current?.contentWindow?.postMessage({type:'meter-map-snapshot',...(monthly?{date:date+'-01',previousDate:previousMonth(date)+'-01',previousLabel:'前月',previousText:monthName(previousMonth(date)),fields:MONTHLY_MAP_FIELDS}:{date,previousDate:snapshot?.previousDate,usageLimits:USAGE_LIMITS}),previous:snapshot?.previous,current:snapshot?.current,values,formulas:snapshot?.formulas,saving,meterMap:snapshot?.meterMap,canManageMap:snapshot?.canManageMap},window.location.origin);
+ const sendMapSnapshot=()=>mapFrame.current?.contentWindow?.postMessage({type:'meter-map-snapshot',...(monthly?{date:date+'-01',previousDate:previousMonth(date)+'-01',previousLabel:'前月',previousText:monthName(previousMonth(date)),fields:MONTHLY_MAP_FIELDS}:{date,previousDate:snapshot?.previousDate,usageLimits:USAGE_LIMITS,alertStreaks:snapshot?meterAlertStreaks(snapshot,USAGE_LIMITS):{},earlier:snapshot?.earlier||{}}),previous:snapshot?.previous,current:snapshot?.current,values,formulas:snapshot?.formulas,saving,meterMap:snapshot?.meterMap,canManageMap:snapshot?.canManageMap},window.location.origin);
  useEffect(()=>{
   const listener=e=>{if(e.origin!==window.location.origin||e.source!==mapFrame.current?.contentWindow||!snapshot)return;
    if(e.data?.type==='meter-map-ready'){sendMapSnapshot();return;}

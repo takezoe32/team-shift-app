@@ -43,3 +43,35 @@ test('実際の毎朝検針の原本（1/1〜11/7）の中央値・最大値と�
     assert.equal(median(usage), s.median, id + ' median'); assert.equal(Math.max(...usage), s.max, id + ' max');
   }
 });
+
+test('3日連続の赤：前日までに続けて赤だった日数（最大2）を数え、どこかで途切れたら止まる', async () => {
+  const { priorAlertDays, meterAlertStreaks } = await import('../src/meterUsageLimits.mjs');
+  const limit = { warn: 40, alert: 72 };
+  assert.equal(priorAlertDays([300, 220, 140], limit), 2);
+  assert.equal(priorAlertDays([300, 220, 200], limit), 1);
+  assert.equal(priorAlertDays([300, 280, 140], limit), 0);
+  assert.equal(priorAlertDays([300, null, 140], limit), 0);
+  assert.equal(priorAlertDays([300, 220, 140, 0], limit), 2);
+  const snapshot = { previous: { 'gas-main': 300, 'gas-kitchen': 10 }, earlier: { '2026-11-06': { 'gas-main': 220, 'gas-kitchen': 9 }, '2026-11-05': { 'gas-main': 140, 'gas-kitchen': 8 } } };
+  assert.deepEqual(meterAlertStreaks(snapshot), { 'gas-main': 2 });
+  assert.deepEqual(meterAlertStreaks({ previous: {}, earlier: {} }), {});
+});
+
+test('earlierMeterDates は前日のさらに2日前・3日前（2026年内のみ）', async () => {
+  const { earlierMeterDates } = await import('../src/meterReadings.mjs');
+  assert.deepEqual(earlierMeterDates('2026-11-08'), ['2026-11-06', '2026-11-05']);
+  assert.deepEqual(earlierMeterDates('2026-11-02'), ['2026-10-31', '2026-10-30']);
+  assert.deepEqual(earlierMeterDates('2026-01-03'), ['2026-01-01']);
+  assert.deepEqual(earlierMeterDates('2026-01-01'), []);
+});
+
+test('実際の原本：月をまたいでも2日前・3日前の検針値を読み、保存時の照合も通る', { skip: !input && 'METER_TEST_XLSX が未設定' }, async () => {
+  const { meterSheets } = await import('../api/_lib/meter-sheets.js');
+  const data = fs.readFileSync(input), meta = { id: 'x', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', fileSize: String(data.length), etag: '"v1"', capabilities: { canEdit: true } };
+  const fetcher = async url => url.includes('alt=media') ? { ok: true, arrayBuffer: async () => data } : { ok: true, json: async () => meta };
+  const book = xlsxCells(data), s = await meterSheets('t', fetcher).read('2026-11-02');
+  assert.deepEqual(Object.keys(s.earlier), ['2026-10-31', '2026-10-30']);
+  assert.equal(s.earlier['2026-10-31']['gas-main'], book.get('10', 'H39').value);
+  assert.equal(s.earlier['2026-10-30']['h-water'], book.get(book.titles.find(t => t.normalize('NFKC') === 'H-10'), 'H40').value);
+  assert.equal(typeof s.earlier['2026-10-31']['gas-main'], 'number');
+});

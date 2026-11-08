@@ -19,6 +19,18 @@ export const METER_USAGE_STATS = {
 export const ALERT_RATIO = 0.9;
 // What the map page receives: {id:{warn,alert}} — yellow when usage > warn, red when usage >= alert.
 export const meterUsageLimits = (stats=METER_USAGE_STATS) => Object.fromEntries(Object.entries(stats).map(([id,s])=>[id,{warn:s.median,alert:Number((s.max*ALERT_RATIO).toFixed(8))}]));
+// How many days in a row, ending with the previous day, were red (0–2): readings = [previous, the day before, the day before that].
+export function priorAlertDays(readings,limit){
+ let days=0;
+ for(let i=0;i+1<readings.length&&days<2;i++){const a=readings[i],b=readings[i+1];if(typeof a!=='number'||typeof b!=='number'||meterUsageLevel(Number((a-b).toFixed(8)),limit)!=='alert')break;days++;}
+ return days;
+}
+// For the map page: {id:days} for the items whose previous day(s) were red. Red today with 2 → 「3日連続」 popup.
+export function meterAlertStreaks(snapshot,limits=meterUsageLimits()){
+ const days=Object.keys(snapshot?.earlier||{}).sort().reverse(),out={};
+ for(const [id,limit] of Object.entries(limits)){const n=priorAlertDays([snapshot?.previous?.[id],...days.map(d=>snapshot.earlier[d]?.[id])],limit);if(n)out[id]=n;}
+ return out;
+}
 // The same rule the map page applies ('' = no color).
 export function meterUsageLevel(usage,limit){
  if(!limit||typeof usage!=='number'||!Number.isFinite(usage))return '';

@@ -1,5 +1,5 @@
 import { Buffer } from 'node:buffer';
-import { METER_FILE_ID,METER_FIELDS,meterDate,previousMeterDate,meterSheet,meterRow } from '../../src/meterReadings.mjs';
+import { METER_FILE_ID,METER_FIELDS,meterDate,previousMeterDate,earlierMeterDates,meterSheet,meterRow } from '../../src/meterReadings.mjs';
 import { MONTHLY_FILE_ID,monthlyMonth,monthlySheet,monthlyDailySheets,monthlySnapshot,monthlyUpdates } from '../../src/meterMonthly.mjs';
 import { fault } from './report-auth.js';
 import { xlsxCells } from './xlsx-cells.js';
@@ -17,11 +17,14 @@ function snapshotFrom(date,titles,get){
   const cell=get(title,f.column+row);current[f.id]=typeof cell.value==='number'?cell.value:null;formulas[f.id]=!!cell.formula||!!cell.blocked||(cell.value!==null&&typeof cell.value!=='number');previous[f.id]=null;
   if(previousSheets[f.section]){const prevDay=Number(previousDate.slice(8)),prevTitle=previousSheets[f.section];if(get(prevTitle,'B'+meterRow(f.section,prevDay)).value!==prevDay)throw fault(409,'前日の検針行を確認できませんでした。');const v=get(prevTitle,f.column+meterRow(f.section,prevDay)).value;previous[f.id]=typeof v==='number'?v:null;}
  }
- return {date,previousDate,current,previous,formulas,sheets};
+ // Readings of the two days before the previous day, for the 「3日連続」 usage check only: a missing sheet or row is just null.
+ const earlier={};
+ for(const day of earlierMeterDates(date)){const e=meterDate(day);earlier[day]={};for(const f of METER_FIELDS){let v=null;try{const title=meterSheet(titles,f.section,e.month),row=meterRow(f.section,e.day);if(get(title,'B'+row).value===e.day){const x=get(title,f.column+row).value;v=typeof x==='number'?x:null;}}catch{v=null;}earlier[day][f.id]=v;}}
+ return {date,previousDate,current,previous,formulas,sheets,earlier};
 }
 const updatesFor=(snapshot,changes)=>Object.entries(changes).map(([id,value])=>{const f=METER_FIELDS.find(f=>f.id===id);if(!f||snapshot.formulas[id]||typeof value!=='number'||!Number.isFinite(value))throw fault(409,'数式や入力対象外のセルは変更できません。');return {title:snapshot.sheets[f.section],address:f.column+meterRow(f.section,meterDate(snapshot.date).day),value};});
 const upstreamError=status=>{if([409,412].includes(status))throw fault(409,'原本が他の人によって変更されました。原本を再読込してから確認してください。');if([403,404].includes(status))throw fault(403,'検針原本にアクセスできません。日報のGoogle Drive連携アカウントに原本の編集権限があるか確認してください。');throw fault(503,'検針原本との通信に失敗しました。入力を残したまま再実行してください。');};
-const dailyRanges=date=>titles=>{const d=meterDate(date),prev=previousMeterDate(date),targets=[];for(const section of ['main','h']){targets.push(meterSheet(titles,section,d.month));if(prev.startsWith(String(d.year)))targets.push(meterSheet(titles,section,Number(prev.slice(5,7))));}return [...new Set(targets)].map(title=>[title,'B1:T45']);};
+const dailyRanges=date=>titles=>{const d=meterDate(date),prev=previousMeterDate(date),targets=[];for(const section of ['main','h']){targets.push(meterSheet(titles,section,d.month));if(prev.startsWith(String(d.year)))targets.push(meterSheet(titles,section,Number(prev.slice(5,7))));for(const day of earlierMeterDates(date)){try{targets.push(meterSheet(titles,section,Number(day.slice(5,7))));}catch{ /* checked in snapshotFrom */ }}}return [...new Set(targets)].map(title=>[title,'B1:T45']);};
 // A Google Sheets spreadsheet read through the Sheets API (only the requested ranges).
 // ranges(titles) -> [[title,'B1:T45'],...]; the result's get(title,address) returns {value,formula,blocked}.
 function nativeBook(token,fileId,fetcher){
