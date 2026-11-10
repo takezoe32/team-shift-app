@@ -24,7 +24,7 @@ export default function MeterReadings({currentUser,kind='daily'}){
 }
 function MeterReadingsForm({currentUser,kind}){
  const monthly=kind==='monthly',fields=monthly?MONTHLY_INPUT_FIELDS:METER_FIELDS,today=()=>monthly?japanToday().slice(0,7):japanToday();
- const [date,setDate]=useState(today),[snapshot,setSnapshot]=useState(null),[values,setValues]=useState({}),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState(''),[verify,setVerify]=useState(false),[refresh,setRefresh]=useState(0),[review,setReview]=useState(false);
+ const [date,setDate]=useState(today),[snapshot,setSnapshot]=useState(null),[values,setValues]=useState({}),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState(''),[verify,setVerify]=useState(false),[refresh,setRefresh]=useState(0),[review,setReview]=useState(false),[prompted,setPrompted]=useState(false);
  const mapFrame=useRef(null),workspace=useRef(null);
  const [frameBox,setFrameBox]=useState({top:64,height:'calc(100dvh - 140px)'});
  useEffect(()=>{
@@ -55,12 +55,13 @@ function MeterReadingsForm({currentUser,kind}){
   try{const r=await fetch('/api/line-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'session',appUid:currentUser.id,credential:response.credential})});const data=await r.json();if(!r.ok)throw new Error(data.error||'本人確認に失敗しました。');setSnapshot(null);setVerify(false);setMessage('');setRefresh(v=>v+1);}
   catch(e){setError(e.message);setLoading(false);}finally{lock.current=false;}
  };
- const close=()=>{dialog.current?.close();setReview(false);};
- const save=async()=>{
+ const close=()=>{dialog.current?.close();setReview(false);setPrompted(false);};
+ // partial (途中保存): only what is typed so far, straight from the input pane without the confirmation screen.
+ const save=async(next=values,partial=false)=>{
   if(lock.current)return;lock.current=true;setSaving(true);setError('');
   try{
-   const r=await fetch('/api/meter-readings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'save',appUid:currentUser.id,...(monthly?{kind,month:date}:{date}),values,revision:snapshot.revision})});const data=await r.json();if(!r.ok)throw new Error(data.error||'保存できませんでした。');
-   setSnapshot(data);setValues(Object.fromEntries(fields.map(f=>[f.id,String(data.current[f.id]??'')])));setMessage(monthly?monthName(date)+'の検針値を毎月検針の原本に保存しました。':date.replaceAll('-','/')+' の検針値を原本に保存しました。');close();
+   const r=await fetch('/api/meter-readings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'save',appUid:currentUser.id,...(monthly?{kind,month:date}:{date}),values:next,revision:snapshot.revision})});const data=await r.json();if(!r.ok)throw new Error(data.error||'保存できませんでした。');
+   setSnapshot(data);setValues(Object.fromEntries(fields.map(f=>[f.id,String(data.current[f.id]??'')])));setMessage(partial?(monthly?monthName(date):date.replaceAll('-','/')+' ')+'の入力済みの検針値を'+(monthly?'毎月検針の':'')+'原本に途中保存しました。残りを入力したら「保存」で保存してください。':monthly?monthName(date)+'の検針値を毎月検針の原本に保存しました。':date.replaceAll('-','/')+' の検針値を原本に保存しました。');close();
   }catch(e){close();setError(e.message);}finally{lock.current=false;setSaving(false);}
  };
  const switchDate=next=>{if(next&&next!==date&&confirmEditDiscard(dirty,saving)){discardDraft();setValues({});setSnapshot(null);setLoading(true);setError('');setMessage('');setVerify(false);setDate(next);}};
@@ -78,8 +79,12 @@ function MeterReadingsForm({currentUser,kind}){
     const edits=Object.fromEntries(Object.entries(e.data.edits).filter(([id,value])=>fields.some(f=>f.id===id)&&!snapshot.formulas[id]&&typeof value==='string'));
     if(Object.keys(edits).length){setValues(v=>({...v,...edits}));setMessage('');}return;
    }
-   if(e.data?.type!=='meter-map-review'||saving||!e.data.edits||typeof e.data.edits!=='object')return;
-   try{const next={...values};for(const [id,value] of Object.entries(e.data.edits)){if(!fields.some(f=>f.id===id)||snapshot.formulas[id]||typeof value!=='string')throw new Error('検針項目を確認してください。');next[id]=value;}const changes=monthly?monthlyChanges(next,snapshot):meterChanges(next,snapshot.current);if(!Object.keys(changes).length)throw new Error('変更した検針値がありません。');setValues(next);setError('');setReview(true);}catch(err){setError(err.message);}
+   if(!['meter-map-review','meter-map-save-partial'].includes(e.data?.type)||saving||review||!e.data.edits||typeof e.data.edits!=='object')return;
+   const partial=e.data.type==='meter-map-save-partial',prompt=!partial&&e.data.prompt===true;
+   try{const next={...values};for(const [id,value] of Object.entries(e.data.edits)){if(!fields.some(f=>f.id===id)||snapshot.formulas[id]||typeof value!=='string')throw new Error('検針項目を確認してください。');next[id]=value;}const changes=monthly?monthlyChanges(next,snapshot):meterChanges(next,snapshot.current);
+    // The automatic prompt stays quiet when nothing differs from the book (e.g. 12.0 typed for 12).
+    if(!Object.keys(changes).length){if(prompt)return;throw new Error(partial?'原本と同じ値のため、途中保存する変更はありません。':'変更した検針値がありません。');}
+    setValues(next);setError('');if(partial){setMessage('');save(next,true);return;}setPrompted(prompt);setReview(true);}catch(err){setError(err.message);}
   };window.addEventListener('message',listener);sendMapSnapshot();return()=>window.removeEventListener('message',listener);
  });
  const changed=fields.filter(f=>Object.hasOwn(values,f.id)&&String(values[f.id])!==String(snapshot?.current[f.id]??''));
@@ -95,7 +100,7 @@ function MeterReadingsForm({currentUser,kind}){
   {message&&<p role="status" className="shrink-0 px-2 py-1 text-xs font-bold text-green-800">{message}</p>}
   {verify&&<section className="shrink-0 space-y-2 rounded-xl bg-blue-50 p-3"><p className="text-sm">{currentUser.name}さんのGoogleアカウントで本人確認してください。</p><GoogleLogin onSuccess={login} onError={()=>setError('Googleの本人確認をやり直してください。')}/></section>}
   {snapshot&&<iframe ref={mapFrame} title={monthly?'ホテル1階 毎月検針マップ':'ホテル1階 検針マップ'} src="/meter-map.html" onLoad={()=>{sendMapSnapshot();sendKeyboard();}} className="block min-h-0 w-full flex-1 border-0"/>}
-  {review&&<dialog ref={dialog} aria-labelledby="meter-review-heading" onCancel={e=>{e.preventDefault();if(!saving)close();}} onClose={()=>setReview(false)} className="fixed inset-0 m-auto max-h-[85dvh] w-[calc(100%-2rem)] max-w-xl overflow-auto rounded-2xl border border-gray-200 bg-white p-5 shadow-xl backdrop:bg-black/40">{monthly?<MonthlyReview month={date} snapshot={snapshot} changed={changed} values={values}/>:<><h2 id="meter-review-heading" className="text-lg font-bold">検針値の保存確認</h2><p className="mt-2 text-sm">{date.replaceAll('-','/')}：変更した{changed.length}項目を原本に保存します。</p><div className="my-4 divide-y divide-gray-200">{changed.map(f=>{const diff=meterDifference(values[f.id],snapshot.previous[f.id],f.unit);return <div key={f.id} className="py-3 text-sm"><p className="font-bold">{f.section==='main'?'':'H-'}{Number(date.slice(5,7))}・{f.group}／{f.label}</p><p className="mt-1">当日：{showNumber(snapshot.current[f.id],f.unit)} → <strong>{values[f.id]} {f.unit}</strong></p><p className="mt-1 text-xs text-gray-500">前日：{showNumber(snapshot.previous[f.id],f.unit)} ／ 前日比 {diff?.text||'未計算'}</p></div>;})}</div></>}<div className="flex justify-end gap-2"><button type="button" className={control} disabled={saving} onClick={close}>入力に戻る</button><button type="button" className={primary} disabled={saving} onClick={save}>{saving?'保存中…':'原本に保存する'}</button></div></dialog>}
+  {review&&<dialog ref={dialog} aria-labelledby="meter-review-heading" onCancel={e=>{e.preventDefault();if(!saving)close();}} onClose={()=>setReview(false)} className="fixed inset-0 m-auto max-h-[85dvh] w-[calc(100%-2rem)] max-w-xl overflow-auto rounded-2xl border border-gray-200 bg-white p-5 shadow-xl backdrop:bg-black/40">{prompted&&<p role="status" className="mb-3 rounded-lg bg-green-50 p-2 text-sm font-bold text-green-800">すべての検針項目が入力されました。内容を確認して、原本に保存してください。</p>}{monthly?<MonthlyReview month={date} snapshot={snapshot} changed={changed} values={values}/>:<><h2 id="meter-review-heading" className="text-lg font-bold">検針値の保存確認</h2><p className="mt-2 text-sm">{date.replaceAll('-','/')}：変更した{changed.length}項目を原本に保存します。</p><div className="my-4 divide-y divide-gray-200">{changed.map(f=>{const diff=meterDifference(values[f.id],snapshot.previous[f.id],f.unit);return <div key={f.id} className="py-3 text-sm"><p className="font-bold">{f.section==='main'?'':'H-'}{Number(date.slice(5,7))}・{f.group}／{f.label}</p><p className="mt-1">当日：{showNumber(snapshot.current[f.id],f.unit)} → <strong>{values[f.id]} {f.unit}</strong></p><p className="mt-1 text-xs text-gray-500">前日：{showNumber(snapshot.previous[f.id],f.unit)} ／ 前日比 {diff?.text||'未計算'}</p></div>;})}</div></>}<div className="flex justify-end gap-2"><button type="button" className={control} disabled={saving} onClick={close}>入力に戻る</button><button type="button" className={primary} disabled={saving} onClick={()=>save()}>{saving?'保存中…':'原本に保存する'}</button></div></dialog>}
  </div>;
 }
 // Confirmation for the monthly book: the meters entered in the app, then the values transferred from the daily book.
