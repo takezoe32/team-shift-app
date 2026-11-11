@@ -4,6 +4,7 @@ import { configuration,cookies,unseal,verifyRequest,privateStore,oauth,fault } f
 import { isReadOnlyUser } from '../src/viewerPermission.mjs';
 import { validateTaskFileContent,taskFileUrl,TASK_FILE_LIMIT,taskFileVisibleTo,taskFilePreview } from '../src/taskFiles.mjs';
 import { MEDIA_FOLDER_ID } from '../src/dailyReport.mjs';
+import { handleReceiptDraft } from './_lib/receipt-drafts.js';
 export function createTaskFileHandler({configure=configuration,makeStore=privateStore,makeClient=oauth,fetcher=fetch,now=Date.now}={}){
  return async(req,res)=>{
   res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');
@@ -19,6 +20,8 @@ export function createTaskFileHandler({configure=configuration,makeStore=private
    const connection=await store.get();if(!connection?.refreshToken||connection.needsReconnect)throw fault(503,'管理者が日報のGoogle Drive連携を確認してください。');
    const client=makeClient(config);client.setCredentials({refresh_token:connection.refreshToken});const access=(await client.getAccessToken()).token;
    const call=async(url,options={})=>{const r=await fetcher(url,{...options,headers:{Authorization:'Bearer '+access,...options.headers},signal:AbortSignal.timeout(25000)});if(!r.ok)throw fault(r.status===404?404:503,'添付ファイルの保存先にアクセスできません。');return r;};
+   const params=new URL(req.url||'/','https://team-shift-app.vercel.app').searchParams;
+   if((req.method==='GET'?params.get('kind'):req.body?.kind)==='receipt-draft')return await handleReceiptDraft({req,res,call,uid:member.uid,params,now});
    if(req.method==='GET'){
     const id=new URL(req.url,'https://team-shift-app.vercel.app').searchParams.get('id');if(!taskFileUrl(id))throw fault(400,'添付ファイルを確認してください。');
     const meta=await(await call(`https://www.googleapis.com/drive/v3/files/${id}?fields=id,name,size,parents,appProperties&supportsAllDrives=true`)).json();
