@@ -66,7 +66,7 @@ function MeterReadingsForm({currentUser,kind}){
  const save=async(next=values,partial=false)=>{
   if(lock.current)return;lock.current=true;setSaving(true);setError('');
   try{
-   const r=await fetch('/api/meter-readings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'save',appUid:currentUser.id,...(monthly?{kind,month:date}:{date}),values:next,revision:snapshot.revision})});const data=await r.json();if(!r.ok)throw new Error(data.error||'保存できませんでした。');
+   const r=await fetch('/api/meter-readings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'save',appUid:currentUser.id,...(monthly?{kind,month:date}:{date}),values:next,final:!partial,revision:snapshot.revision})});const data=await r.json();if(!r.ok)throw new Error(data.error||'保存できませんでした。');
    setSnapshot(data);setValues(Object.fromEntries(fields.map(f=>[f.id,String(data.current[f.id]??'')])));
    const text=partial?(monthly?monthName(date):date.replaceAll('-','/')+' ')+'の入力済みの検針値を'+(monthly?'毎月検針の':'')+'原本に途中保存しました。残りを入力したら「保存」で保存してください。':monthly?monthName(date)+'の検針値を毎月検針の原本に保存しました。':date.replaceAll('-','/')+' の検針値を原本に保存しました。';
    setMessage(text);close();setDone({title:partial?'途中保存が完了しました':'保存が完了しました',text});

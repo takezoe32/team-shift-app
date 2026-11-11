@@ -7,6 +7,8 @@ import { canManageMeterMap,validateMeterPoints,METER_MAP_ID,METER_MAP_PATHS } fr
 import { MONTHLY_INPUT_FIELDS,monthlyMonth,monthlyChanges } from '../src/meterMonthly.mjs';
 import { randomBytes } from 'node:crypto';
 import { readYearFiles } from './_lib/year-files.js';
+import { recordMeterSave } from '../src/meterSaveStatus.mjs';
+import { japanToday } from '../src/japanTime.mjs';
 export function createMeterHandler({configure=configuration,makeStore=privateStore,makeLocks=makeLineStore,makeClient=oauth,makeSheets=(token,options)=>meterSheets(token,fetch,options),makeMonthlySheets=(token,options)=>monthlyMeterSheets(token,fetch,options),env=globalThis.process.env,now=Date.now}={}){
  return async(req,res)=>{
   res.setHeader('Cache-Control','no-store');
@@ -63,6 +65,10 @@ export function createMeterHandler({configure=configuration,makeStore=privateSto
     await sheets.write(fresh,changes);
     const saved=await sheets.read(date);
     if(Object.entries(changes).some(([id,value])=>saved.current[id]!==value))throw fault(409,'保存結果が一致しません。原本を再読込して確認してください。');
+    // 「保存」 (final, not 途中保存) is shown under the calendar's shared memo for the rest of the day; the 毎朝検針 only for today's
+    // reading. The book is already saved, so a failure here does not fail the request.
+    if(req.body.final===true&&(monthly||date===japanToday(now()))){const at=new Date(now()).toISOString(),shared='app_data/shared_state';
+     try{await locks.transact([shared],records=>({writes:[{path:shared,fields:['meterSaves'],value:{meterSaves:recordMeterSave(records[shared]?.meterSaves,{kind:monthly?'monthly':'daily',uid,name:records[shared]?.users?.[uid]?.name||user.name,at,month:monthly?date:''})}}]}));}catch{ /* The calendar line is a convenience. */ }}
     return res.status(200).json({...response(saved),savedAt:new Date(now()).toISOString(),savedBy:user.name||''});
    }finally{await locks.transact([path],values=>values[path]?.nonce===nonce?{writes:[{path,value:{...values[path],expires:0}}]}:{});}
   }catch(e){return res.status(e.status||500).json({error:e.status?e.message:'検針処理に失敗しました。入力を残したまま、時間をおいて再実行してください。'});}
