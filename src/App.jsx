@@ -24,6 +24,7 @@ import { handoffUpdates, initialPartnerText } from './handoffHistory.mjs';
 import HandoffEntry from './components/HandoffEntry';
 import { canChangeHandoff, findLiveTask } from './handoffEdit.mjs';
 import BarcodeScannerModal from './components/BarcodeScannerModal';
+import InventoryProductSearch from './components/InventoryProductSearch';
 import CalendarBlocks from './components/CalendarBlocks';
 import ViewerWorkspace from './components/ViewerWorkspace';
 import { VIEWER_ROLE, withViewerRole, isReadOnlyUser, guardWrites } from './viewerPermission.mjs';
@@ -1370,8 +1371,8 @@ const DailyDetailView = ({
   const [newTaskEndTime, setNewTaskEndTime] = useState('');
   const [newTaskProductId, setNewTaskProductId] = useState('');
   const [newTaskProductQuantity, setNewTaskProductQuantity] = useState('1');
-  const [productScannerOpen, setProductScannerOpen] = useState(false);
-  const [productScanMessage, setProductScanMessage] = useState('');
+  // Bumped after a task is added so the product search box starts empty.
+  const [productSearchKey, setProductSearchKey] = useState(0);
   const [newTaskVisibility, setNewTaskVisibility] = useState('public');
   const [selectedUserUid, setSelectedUserUid] = useState(currentUserUid);
   const taskAssigneeIds = newAssigneeIds || [selectedUserUid];
@@ -1521,16 +1522,6 @@ const DailyDetailView = ({
 
   const clearNewTaskImage = () => setNewTaskImages([]);
 
-  const handleProductBarcodeDetected = (code) => {
-    setProductScannerOpen(false);
-    const barcode = normalizeInventoryName(code);
-    const product = inventoryItems.find(item => normalizeInventoryName(item.barcode) === barcode);
-    if (!product) { setProductScanMessage('このバーコードの商品は未登録です。在庫管理で商品登録してください。'); return; }
-    if (Number(product.stock || 0) <= 0) { setProductScanMessage('この商品の在庫がありません。'); return; }
-    setNewTaskProductId(product.id);
-    setProductScanMessage('選択しました：' + inventoryProductLabel(product));
-  };
-
   const handleAddTask = async () => {
     if (!taskRegistrationDate) { alert('日付を選択してください。'); return; }
     if (newTaskPeriodEnd && newTaskPeriodEnd < taskRegistrationDate) { alert('作業期間の終了日は開始日以降を選択してください。'); return; }
@@ -1560,7 +1551,7 @@ const DailyDetailView = ({
       setNewTaskEndTime('');
       setNewTaskProductId('');
       setNewTaskProductQuantity('1');
-      setProductScanMessage('');
+      setProductSearchKey(key => key + 1);
       clearNewTaskImage();
       return true;
     } catch (error) {
@@ -1648,7 +1639,7 @@ summary={[[ '重要', newTaskVisibility !== 'private' && newTaskImportant ? '重
               {newTaskVisibility !== 'private' && <label className="block text-sm font-bold">どこで？どんな内容？（必須）<input type="text" value={newTaskSubject} onChange={e=>setNewTaskSubject(e.target.value)} placeholder="例：1階ロビーの電球交換" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm" disabled={isUploading}/></label>}
               <label className="block text-sm font-bold">日付<DateInput aria-label="タスクの登録日" value={taskRegistrationDate} onChange={e => setNewTaskDate(e.target.value)} disabled={isUploading} required className="block w-full min-h-12 mt-1 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label>{newTaskVisibility !== 'private' && <TaskRepeatFields repeat={newTaskRepeat} onRepeat={setNewTaskRepeat} periodEnd={newTaskPeriodEnd} onPeriodEnd={setNewTaskPeriodEnd} min={taskRegistrationDate} disabled={isUploading}/>}
               {newTaskVisibility !== 'private' && <label className="flex items-center gap-2 text-xs text-gray-600"><span className="font-bold">終了予定時刻</span><div className="flex items-center gap-1"><select aria-label="終了予定時刻の時" value={newTaskEndTime ? newTaskEndTime.split(':')[0] : ''} onChange={e=>setNewTaskEndTime(e.target.value ? e.target.value+':'+((newTaskEndTime||'').split(':')[1]||'00') : '')} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" disabled={isUploading}><option value="">時</option>{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(v=><option key={v} value={v}>{v}</option>)}</select><span>:</span><select aria-label="終了予定時刻の分" value={newTaskEndTime ? newTaskEndTime.split(':')[1] : ''} onChange={e=>setNewTaskEndTime(((newTaskEndTime||'').split(':')[0]||'00')+':'+e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" disabled={isUploading}><option value="">分</option>{['00','15','30','45'].map(v=><option key={v} value={v}>{v}</option>)}</select></div></label>}
-              {newTaskVisibility !== 'private' && <div className="space-y-2"><label className="block text-xs text-gray-600"><span className="block font-bold mb-1">使用する商品（任意）</span><select value={newTaskProductId} onChange={e=>setNewTaskProductId(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white" disabled={isUploading}><option value="">商品を選択しない</option>{inventoryItems.map(item=><option key={item.id} value={item.id} disabled={Number(item.stock||0)<=0}>{item.kind ? item.kind + '：' : ''}{inventoryProductLabel(item)}{item.usageLocation ? '／使用箇所：' + item.usageLocation : ''}（在庫 {Number(item.stock||0)} 個）</option>)}</select></label><div className="flex gap-2"><button type="button" onClick={()=>setProductScannerOpen(true)} disabled={isUploading} className="min-h-10 px-3 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-bold inline-flex items-center gap-1"><Camera size={15}/>バーコード読取</button><label className="flex-1 text-xs text-gray-600 flex items-center gap-2">使用数量<input type="number" min="1" step="1" value={newTaskProductQuantity} onChange={e=>setNewTaskProductQuantity(e.target.value)} className="min-h-10 w-20 rounded-lg border border-gray-200 px-2 text-center text-sm"/></label></div>{productScanMessage && <p className="text-xs text-blue-700">{productScanMessage}</p>}</div>}
+              {newTaskVisibility !== 'private' && <div className="space-y-2"><div className="block text-xs text-gray-600"><span className="block font-bold mb-1">使用する商品（任意）</span><InventoryProductSearch key={productSearchKey} items={inventoryItems} disabled={isUploading} selectedId={newTaskProductId} onSelect={item=>setNewTaskProductId(item?.id || '')} unavailable={item=>Number(item.stock||0)<=0?'在庫なし':''}/></div><div className="flex gap-2"><label className="flex-1 text-xs text-gray-600 flex items-center gap-2">使用数量<input type="number" min="1" step="1" value={newTaskProductQuantity} onChange={e=>setNewTaskProductQuantity(e.target.value)} className="min-h-10 w-20 rounded-lg border border-gray-200 px-2 text-center text-sm"/></label></div></div>}
             </div>
             <div className="flex flex-col gap-2 items-stretch">
               <label className="block text-sm font-bold">{newTaskVisibility === 'private' ? '個人メモ' : '詳しい内容（任意）'}<textarea
@@ -1792,7 +1783,6 @@ summary={[[ '重要', newTaskVisibility !== 'private' && newTaskImportant ? '重
           </div>
         </div>
       )}
-      {productScannerOpen && <BarcodeScannerModal onDetected={handleProductBarcodeDetected} onClose={()=>setProductScannerOpen(false)}/>}
     </div>
   );
 };
