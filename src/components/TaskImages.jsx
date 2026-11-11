@@ -2,6 +2,8 @@ import TaskFileViewer from './TaskFileViewer';
 import { isTaskFile, validateTaskFiles, TASK_FILE_ACCEPT } from '../taskFiles.mjs';
 import { useEffect, useRef, useState } from 'react';
 import { getTaskImages, validateTaskImageFiles, isTaskVideo } from '../taskImages.mjs';
+// One button for images, a video and documents: the phone offers its camera, photo library and files from it.
+const ATTACH_ACCEPT = 'image/*,video/*,.mp4,.mov,.m4v,.webm,.3gp,' + TASK_FILE_ACCEPT;
 
 function MediaPreview({ file }) {
   const ref = useRef(null);
@@ -16,9 +18,10 @@ export function ImagePicker({ files, onChange, disabled = false }) {
   const addFiles = event => {
     const incoming = Array.from(event.target.files || []); event.target.value = '';
     const next = [...files, ...incoming];
+    if (incoming.some(file => !isTaskFile(file) && !isTaskVideo(file) && !String(file.type || '').startsWith('image/'))) { alert('画像・動画・PDF・Excel・Word・PowerPoint・テキスト・CSVを選択してください。'); return; }
     try { validateTaskFiles(next.filter(isTaskFile)); validateTaskImageFiles(next.filter(file=>!isTaskFile(file))); onChange(next); } catch(error) { alert(error.message); }
   };
-  return <div className="space-y-2"><div className="flex flex-wrap gap-2"><label className="inline-flex min-h-11 cursor-pointer items-center rounded-lg border border-gray-300 bg-white px-3 text-xs font-bold text-blue-700">画像を追加（複数選択可）<input type="file" accept="image/*" multiple disabled={disabled} className="hidden" onChange={addFiles}/></label><label className="inline-flex min-h-11 cursor-pointer items-center rounded-lg border border-gray-300 bg-white px-3 text-xs font-bold text-blue-700">動画を追加（音声付き）<input type="file" accept="video/*,.mp4,.mov,.m4v,.webm,.3gp" disabled={disabled} className="hidden" onChange={addFiles}/></label><label className="inline-flex min-h-11 cursor-pointer items-center rounded-lg border border-gray-300 bg-white px-3 text-xs font-bold text-blue-700">ファイルを追加<input type="file" accept={TASK_FILE_ACCEPT} multiple disabled={disabled} className="hidden" onChange={addFiles}/></label></div><div className="flex flex-wrap gap-2">{files.map((file,index)=><div key={index} className="max-w-full space-y-1"><FilePreview file={file}/><button type="button" disabled={disabled} onClick={()=>onChange(files.filter((_,i)=>i!==index))} className="min-h-9 text-xs font-bold text-red-600" aria-label={file.name + 'を外す'}>この{isTaskFile(file) ? 'ファイル' : isTaskVideo(file) ? '動画' : '画像'}を外す</button></div>)}</div><p className="text-[10px] text-gray-500">PDF・Excel・Word・PowerPoint・テキスト・CSV：各3MB以下、1回5件まで。画像5枚（各10MB以下）・動画1本（30秒以内）。20MBを超える動画は保存時に20MB以下へ自動圧縮します。圧縮中は画面を開いたままお待ちください。</p></div>;
+  return <div className="space-y-2"><div className="flex flex-wrap gap-2"><label className="inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 text-xs font-bold text-blue-700">📎 添付ファイルを追加（画像・動画・書類）<input type="file" accept={ATTACH_ACCEPT} multiple disabled={disabled} className="hidden" onChange={addFiles}/></label></div><div className="flex flex-wrap gap-2">{files.map((file,index)=><div key={index} className="max-w-full space-y-1"><FilePreview file={file}/><button type="button" disabled={disabled} onClick={()=>onChange(files.filter((_,i)=>i!==index))} className="min-h-9 text-xs font-bold text-red-600" aria-label={file.name + 'を外す'}>この{isTaskFile(file) ? 'ファイル' : isTaskVideo(file) ? '動画' : '画像'}を外す</button></div>)}</div><p className="text-[10px] text-gray-500">PDF・Excel・Word・PowerPoint・テキスト・CSV：各3MB以下、1回5件まで。画像5枚（各10MB以下）・動画1本（30秒以内）。20MBを超える動画は保存時に20MB以下へ自動圧縮します。圧縮中は画面を開いたままお待ちください。</p></div>;
 }
 function VideoAttachment({ media }) {
   const [failed, setFailed] = useState(false);
