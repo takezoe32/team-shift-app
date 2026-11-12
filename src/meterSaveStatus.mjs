@@ -16,6 +16,12 @@ export function recordMeterSave(current, { kind, uid, name, at, month = '' }) {
   return { date: today, daily: list(base.daily), monthly: list(base.monthly), [kind]: rows };
 }
 
+// Every input item of the book is filled after a save (formula cells do not count): the line then appears even when
+// the last values went in with 途中保存, and stays away while an item is still missing.
+export function meterComplete(snapshot, fields) {
+  return fields.every(f => snapshot?.formulas?.[f.id] || ![null, undefined, ''].includes(snapshot?.current?.[f.id]));
+}
+
 // What the calendar shows now: nothing once the day has changed.
 export function todayMeterSaves(saves, now = Date.now()) {
   if (!saves || saves.date !== japanToday(now)) return [];

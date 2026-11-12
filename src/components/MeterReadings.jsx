@@ -66,7 +66,11 @@ function MeterReadingsForm({currentUser,kind}){
  const save=async(next=values,partial=false)=>{
   if(lock.current)return;lock.current=true;setSaving(true);setError('');
   try{
-   const r=await fetch('/api/meter-readings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'save',appUid:currentUser.id,...(monthly?{kind,month:date}:{date}),values:next,final:!partial,revision:snapshot.revision})});const data=await r.json();if(!r.ok)throw new Error(data.error||'保存できませんでした。');
+   // keepalive: a save already sent still reaches the server when the screen is switched or the phone goes to another app
+   // (browsers only allow it for small requests, so a larger one is sent normally).
+   const body=JSON.stringify({action:'save',appUid:currentUser.id,...(monthly?{kind,month:date}:{date}),values:next,final:!partial,revision:snapshot.revision});
+   let r,data;try{r=await fetch('/api/meter-readings',{method:'POST',headers:{'Content-Type':'application/json'},body,keepalive:body.length<60000});data=await r.json();}catch{throw new Error('通信が途切れたため、保存できたか確認できませんでした（保存中に別のアプリや画面に切り替えた場合など）。入力はこの端末に残っています。もう一度「保存」を押してください。「原本が他の人によって変更されました」と出た場合は、すでに保存できている可能性があります。「原本を再読込」で値を確かめてください。');}
+   if(!r.ok)throw new Error(data.error||'保存できませんでした。');
    setSnapshot(data);setValues(Object.fromEntries(fields.map(f=>[f.id,String(data.current[f.id]??'')])));
    const text=partial?(monthly?monthName(date):date.replaceAll('-','/')+' ')+'の入力済みの検針値を'+(monthly?'毎月検針の':'')+'原本に途中保存しました。残りを入力したら「保存」で保存してください。':monthly?monthName(date)+'の検針値を毎月検針の原本に保存しました。':date.replaceAll('-','/')+' の検針値を原本に保存しました。';
    setMessage(text);close();setDone({title:partial?'途中保存が完了しました':'保存が完了しました',text});
@@ -105,6 +109,7 @@ function MeterReadingsForm({currentUser,kind}){
   <section className="flex shrink-0 items-center gap-2 border-b border-gray-100 py-1"><h1 className="mr-auto text-sm font-black text-gray-800">{monthly?'毎月検針':'毎朝検針'}</h1>{monthly?<><label htmlFor="meter-month" className="sr-only">検針月</label><select id="meter-month" aria-label="検針月" value={date} disabled={loading||saving} onChange={e=>switchDate(e.target.value)} className="h-10 w-28 rounded-lg border border-gray-300 bg-white px-2">{meterMonths().includes(date)?null:<option value={date}>{date}</option>}{meterMonths().map(m=><option key={m} value={m}>{monthName(m)}</option>)}</select></>:<><label htmlFor="meter-date" className="sr-only">検針日</label><DateInput id="meter-date" aria-label="検針日" required min="2026-01-01" max={japanToday().slice(0,4)+'-12-31'} value={date} disabled={loading||saving} onChange={e=>switchDate(e.target.value)} className="h-10 w-36 rounded-lg border border-gray-300 px-2"/></>}<button type="button" className="h-10 rounded-lg border border-blue-200 px-3 text-sm font-bold text-blue-800 disabled:opacity-50" disabled={loading||saving} onClick={()=>switchDate(today())}>{monthly?'今月':'今日'}</button></section>
   {loading&&<p role="status" className="shrink-0 p-2 text-sm text-blue-800">検針値を読み込んでいます…</p>}
   {error&&<div className="max-h-24 shrink-0 overflow-auto rounded-lg bg-red-50 p-2 text-xs text-red-800"><p role="alert">{error}</p><button type="button" className="mt-1 underline" disabled={loading||saving} onClick={reload}>再試行</button></div>}
+  {saving&&<p role="status" className="shrink-0 rounded-lg bg-amber-50 px-2 py-1 text-xs font-bold text-amber-900">原本に保存しています…完了の表示が出るまで、画面を切り替えずにお待ちください。</p>}
   {message&&<p role="status" className="shrink-0 px-2 py-1 text-xs font-bold text-green-800">{message}</p>}
   {verify&&<section className="shrink-0 space-y-2 rounded-xl bg-blue-50 p-3"><p className="text-sm">{currentUser.name}さんのGoogleアカウントで本人確認してください。</p><GoogleLogin onSuccess={login} onError={()=>setError('Googleの本人確認をやり直してください。')}/></section>}
   {snapshot&&<iframe ref={mapFrame} title={monthly?'ホテル1階 毎月検針マップ':'ホテル1階 検針マップ'} src="/meter-map.html" onLoad={()=>{sendMapSnapshot();sendKeyboard();}} className="block min-h-0 w-full flex-1 border-0"/>}

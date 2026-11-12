@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { recordMeterSave, todayMeterSaves, msUntilJapanMidnight } from '../src/meterSaveStatus.mjs';
+import { recordMeterSave, todayMeterSaves, msUntilJapanMidnight, meterComplete } from '../src/meterSaveStatus.mjs';
+import { METER_FIELDS } from '../src/meterReadings.mjs';
 import { createMeterHandler } from '../api/meter-readings.js';
 import { seal } from '../api/_lib/report-auth.js';
 
@@ -23,14 +24,14 @@ test('日付が変わったら表示せず、次の保存で前日分を消す�
   assert.equal(msUntilJapanMidnight(Date.parse(at(23, 59))), 60050);
 });
 
-// The meter API: only the final 「保存」 is recorded, the 毎朝検針 only for today's reading.
+// The meter API: 「保存」, or a 途中保存 that fills the whole book, is recorded; the 毎朝検針 only for today's reading.
 const secret = Buffer.alloc(32, 8).toString('base64'), uid = 'u1', email = 'member@plandosee.co.jp';
 const today = Date.UTC(2026, 9, 26, 23, 0), now = () => today; // 2026-10-27 08:00 in Japan
 const baseline = { date: '2026-10-27', previousDate: '2026-10-26', current: { 'gas-main': 10 }, previous: { 'gas-main': 8 }, formulas: { 'gas-main': false }, sheets: { main: '10', h: 'Ｈ-10' } };
-function fixture() {
+function fixture({ filled = false } = {}) {
   const records = { 'app_data/shared_state': { users: { [uid]: { email, name: '田中' } } } };
   let reads = 0;
-  const h = createMeterHandler({ now, configure: () => ({ ready: true, secret }), makeStore: () => ({ source: async () => ({ users: { [uid]: { email, role: 'member', name: '田中' } } }), get: async () => ({ refreshToken: 't' }) }), makeClient: () => ({ setCredentials() {}, getAccessToken: async () => ({ token: 'a' }) }), makeSheets: () => ({ read: async () => (++reads > 1 ? { ...baseline, current: { 'gas-main': 11 } } : baseline), write: async () => {} }), makeLocks: () => ({ read: async () => null, transact: async (paths, plan) => { const out = plan(records); for (const w of out.writes || []) records[w.path] = w.fields ? { ...records[w.path], ...w.value } : w.value; return out.result; } }) });
+  const h = createMeterHandler({ now, configure: () => ({ ready: true, secret }), makeStore: () => ({ source: async () => ({ users: { [uid]: { email, role: 'member', name: '田中' } } }), get: async () => ({ refreshToken: 't' }) }), makeClient: () => ({ setCredentials() {}, getAccessToken: async () => ({ token: 'a' }) }), makeSheets: () => ({ read: async () => (++reads > 1 ? { ...baseline, current: { ...(filled ? Object.fromEntries(METER_FIELDS.map(f => [f.id, 1])) : {}), 'gas-main': 11 } } : baseline), write: async () => {} }), makeLocks: () => ({ read: async () => null, transact: async (paths, plan) => { const out = plan(records); for (const w of out.writes || []) records[w.path] = w.fields ? { ...records[w.path], ...w.value } : w.value; return out.result; } }) });
   return { h, records };
 }
 function request(body) {
@@ -46,4 +47,13 @@ test('検針の「保存」で今日の保存者を記録し、途中保存で�
   const saves = full.records['app_data/shared_state'].meterSaves;
   assert.deepEqual([saves.date, saves.daily.map(r => r.name)], ['2026-10-27', ['田中']]);
   assert.ok(full.records['app_data/shared_state'].users, 'other shared data stays');
+});
+test('途中保存でも原本の全項目がそろえば記録し、1項目でも空なら記録しない', async () => {
+  const complete = fixture({ filled: true });
+  assert.equal((await invoke(complete.h, request({ final: false }))).code, 200);
+  assert.deepEqual(complete.records['app_data/shared_state'].meterSaves.daily.map(r => r.name), ['田中']);
+  const all = Object.fromEntries(METER_FIELDS.map(f => [f.id, 1]));
+  assert.equal(meterComplete({ current: all, formulas: {} }, METER_FIELDS), true);
+  assert.equal(meterComplete({ current: { ...all, [METER_FIELDS[3].id]: null }, formulas: {} }, METER_FIELDS), false);
+  assert.equal(meterComplete({ current: { ...all, [METER_FIELDS[3].id]: null }, formulas: { [METER_FIELDS[3].id]: true } }, METER_FIELDS), true);
 });
