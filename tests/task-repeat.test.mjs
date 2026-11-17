@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { periodTaskChanges, taskOnDay, isPeriodTask, isRecurringTask, isTaskPast, taskDisplayDay, nextOccurrence, repeatMatches, repeatLabel, normalizeRepeat } from '../src/periodTask.mjs';
+import { periodTaskChanges, taskOnDay, isPeriodTask, isRecurringTask, isTaskPast, isRepeatOver, taskDisplayDay, nextOccurrence, repeatMatches, repeatLabel, normalizeRepeat } from '../src/periodTask.mjs';
 import { calendarDayData } from '../src/calendarDay.mjs';
 import { calendarPeriods } from '../src/calendarPeriods.mjs';
 import { collectDailyReport } from '../src/dailyReport.mjs';
@@ -58,4 +58,23 @@ test('the daily report lists an unfinished repeating task only on its occurrence
  const state=source({...weekly,createdAt:'2026-11-01T00:00:00Z'});
  const on=collectDailyReport(state,'2026-11-06'),off=collectDailyReport(state,'2026-11-04');
  assert.equal(JSON.stringify(on).includes('屋上点検'),true);assert.equal(JSON.stringify(off).includes('屋上点検'),false);
+});
+test('a repeat with an end date stops after that day and is then left out of the open lists',()=>{
+ const ending={...weekly,periodEndDate:'2026-11-13'};
+ assert.deepEqual(['2026-11-06','2026-11-13','2026-11-16','2026-11-20'].map(day=>taskOnDay(ending,start,day)),[true,true,false,false]);
+ assert.equal(nextOccurrence(ending,'2026-11-10'),'2026-11-13');assert.equal(nextOccurrence(ending,'2026-11-14'),'');
+ assert.deepEqual(['2026-11-13','2026-11-14'].map(day=>isRepeatOver(ending,day)),[false,true]);
+ assert.equal(isRepeatOver(weekly,'2030-01-01'),false);assert.equal(isRepeatOver({id:'p',periodStartDate:start,periodEndDate:'2026-11-03'},'2030-01-01'),false);
+ assert.equal(isTaskPast(ending,start,'2026-12-01'),false);assert.equal(isPartnerOverdue({...ending,date:start,partnerName:'A'},Date.parse('2026-12-01T00:00:00Z')),false);
+ assert.equal(calendarDayData('2026-11-13',source(ending).teamData).tasks.length,1);assert.equal(calendarDayData('2026-11-16',source(ending).teamData).tasks.length,0);
+ const state=source({...ending,createdAt:'2026-11-01T00:00:00Z'});
+ assert.equal(JSON.stringify(collectDailyReport(state,'2026-11-13')).includes('屋上点検'),true);assert.equal(JSON.stringify(collectDailyReport(state,'2026-11-16')).includes('屋上点検'),false);
+ assert.throws(()=>periodTaskChanges(ending,{action:'daily'},actor,start,'u','2026-11-16T01:00:00Z'),/対象日/);
+});
+test('the end date of a repeat is optional, must not be before the start and keeps recorded days inside',()=>{
+ const single={id:'s',subject:'x',assigneeIds:['u']},repeat={type:'monthly',day:5};
+ assert.deepEqual(periodTaskChanges(single,{action:'set',startDate:start,repeat,endDate:'2027-03-31'},actor,start,'u'),{periodStartDate:start,periodEndDate:'2027-03-31',repeat});
+ assert.deepEqual(periodTaskChanges(single,{action:'set',startDate:start,repeat,endDate:''},actor,start,'u'),{periodStartDate:start,periodEndDate:'',repeat});
+ assert.throws(()=>periodTaskChanges(single,{action:'set',startDate:start,repeat,endDate:'2026-11-01'},actor,start,'u'),/繰り返しの終了日/);
+ assert.throws(()=>periodTaskChanges({...weekly,dailyWork:{'2026-11-06':{}}},{action:'set',startDate:start,repeat:weekly.repeat,endDate:'2026-11-05'},actor,start,'u'),/期間から外す/);
 });

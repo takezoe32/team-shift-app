@@ -15,7 +15,7 @@ import ReceiptImport from './components/ReceiptImport';
 import { TaskContent } from './components/TaskReadPreview';
 import TaskPeriodPanel from './components/TaskPeriodPanel';
 import TaskRepeatFields from './components/TaskRepeatFields';
-import { isPeriodTask, taskOnDay, periodTaskChanges, taskDisplayDay, isTaskPast, isDailyWorkFinished, isRecurringTask, normalizeRepeat, repeatLabel } from './periodTask.mjs';
+import { isPeriodTask, taskOnDay, periodTaskChanges, taskDisplayDay, isTaskPast, isDailyWorkFinished, isRecurringTask, isRepeatOver, normalizeRepeat, repeatLabel } from './periodTask.mjs';
 import { japanToday, japanTime, japanDateTime, calendarDate } from './japanTime.mjs';
 import DateInput from './components/DateInput';
 import { taskCompletionActor, completionActorName } from './taskCompletionActor.mjs';
@@ -541,7 +541,7 @@ const CalendarView = ({ calendarNote, saveCalendarNote, meterSaves, currentDate,
       <div className="mt-1 flex-1 px-1"><CalendarPeriodSpace periods={periods} day={dateStr}/>{myShift.id!=='none'&&<div className={`text-[10px] font-bold px-1.5 py-0.5 rounded truncate ${myShift.color}`}>{myShift.label}</div>}</div>
     </button>);
   }
-  const activePartnerItems=(partnerItems||[]).filter(i=>!i.completed&&!isDailyWorkFinished(i,todayStr)).sort((a,b)=>compareCalendarPartners(a,b,calendarPartnerSort,todayStr));
+  const activePartnerItems=(partnerItems||[]).filter(i=>!i.completed&&!isDailyWorkFinished(i,todayStr)&&!isRepeatOver(i,todayStr)).sort((a,b)=>compareCalendarPartners(a,b,calendarPartnerSort,todayStr));
   const datesToShow=Object.keys(teamData.tasks || {}).filter(sourceDate => sourceDate <= selectedCalendarTaskDate || Object.values(teamData.tasks[sourceDate] || {}).some(tasks => tasks.some(task => taskOnDay(task,sourceDate,selectedCalendarTaskDate)))).sort();
   const selectedTasks=datesToShow.flatMap(taskDate=>(sortedUsers||[]).flatMap(member=>(teamData.tasks[taskDate]?.[member.id]||[]).filter(t=>t.visibility!=='private'&&!t.completed&&!(selectedCalendarTaskDate===todayStr&&isDailyWorkFinished(t,todayStr))&&(!t.periodStartDate || t.periodStartDate<=selectedCalendarTaskDate)&&(!isRecurringTask(t)||taskOnDay(t,taskDate,selectedCalendarTaskDate))).map(task=>({...task,ownerUid:member.id,member,taskDate,assigneeIds:Array.isArray(task.assigneeIds)&&task.assigneeIds.length?task.assigneeIds:[member.id]}))));
   const startPartnerEdit=()=>{const [h='',m='']=String(detailPartner?.time||'').split(':');setPartnerEditName(detailPartner?.partnerName||'');setPartnerEditSubject(detailPartner?.subject||'');setPartnerEditImportant(detailPartner?.important === true);setPartnerEditAssigneeIds(partnerAssigneeIds(detailPartner));setPartnerEditDate(detailPartner?.date||'');setPartnerEditHour(h);setPartnerEditMinute(m);setPartnerEditEndTime(detailPartner?.endTime||'');setPartnerEditNote('');setPartnerEditImages([]);setCalendarUploadProgress(null);setIsEditingPartner(true);};
@@ -1531,7 +1531,7 @@ const DailyDetailView = ({
   const taskMissing = missingRequired(newTaskVisibility === 'private' ? [['個人メモの内容か写真', taskMemoFilled], ['日付', !!taskRegistrationDate]] : [['どこで？どんな内容？', taskSubjectFilled], ['担当者', taskAssigneeFilled], ['日付', !!taskRegistrationDate]]);
   const handleAddTask = async () => {
     if (!taskRegistrationDate) { alert('日付を選択してください。'); return; }
-    if (newTaskPeriodEnd && newTaskPeriodEnd < taskRegistrationDate) { alert('作業期間の終了日は開始日以降を選択してください。'); return; }
+    if (newTaskPeriodEnd && newTaskPeriodEnd < taskRegistrationDate) { alert('終了日は開始日以降を選択してください。'); return; }
     if (newTaskVisibility !== 'private' && newTaskRepeat && !normalizeRepeat(newTaskRepeat)) { alert('繰り返しの曜日を1つ以上選んでください。'); return; }
     if (newTaskVisibility === 'private' ? (!newTaskText.trim() && !newTaskImage) : !newTaskSubject.trim()) { alert(newTaskVisibility === 'private' ? '内容または画像を追加してください。' : 'どこで？どんな内容？を入力してください。'); return; }
     if (addTaskSavingRef.current) return;
@@ -1633,7 +1633,7 @@ steps={[
 <RequiredSummary missing={taskMissing}/>
 </>, validate:() => !taskRegistrationDate ? '日付を選択してください。' : newTaskVisibility !== 'private' && !taskAssigneeIds.length ? '担当者を1人以上選んでください。' : newTaskVisibility !== 'private' && !newTaskSubject.trim() ? 'どこで？どんな内容？を入力してください。' : newTaskVisibility === 'private' && !newTaskText.trim() && !newTaskImage ? '個人メモか写真を追加してください。' : ''}
 ]}
-summary={[[ '重要', newTaskVisibility !== 'private' && newTaskImportant ? '重要' : 'なし' ], [ '登録日', taskRegistrationDate ], ['繰り返し・期間', newTaskVisibility !== 'private' && newTaskRepeat ? repeatLabel(newTaskRepeat) + '（終了日なし）' : newTaskPeriodEnd ? '〜' + newTaskPeriodEnd : '単日タスク'], ['担当', newTaskVisibility === 'private' ? users[selectedUserUid]?.name : taskAssigneeIds.map(id => users[id]?.name).filter(Boolean).join('・')], ['公開範囲', newTaskVisibility === 'private' ? '自分だけの個人メモ' : 'みんなに公開'], ['どこで？どんな内容？', newTaskSubject], ['内容', newTaskText], ['終了予定', newTaskEndTime], ['使用する商品', newTaskProductId ? inventoryProductLabel(inventoryItems.find(item => item.id === newTaskProductId) || {}) + ' × ' + newTaskProductQuantity : 'なし'], ['写真・動画', newTaskImages.length + '件']]}
+summary={[[ '重要', newTaskVisibility !== 'private' && newTaskImportant ? '重要' : 'なし' ], [ '登録日', taskRegistrationDate ], ['繰り返し・期間', newTaskVisibility !== 'private' && newTaskRepeat ? repeatLabel(newTaskRepeat) + (newTaskPeriodEnd ? '（' + newTaskPeriodEnd.replaceAll('-', '/') + 'まで）' : '（終了日なし）') : newTaskPeriodEnd ? '〜' + newTaskPeriodEnd : '単日タスク'], ['担当', newTaskVisibility === 'private' ? users[selectedUserUid]?.name : taskAssigneeIds.map(id => users[id]?.name).filter(Boolean).join('・')], ['公開範囲', newTaskVisibility === 'private' ? '自分だけの個人メモ' : 'みんなに公開'], ['どこで？どんな内容？', newTaskSubject], ['内容', newTaskText], ['終了予定', newTaskEndTime], ['使用する商品', newTaskProductId ? inventoryProductLabel(inventoryItems.find(item => item.id === newTaskProductId) || {}) + ' × ' + newTaskProductQuantity : 'なし'], ['写真・動画', newTaskImages.length + '件']]}
 />}
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <span className="text-xs font-black text-gray-600">このタスクを</span>
@@ -2441,7 +2441,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
   // Required fields, shown on the form (badge, red box, list above the save button).
   const partnerRequired = [['パートナー名', !!String(partnerName || '').trim()], ['どこ？で何を？（件名）', !!subject.trim()], ['日付', !!date], ['開始時間', !!time], ['担当者', !!assigneeUid]];
   const handleSave = async () => {
-    if (partnerPeriodEnd && partnerPeriodEnd < date) { alert('作業期間の終了日は開始日以降を選択してください。'); return; }
+    if (partnerPeriodEnd && partnerPeriodEnd < date) { alert('終了日は開始日以降を選択してください。'); return; }
     if (partnerRepeat && !normalizeRepeat(partnerRepeat)) { alert('繰り返しの曜日を1つ以上選んでください。'); return; }
     if (!partnerName || !subject.trim() || !assigneeUid || !date || !time) {
       alert('パートナー名・件名・担当者・日付・開始時間を入力してください。');
@@ -2456,13 +2456,13 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
     try {
       const addedImages = await uploadTaskAttachments(newPartnerImages, setPartnerUploadProgress);
       const currentItem = editingItemId ? (partnerItems || []).find(item => item.id === editingItemId) : null;
-      if (Object.keys(currentItem?.dailyWork || {}).some(day => partnerRepeat ? day < date : !partnerPeriodEnd || day < date || day > partnerPeriodEnd)) throw new Error('作業終了の記録がある日を期間から外すことはできません。');
+      if (Object.keys(currentItem?.dailyWork || {}).some(day => partnerRepeat ? day < date || (partnerPeriodEnd && day > partnerPeriodEnd) : !partnerPeriodEnd || day < date || day > partnerPeriodEnd)) throw new Error('作業終了の記録がある日を期間から外すことはできません。');
       const images = mergeTaskImages(currentItem, addedImages);
       const { imageUrl = '', imageName = '', imagePublicId = '', imageBytes = 0 } = images.find(media=>media.mediaType !== 'video' && media.mediaType !== 'file') || {};
       const hasNewUpdate = !!(content.trim() || addedImages.length);
       const newUpdate = hasNewUpdate ? createPartnerUpdate(content.trim(), currentUser, addedImages, editingItemId ? 'handoff' : 'initial') : null;
       const updates = newUpdate ? [newUpdate] : [];
-      const itemData = { images, periodStartDate: partnerPeriodEnd || partnerRepeat ? date : '', periodEndDate: partnerRepeat ? '' : partnerPeriodEnd || '', repeat: normalizeRepeat(partnerRepeat), partnerName, important: partnerImportant, subject: subject.trim(), assigneeUid, assigneeIds: partnerAssignees, date, time, endTime, content: content.trim() || currentItem?.content || '', updates, createdByUid: editingItemId ? (currentItem?.createdByUid || '') : (currentUser?.id || ''), createdByName: editingItemId ? (currentItem?.createdByName || '') : (currentUser?.name || ''), ...(imageUrl ? { imageUrl, imageName, imagePublicId, imageBytes, imageUploadedAt: new Date().toISOString() } : {}) };
+      const itemData = { images, periodStartDate: partnerPeriodEnd || partnerRepeat ? date : '', periodEndDate: partnerPeriodEnd || '', repeat: normalizeRepeat(partnerRepeat), partnerName, important: partnerImportant, subject: subject.trim(), assigneeUid, assigneeIds: partnerAssignees, date, time, endTime, content: content.trim() || currentItem?.content || '', updates, createdByUid: editingItemId ? (currentItem?.createdByUid || '') : (currentUser?.id || ''), createdByName: editingItemId ? (currentItem?.createdByName || '') : (currentUser?.name || ''), ...(imageUrl ? { imageUrl, imageName, imagePublicId, imageBytes, imageUploadedAt: new Date().toISOString() } : {}) };
       if (editingItemId) {
         const savedItemId = editingItemId;
         await debugLog?.('INFO', action + '.firestore.update.start', { itemId: savedItemId, itemData });
@@ -2517,7 +2517,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
     const bKey = `${b.date || ''}T${b.time || '00:00'}`;
     return aKey.localeCompare(bKey);
   });
-  const activePartnerItems = sortedItems.filter(item => !item.completed);
+  const activePartnerItems = sortedItems.filter(item => !item.completed && !isRepeatOver(item, japanToday()));
   const completedPartnerItems = sortedItems.filter(item => item.completed).sort((a, b) => String(b.completedAt || '').localeCompare(String(a.completedAt || '')));
   const renderPartnerItem = (item) => (
               <div key={item.id} className={`bg-white rounded-xl border ${item.completed ? 'border-green-200' : 'border-gray-200'} px-3 py-3 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 sm:grid-cols-[auto_auto_minmax(0,1fr)_auto]`}>
@@ -4685,7 +4685,7 @@ export default function App() {
                             completed: false,
                             createdAt: new Date().toISOString(),
                             periodStartDate: periodEndDate || normalizeRepeat(repeat) ? dateStr : '',
-                            periodEndDate: normalizeRepeat(repeat) ? '' : periodEndDate || '',
+                            periodEndDate: periodEndDate || '',
                             ...(normalizeRepeat(repeat) ? { repeat: normalizeRepeat(repeat) } : {}),
                             ownerUid: targetUid,
                             assigneeIds: selectedAssignees,

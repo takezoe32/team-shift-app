@@ -2,7 +2,8 @@ import { japanToday } from './japanTime.mjs';
 import { canCompleteTask } from './taskCompletionPermission.mjs';
 const validDay = day => /^\d{4}-\d{2}-\d{2}$/.test(day || '') && new Date(day + 'T12:00:00Z').toISOString().slice(0, 10) === day;
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
-// Repeat rules: { type:'weekly', weekdays:[0-6] } or { type:'monthly', day:1-31 }. A repeating task has no end date.
+// Repeat rules: { type:'weekly', weekdays:[0-6] } or { type:'monthly', day:1-31 }.
+// A repeat may have a last day (periodEndDate); without one it continues until 「繰り返しを終了」.
 export function normalizeRepeat(repeat) {
   if (repeat?.type === 'weekly' && Array.isArray(repeat.weekdays)) {
     const weekdays = [...new Set(repeat.weekdays)].sort((a, b) => a - b);
@@ -26,18 +27,22 @@ export function repeatLabel(repeat) {
   return rule.type === 'weekly' ? `毎週 ${rule.weekdays.map(day => WEEKDAYS[day]).join('・')}曜日` : `毎月${rule.day}日${rule.day > 28 ? '（ない月は月末）' : ''}`;
 }
 export const isRecurringTask = item => !!normalizeRepeat(item?.repeat) && validDay(item?.periodStartDate);
+const repeatEnd = item => validDay(item?.periodEndDate) ? item.periodEndDate : '';
 export const isPeriodTask = item => isRecurringTask(item) || !!(item?.periodStartDate && item?.periodEndDate);
 export const isDailyWorkFinished = (item, day) => isPeriodTask(item) && !!item.dailyWork?.[day];
-export const taskOnDay = (item, sourceDate, day) => isRecurringTask(item) ? item.periodStartDate <= day && repeatMatches(item.repeat, day) : isPeriodTask(item) ? item.periodStartDate <= day && day <= item.periodEndDate : sourceDate === day;
+export const taskOnDay = (item, sourceDate, day) => isRecurringTask(item) ? item.periodStartDate <= day && (!repeatEnd(item) || day <= repeatEnd(item)) && repeatMatches(item.repeat, day) : isPeriodTask(item) ? item.periodStartDate <= day && day <= item.periodEndDate : sourceDate === day;
 export function nextOccurrence(item, from) {
   if (!isRecurringTask(item)) return '';
   const date = new Date((from > item.periodStartDate ? from : item.periodStartDate) + 'T12:00:00Z');
   for (let i = 0; i < 62; i++, date.setUTCDate(date.getUTCDate() + 1)) {
     const day = date.toISOString().slice(0, 10);
+    if (repeatEnd(item) && day > repeatEnd(item)) return '';
     if (repeatMatches(item.repeat, day)) return day;
   }
   return '';
 }
+// A repeat whose last day has passed: it has no more occurrences, so the open lists stop showing it.
+export const isRepeatOver = (item, today) => isRecurringTask(item) && !!repeatEnd(item) && !nextOccurrence(item, today);
 export function periodTaskChanges(item, operation, actor, sourceDate, ownerUid, now = new Date().toISOString()) {
   if (!item || !actor?.id || actor.role === 'viewer' || actor.readOnly) throw new Error('このタスクを変更できません。');
   const partner = Object.hasOwn(item, 'partnerName');
@@ -50,8 +55,10 @@ export function periodTaskChanges(item, operation, actor, sourceDate, ownerUid, 
       const repeat = normalizeRepeat(operation.repeat);
       if (!repeat) throw new Error('繰り返しの曜日または日にちを選んでください。');
       if (!validDay(start)) throw new Error('開始日を選んでください。');
-      if (Object.keys(item.dailyWork || {}).some(day => day < start)) throw new Error('作業終了の記録がある日を期間から外すことはできません。');
-      return { periodStartDate: start, periodEndDate: '', repeat };
+      const last = end || '';
+      if (last && (!validDay(last) || last < start)) throw new Error('繰り返しの終了日は開始日以降を選んでください。');
+      if (Object.keys(item.dailyWork || {}).some(day => day < start || (last && day > last))) throw new Error('作業終了の記録がある日を期間から外すことはできません。');
+      return { periodStartDate: start, periodEndDate: last, repeat };
     }
     if (!validDay(start) || !validDay(end) || end < start) throw new Error('終了日は開始日以降を選んでください。');
     if (Object.keys(item.dailyWork || {}).some(day => day < start || day > end)) throw new Error('作業終了の記録がある日を期間から外すことはできません。');
