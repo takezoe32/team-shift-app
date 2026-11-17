@@ -3625,7 +3625,7 @@ const BottomNav = ({ inventorySection, setInventorySection, activeTab, setActive
     { id:'report-today', label:'本日の日報（途中経過）', description:'今日の途中経過と、過去の日の日報を表示', Icon:FileSpreadsheet },
     { id:'receipt', label:'レシート取込（テスト中）', description:'撮影・読取して仕入れ表用にコピー', Icon:Camera },
     ...(canAccessMeters(currentUser) ? [
-    { id:'meter-daily', label:'毎朝検針（テスト中）', description:'検針値を入力・前日比を確認して原本に保存', Icon:FileSpreadsheet },
+    { id:'meter-daily', label:'毎朝検針', description:'検針値を入力・前日比を確認して原本に保存', Icon:FileSpreadsheet },
     { id:'meter-monthly', label:'毎月検針（テスト中）', description:'部門メーターを入力し、毎朝検針の値と合わせて原本に保存', Icon:FileSpreadsheet },
     ] : []),
     ...(canManageSettings ? [{ id:'settings', label:'設定', description:'メンバー管理・アプリの設定', Icon:Settings }] : [])
