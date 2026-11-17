@@ -3622,7 +3622,7 @@ const BottomNav = ({ inventorySection, setInventorySection, activeTab, setActive
   ];
   const secondary = [
     { id:'completed', label:'終了履歴', description:'終了したタスクを確認', Icon:ClipboardList },
-    { id:'report-today', label:'本日の日報（途中経過）', description:'今日終了したタスクで作った日報を表示', Icon:FileSpreadsheet },
+    { id:'report-today', label:'本日の日報（途中経過）', description:'今日の途中経過と、過去の日の日報を表示', Icon:FileSpreadsheet },
     { id:'receipt', label:'レシート取込（テスト中）', description:'撮影・読取して仕入れ表用にコピー', Icon:Camera },
     ...(canAccessMeters(currentUser) ? [
     { id:'meter-daily', label:'毎朝検針（テスト中）', description:'検針値を入力・前日比を確認して原本に保存', Icon:FileSpreadsheet },

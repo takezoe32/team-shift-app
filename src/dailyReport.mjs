@@ -19,6 +19,11 @@ export function tokyoDate(value) {
 export function validateReportDate(date) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || tokyoDate(date + 'T12:00:00+09:00') !== date) throw new Error('有効な日付を選んでください。');
 }
+// The day before / after a report date (days may be negative).
+export function shiftReportDate(date, days) {
+  validateReportDate(date);
+  return tokyoDate(Date.parse(date + 'T12:00:00+09:00') + days * 86400000);
+}
 export function collectDailyReport(source, date) {
   validateReportDate(date);
   const users = source.users || {};
