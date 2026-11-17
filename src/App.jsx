@@ -14,6 +14,7 @@ import useJapanDay from './useJapanDay';
 import ReceiptImport from './components/ReceiptImport';
 import { TaskContent } from './components/TaskReadPreview';
 import TaskPeriodPanel from './components/TaskPeriodPanel';
+import PartnerNameSettings from './components/PartnerNameSettings';
 import TaskRepeatFields from './components/TaskRepeatFields';
 import { isPeriodTask, taskOnDay, periodTaskChanges, taskDisplayDay, isTaskPast, isDailyWorkFinished, isRecurringTask, isRepeatOver, normalizeRepeat, repeatLabel } from './periodTask.mjs';
 import { japanToday, japanTime, japanDateTime, calendarDate } from './japanTime.mjs';
@@ -1128,7 +1129,6 @@ const DailyTaskItem = ({ task, selectedDate, selectedUserUid, currentUserUid, cu
       return (
         <div className="bg-white p-3 rounded-xl border border-blue-400 shadow-sm space-y-2">
           <TaskUpdateHistory currentUserUid={currentUserUid} task={task} onChange={canEditTask ? operation => updateTaskText(task.taskDate || selectedDate, task.ownerUid || selectedUserUid, task.id, { handoffOperation: operation }) : undefined}/>
-          <ImageGallery item={task}/><ImagePicker files={editTaskImages} onChange={setEditTaskImages} disabled={isSavingEdit}/><TaskSaveProgress progress={editUploadProgress}/>
           <label className="block text-xs font-bold text-gray-600">タスクの日付<DateInput value={editDate} disabled={isSavingEdit} onChange={e=>setEditDate(e.target.value)} className="mt-1 min-h-11 w-full border border-gray-300 rounded-lg px-3 text-sm"/></label>
           <ImportantToggle value={editImportant} onChange={setEditImportant} disabled={isSavingEdit}/>
           <label className="block text-sm font-bold text-gray-700">件名<input type="text" value={editSubject} onChange={e=>setEditSubject(e.target.value)} disabled={isSavingEdit} placeholder="件名" className="mt-1 w-full border rounded-xl p-3 text-base" /></label>
@@ -1166,6 +1166,7 @@ const DailyTaskItem = ({ task, selectedDate, selectedUserUid, currentUserUid, cu
             </button>
           </div>
           <p className="text-[10px] text-gray-400">Enterで改行できます。保存は右のボタンを押してください。</p>
+          <ImagePicker files={editTaskImages} onChange={setEditTaskImages} disabled={isSavingEdit}/><ImageGallery item={task}/><TaskSaveProgress progress={editUploadProgress}/>
           <button type="button" disabled={isSavingEdit} onClick={() => { if (confirmEditDiscard(true, isSavingEdit)) setIsEditing(false); }} className="min-h-10 px-3 text-xs font-bold text-gray-600">キャンセル</button>
         </div>
       );
@@ -1626,10 +1627,10 @@ steps={[
 {newTaskVisibility !== 'private' && <ImportantToggle value={newTaskImportant} onChange={setNewTaskImportant} disabled={isUploading}/>}
 {newTaskVisibility !== 'private' && <label className="block font-bold">どこで？どんな内容？<RequiredBadge filled={taskSubjectFilled}/><input type="text" value={newTaskSubject} onChange={e => setNewTaskSubject(e.target.value)} placeholder="例：1階ロビーの電球交換" className={'w-full min-h-14 mt-2 border rounded-xl p-3 text-base ' + requiredBox(taskSubjectFilled)}/></label>}
 <label className="block font-bold">{newTaskVisibility === 'private' ? <>個人メモ（内容か写真）<RequiredBadge filled={taskMemoFilled}/></> : '詳しい内容（任意）'}<textarea rows={4} value={newTaskText} onChange={e => setNewTaskText(e.target.value)} placeholder="例：1階ロビーの電球を交換する" className={'w-full mt-2 border rounded-xl p-3 text-base ' + (newTaskVisibility === 'private' ? requiredBox(taskMemoFilled) : 'border-gray-300')}/></label>
+<ImagePicker files={newTaskImages} onChange={setNewTaskImages} disabled={isUploading}/>
 {newTaskVisibility !== 'private' && <fieldset className="my-4"><legend className="font-bold text-base">担当者（複数選べます）<RequiredBadge filled={taskAssigneeFilled}/></legend><p className="text-sm text-gray-500 my-2">担当する人の名前をすべて選んでください。</p><div className="flex flex-wrap gap-2">{sortedUsers.map(user => <label key={user.id} className={`flex items-center gap-2 min-h-12 px-3 border-2 rounded-xl text-base ${taskAssigneeIds.includes(user.id) ? 'bg-blue-50 border-blue-500' : 'border-gray-200'}`}><input type="checkbox" checked={taskAssigneeIds.includes(user.id)} onChange={e => setNewAssigneeIds(e.target.checked ? [...taskAssigneeIds, user.id] : taskAssigneeIds.filter(id => id !== user.id))}/>{user.name}</label>)}</div></fieldset>}
 <label className="block text-sm font-bold">日付<RequiredBadge filled={!!taskRegistrationDate}/><DateInput aria-label="タスクの登録日" value={taskRegistrationDate} onChange={e => setNewTaskDate(e.target.value)} disabled={isUploading} required className={'block w-full min-h-12 mt-1 border rounded-xl p-3 text-base ' + requiredBox(!!taskRegistrationDate)}/></label>{newTaskVisibility !== 'private' && <TaskRepeatFields repeat={newTaskRepeat} onRepeat={setNewTaskRepeat} periodEnd={newTaskPeriodEnd} onPeriodEnd={setNewTaskPeriodEnd} min={taskRegistrationDate} disabled={isUploading}/>}
 {newTaskVisibility !== 'private' && <QuarterHourTime label="終了予定時間" value={newTaskEndTime} onChange={setNewTaskEndTime} disabled={isUploading}/>}
-<ImagePicker files={newTaskImages} onChange={setNewTaskImages} disabled={isUploading}/>
 <RequiredSummary missing={taskMissing}/>
 </>, validate:() => !taskRegistrationDate ? '日付を選択してください。' : newTaskVisibility !== 'private' && !taskAssigneeIds.length ? '担当者を1人以上選んでください。' : newTaskVisibility !== 'private' && !newTaskSubject.trim() ? 'どこで？どんな内容？を入力してください。' : newTaskVisibility === 'private' && !newTaskText.trim() && !newTaskImage ? '個人メモか写真を追加してください。' : ''}
 ]}
@@ -1659,6 +1660,7 @@ summary={[[ '重要', newTaskVisibility !== 'private' && newTaskImportant ? '重
                 style={{ minHeight: '52px', maxHeight: '160px' }}
                 disabled={isUploading}
               /></label>
+              <ImagePicker files={newTaskImages} onChange={setNewTaskImages} disabled={isUploading}/>
 {newTaskVisibility !== 'private' && <fieldset className="my-4"><legend className="font-bold text-base">担当者（複数選べます）<RequiredBadge filled={taskAssigneeFilled}/></legend><p className="text-sm text-gray-500 my-2">担当する人の名前をすべて選んでください。</p><div className="flex flex-wrap gap-2">{sortedUsers.map(user => <label key={user.id} className={`flex items-center gap-2 min-h-12 px-3 border-2 rounded-xl text-base ${taskAssigneeIds.includes(user.id) ? 'bg-blue-50 border-blue-500' : 'border-gray-200'}`}><input type="checkbox" checked={taskAssigneeIds.includes(user.id)} onChange={e => setNewAssigneeIds(e.target.checked ? [...taskAssigneeIds, user.id] : taskAssigneeIds.filter(id => id !== user.id))}/>{user.name}</label>)}</div></fieldset>}
               <RequiredSummary missing={taskMissing}/>
               <button type="button"
@@ -1669,7 +1671,7 @@ summary={[[ '重要', newTaskVisibility !== 'private' && newTaskImportant ? '重
                 {isUploading ? <Loader2 size={18} className="animate-spin"/> : <Save size={18}/>} 保存
               </button>
             </div>
-            <ImagePicker files={newTaskImages} onChange={setNewTaskImages} disabled={isUploading}/><TaskSaveProgress progress={taskUploadProgress}/>
+            <TaskSaveProgress progress={taskUploadProgress}/>
             <p className="text-[10px] text-gray-400 mt-1.5">Enterで改行。保存は「保存」ボタン。画像・動画を追加できます。</p>
           </div>
         </div>
@@ -1797,7 +1799,7 @@ summary={[[ '重要', newTaskVisibility !== 'private' && newTaskImportant ? '重
 };
 
 
-const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, currentUserUid, roleNames, updateRoleNames, roles, updateRoles, deleteUserCompletely, sortedUsers, userOrder, updateUserOrder, debugLogs, lineLinkedMembers }) => {
+const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, currentUserUid, roleNames, updateRoleNames, roles, updateRoles, deleteUserCompletely, sortedUsers, userOrder, updateUserOrder, debugLogs, lineLinkedMembers, partnerNames, addPartnerName, updatePartnerName, deletePartnerName }) => {
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserRole, setNewUserRole] = useState((roles.staff ? 'staff' : Object.keys(roles).find(key => key !== 'viewer')) || 'viewer');
@@ -2000,6 +2002,8 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
       <div className="p-4 space-y-6 max-w-3xl mx-auto">
         {String(users[currentUserUid]?.email || '').toLowerCase() === 'mitsutake.takezoe@plandosee.co.jp' && <LineTaskPanel users={sortedUsers}/>}
         {String(users[currentUserUid]?.email || '').toLowerCase() === 'mitsutake.takezoe@plandosee.co.jp' && <a href="#data-safety" onClick={event => { if (!confirmDiscardEdits()) event.preventDefault(); }} className="block rounded-xl border border-blue-200 bg-blue-50 p-4 font-bold text-blue-800">データ保護・バックアップ・不具合通知 →</a>}
+
+        <PartnerNameSettings names={partnerNames || []} onAdd={addPartnerName} onRename={updatePartnerName} onDelete={deletePartnerName}/>
 
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
           <div className="flex justify-between items-center border-b pb-2 mb-4">
@@ -2344,7 +2348,7 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
   );
 };
 
-const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartnerItem, togglePartnerItem, completePartnerItem, reschedulePartnerItem, deletePartnerItem, addPartnerName, updatePartnerName, deletePartnerName, currentUser, debugLog, sortedUsers }) => {
+const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartnerItem, togglePartnerItem, completePartnerItem, reschedulePartnerItem, deletePartnerItem, updatePartnerName, deletePartnerName, currentUser, debugLog, sortedUsers }) => {
   const [scheduleNow, setScheduleNow] = useState(Date.now);
   useEffect(() => {
     const refresh = () => setScheduleNow(Date.now());
@@ -2367,13 +2371,11 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
   const [partnerAssignees, setPartnerAssignees] = useState([]);
   const assigneeUid = partnerAssignees[0] || '';
   const [content, setContent] = useState('');
-  const [newPartnerName, setNewPartnerName] = useState('');
   const [newPartnerImages, setNewPartnerImages] = useState([]);
   const newPartnerImage = newPartnerImages[0] || null;
   const partnerSavingRef = useRef(false);
   const [partnerUploadProgress, setPartnerUploadProgress] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [isAddingName, setIsAddingName] = useState(false);
   const [showPartnerNameMenu, setShowPartnerNameMenu] = useState(false);
   const [editingPartnerName, setEditingPartnerName] = useState(null);
   const [editingPartnerNameValue, setEditingPartnerNameValue] = useState('');
@@ -2384,8 +2386,8 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
   const deletingPartnerRef = useRef(false);
   const [deletingPartnerId, setDeletingPartnerId] = useState(null);
   const [savedPartnerDate, setSavedPartnerDate] = useState(date);
-  const hasPartnerDraft = !!(partnerPeriodEnd || partnerRepeat || editingItemId || editingPartnerName || newPartnerName.trim() || partnerName || subject.trim() || content.trim() || partnerImportant || partnerAssignees.length || timeHour || timeMinute || endTime || newPartnerImages.length || date !== savedPartnerDate);
-  useEditGuard(hasPartnerDraft || isSaving || isAddingName, isSaving || isAddingName);
+  const hasPartnerDraft = !!(partnerPeriodEnd || partnerRepeat || editingItemId || editingPartnerName || partnerName || subject.trim() || content.trim() || partnerImportant || partnerAssignees.length || timeHour || timeMinute || endTime || newPartnerImages.length || date !== savedPartnerDate);
+  useEditGuard(hasPartnerDraft || isSaving, isSaving);
   const revealPartnerForm = () => requestAnimationFrame(() => {
     partnerFormRef.current?.scrollIntoView({ block: 'start', behavior: 'instant' });
     partnerFormRef.current?.focus({ preventScroll: true });
@@ -2601,57 +2603,6 @@ summary={[[ '重要', partnerImportant ? '重要' : 'なし' ], [ 'パートナ�
               }} className="text-[10px] font-bold text-gray-500 hover:text-gray-800">キャンセル</button>
             </div>
           )}
-          <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
-            <div className="text-[10px] font-bold text-gray-500 mb-2">パートナー名を追加</div>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={newPartnerName}
-                onChange={(e) => setNewPartnerName(e.target.value)}
-                placeholder="例：○○会社"
-                className="min-w-0 flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400 bg-white"
-                onKeyDown={async (e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    const name = newPartnerName.trim();
-                    if (!name) return;
-                    setIsAddingName(true);
-                    try {
-                      const added = await addPartnerName(name);
-                      if (added) {
-                        setPartnerName(name);
-                        setNewPartnerName('');
-                      }
-                    } finally {
-                      setIsAddingName(false);
-                    }
-                  }
-                }}
-              />
-              <button
-                type="button"
-                disabled={isAddingName || !newPartnerName.trim()}
-                onClick={async () => {
-                  const name = newPartnerName.trim();
-                  if (!name) return;
-                  setIsAddingName(true);
-                  try {
-                    const added = await addPartnerName(name);
-                    if (added) {
-                      setPartnerName(name);
-                      setNewPartnerName('');
-                    }
-                  } finally {
-                    setIsAddingName(false);
-                  }
-                }}
-                className="shrink-0 px-3 rounded-xl bg-gray-700 text-white text-xs font-bold disabled:opacity-40"
-              >
-                {isAddingName ? '…' : '追加'}
-              </button>
-            </div>
-          </div>
-
           <div className="block">
             <span className="text-[10px] font-bold text-gray-500">パートナー名<RequiredBadge filled={partnerRequired[0][1]}/></span>
             <div className="relative mt-1">
@@ -2668,7 +2619,7 @@ summary={[[ '重要', partnerImportant ? '重要' : 'なし' ], [ 'パートナ�
               {showPartnerNameMenu && (
                 <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
                   {(partnerNames || []).length === 0 ? (
-                    <div className="px-3 py-3 text-[9px] text-gray-400">上の欄からパートナー名を追加してください。</div>
+                    <div className="px-3 py-3 text-xs text-gray-500">パートナー名が登録されていません。「設定」の「パートナー名の登録」で追加してください。</div>
                   ) : (
                     <div className="max-h-56 overflow-y-auto">
                       {(partnerNames || []).map(name => (
@@ -2727,6 +2678,7 @@ summary={[[ '重要', partnerImportant ? '重要' : 'なし' ], [ 'パートナ�
                 </div>
               )}
             </div>
+            <p className="mt-1 text-[11px] text-gray-500">一覧にない会社は、「設定」の「パートナー名の登録」で追加します。</p>
           </div>
 
           <AssigneePicker users={sortedUsers} value={partnerAssignees} onChange={setPartnerAssignees} disabled={isSaving}/>
@@ -2771,8 +2723,6 @@ summary={[[ '重要', partnerImportant ? '重要' : 'なし' ], [ 'パートナ�
 
           <label className="block"><span className="text-[10px] font-bold text-gray-500">終了予定時刻</span><div className="flex items-center gap-1"><select aria-label="終了予定時刻の時" value={endTime ? endTime.split(':')[0] : ''} onChange={e=>setEndTime(e.target.value ? e.target.value+':'+((endTime||'').split(':')[1]||'00') : '')} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" ><option value="">時</option>{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(v=><option key={v} value={v}>{v}</option>)}</select><span>:</span><select aria-label="終了予定時刻の分" value={endTime ? endTime.split(':')[1] : ''} onChange={e=>setEndTime(((endTime||'').split(':')[0]||'00')+':'+e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" ><option value="">分</option>{['00','15','30','45'].map(v=><option key={v} value={v}>{v}</option>)}</select></div></label>
 
-          <ImagePicker files={newPartnerImages} onChange={setNewPartnerImages} disabled={isSaving}/><TaskSaveProgress progress={partnerUploadProgress}/>
-          {editingItemId && <ImageGallery item={(partnerItems || []).find(item=>item.id===editingItemId)}/>}
 
           <div className="space-y-2">
             <ImportantToggle value={partnerImportant} onChange={setPartnerImportant} disabled={isSaving}/>
@@ -2790,6 +2740,7 @@ summary={[[ '重要', partnerImportant ? '重要' : 'なし' ], [ 'パートナ�
                 className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400 resize-none"
               />
             </label>
+            <ImagePicker files={newPartnerImages} onChange={setNewPartnerImages} disabled={isSaving}/>{editingItemId && <ImageGallery item={(partnerItems || []).find(item=>item.id===editingItemId)}/>}<TaskSaveProgress progress={partnerUploadProgress}/>
           </div>
 
           <RequiredSummary missing={missingRequired(partnerRequired)}/>
@@ -3711,6 +3662,31 @@ export default function App() {
   const [teamData, setTeamData] = useState({ shifts: {}, tasks: {} });
   const [partnerItems, setPartnerItems] = useState([]);
   const [partnerNames, setPartnerNames] = useState([]);
+  // The registered partner names: added in 設定, renamed/removed there or from the partner task form.
+  const addPartnerName = async (name) => {
+    const normalized = name.trim();
+    if (!normalized) return false;
+    if (partnerNames.some(existing => existing.toLowerCase() === normalized.toLowerCase())) {
+      alert('同じパートナー名がすでに登録されています。');
+      return false;
+    }
+    const updatedNames = [...partnerNames, normalized];
+    setPartnerNames(updatedNames);
+    await saveToFirestore({ partnerNames: updatedNames });
+    return true;
+  };
+  const updatePartnerName = async (oldName, newName) => {
+    const updatedNames = partnerNames.map(name => name === oldName ? newName : name);
+    const updatedItems = partnerItems.map(item => item.partnerName === oldName ? { ...item, partnerName: newName } : item);
+    setPartnerNames(updatedNames);
+    setPartnerItems(updatedItems);
+    await saveToFirestore({ partnerNames: updatedNames, partnerItems: updatedItems });
+  };
+  const deletePartnerName = async (name) => {
+    const updatedNames = partnerNames.filter(existing => existing !== name);
+    setPartnerNames(updatedNames);
+    await saveToFirestore({ partnerNames: updatedNames });
+  };
   const [calendarNote, setCalendarNote] = useState(null);
   const [meterSaves, setMeterSaves] = useState(null);
   const [inventoryItems, setInventoryItems] = useState([]);
@@ -4275,30 +4251,8 @@ export default function App() {
                   setPartnerItems(updatedItems);
                   await saveToFirestore({ partnerItems: updatedItems });
                 }}
-                addPartnerName={async (name) => {
-                  const normalized = name.trim();
-                  if (!normalized) return false;
-                  if (partnerNames.some(existing => existing.toLowerCase() === normalized.toLowerCase())) {
-                    alert('同じパートナー名がすでに登録されています。');
-                    return false;
-                  }
-                  const updatedNames = [...partnerNames, normalized];
-                  setPartnerNames(updatedNames);
-                  await saveToFirestore({ partnerNames: updatedNames });
-                  return true;
-                }}
-                updatePartnerName={async (oldName, newName) => {
-                  const updatedNames = partnerNames.map(name => name === oldName ? newName : name);
-                  const updatedItems = partnerItems.map(item => item.partnerName === oldName ? { ...item, partnerName: newName } : item);
-                  setPartnerNames(updatedNames);
-                  setPartnerItems(updatedItems);
-                  await saveToFirestore({ partnerNames: updatedNames, partnerItems: updatedItems });
-                }}
-                deletePartnerName={async (name) => {
-                  const updatedNames = partnerNames.filter(existing => existing !== name);
-                  setPartnerNames(updatedNames);
-                  await saveToFirestore({ partnerNames: updatedNames });
-                }}
+                updatePartnerName={updatePartnerName}
+                deletePartnerName={deletePartnerName}
                 addPartnerItem={async (item) => {
                   const updatedItems = [...partnerItems, item];
                   setPartnerItems(updatedItems);
@@ -4820,6 +4774,10 @@ export default function App() {
               />
             ) : (
               <SettingsView 
+                partnerNames={partnerNames}
+                addPartnerName={addPartnerName}
+                updatePartnerName={updatePartnerName}
+                deletePartnerName={deletePartnerName}
                 lineLinkedMembers={lineLinkedMembers}
                 currentUserUid={currentUser.id} 
                 debugLogs={debugLogs}
