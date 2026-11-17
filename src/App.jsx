@@ -1363,10 +1363,10 @@ const DailyTaskItem = ({ task, selectedDate, selectedUserUid, currentUserUid, cu
 
 const DailyDetailView = ({
   selectedDate, changeDay, teamData, currentUserUid, shiftTypes, inventoryItems = [],
-  addTask, toggleTask, deleteTask, updateTaskText, updateTaskAssignees, users, roles, sortedUsers, initialVisibility = 'public', onPartnerKind
+  addTask, toggleTask, deleteTask, updateTaskText, updateTaskAssignees, users, roles, sortedUsers, initialVisibility = 'public', initialQuick = true, onPartnerKind
 }) => {
   const [newAssigneeIds, setNewAssigneeIds] = useState(null);
-  const [quickTaskOpen, setQuickTaskOpen] = useState(true);
+  const [quickTaskOpen, setQuickTaskOpen] = useState(initialQuick);
   const [newTaskSubject, setNewTaskSubject] = useState('');
   const [newTaskDate, setNewTaskDate] = useState(null);
   const [newTaskPeriodEnd, setNewTaskPeriodEnd] = useState('');
@@ -1587,7 +1587,7 @@ const DailyDetailView = ({
 
   // 個人タスク／パートナータスク／個人メモ: the partner kind opens the partner form, the other two switch this form.
   const kindTabs = <TaskKindTabs value={newTaskVisibility === 'private' ? 'memo' : 'member'} disabled={isUploading} memoDisabled={selectedUserUid !== currentUserUid} onChange={kind => {
-    if (kind === 'partner') onPartnerKind?.();
+    if (kind === 'partner') onPartnerKind?.(quickTaskOpen); // keeps かんたん入力 / 詳しく入力 as it is now
     else if (kind === 'memo') { setNewTaskVisibility('private'); setNewTaskSubject(''); setNewTaskEndTime(''); }
     else setNewTaskVisibility('public');
   }}/>;
@@ -2350,7 +2350,7 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
   );
 };
 
-const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartnerItem, togglePartnerItem, completePartnerItem, reschedulePartnerItem, deletePartnerItem, updatePartnerName, deletePartnerName, currentUser, debugLog, sortedUsers, onKind }) => {
+const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartnerItem, togglePartnerItem, completePartnerItem, reschedulePartnerItem, deletePartnerItem, updatePartnerName, deletePartnerName, currentUser, debugLog, sortedUsers, onKind, initialQuick = true }) => {
   const [scheduleNow, setScheduleNow] = useState(Date.now);
   useEffect(() => {
     const refresh = () => setScheduleNow(Date.now());
@@ -2359,7 +2359,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
     document.addEventListener('visibilitychange', refresh);
     return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh); };
   }, []);
-  const [quickPartnerOpen, setQuickPartnerOpen] = useState(true);
+  const [quickPartnerOpen, setQuickPartnerOpen] = useState(initialQuick);
   const [date, setDate] = useState(japanToday());
   const [timeHour, setTimeHour] = useState('');
   const [timeMinute, setTimeMinute] = useState('');
@@ -2443,7 +2443,7 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
   };
 
   // The same kind row as the member form; it is hidden while a registered partner task is being edited.
-  const kindTabs = editingItemId ? null : <TaskKindTabs value="partner" disabled={isSaving} onChange={kind => onKind?.(kind)}/>;
+  const kindTabs = editingItemId ? null : <TaskKindTabs value="partner" disabled={isSaving} onChange={kind => onKind?.(kind, quickPartnerOpen)}/>;
   // Required fields, shown on the form (badge, red box, list above the save button).
   const partnerRequired = [['パートナー名', !!String(partnerName || '').trim()], ['どこ？で何を？（件名）', !!subject.trim()], ['日付', !!date], ['開始時間', !!time], ['担当者', !!assigneeUid]];
   const handleSave = async () => {
@@ -3640,6 +3640,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('calendar');
   // Which kind the task screen starts with: 個人メモ only when it was chosen on the partner form.
   const [taskStartVisibility, setTaskStartVisibility] = useState('public');
+  // Whether the task screen starts in かんたん入力: a kind button keeps the mode the user was in; the menu starts with it.
+  const [taskStartQuick, setTaskStartQuick] = useState(true);
   const [inventorySection, setInventorySection] = useState('list');
   const [currentDate, setCurrentDate] = useState(() => calendarDate());
   const [selectedDate, setSelectedDate] = useState(japanToday());
@@ -4221,7 +4223,8 @@ export default function App() {
               <ViewerWorkspace inventorySection={inventorySection} inventoryMovements={inventoryMovements} tab={activeTab} teamData={teamData} partnerItems={partnerItems} inventoryItems={inventoryItems} users={sortedUsers} date={selectedDate} onDate={setSelectedDate} onTab={setActiveTab}/>
             ) : activeTab === 'partner' ? (
               <PartnerView
-                onKind={kind => { if (!confirmDiscardEdits()) return; setTaskStartVisibility(kind === 'memo' ? 'private' : 'public'); setSelectedDate(japanToday()); setActiveTab('daily'); }}
+                initialQuick={taskStartQuick}
+                onKind={(kind, quick) => { if (!confirmDiscardEdits()) return; setTaskStartVisibility(kind === 'memo' ? 'private' : 'public'); setTaskStartQuick(quick); setSelectedDate(japanToday()); setActiveTab('daily'); }}
                 currentUser={currentUser}
                 debugLog={debugLog}
                 partnerItems={partnerItems}
@@ -4389,7 +4392,7 @@ export default function App() {
                 currentUserUid={currentUser.id} 
                 currentUser={currentUser}
                 roles={roles}
-                onDateClick={(dateStr) => { setSelectedDate(dateStr); setTaskStartVisibility('public'); setActiveTab('daily'); }} 
+                onDateClick={(dateStr) => { setSelectedDate(dateStr); setTaskStartVisibility('public'); setTaskStartQuick(true); setActiveTab('daily'); }} 
                 shiftTypes={shiftTypes} 
                 teamData={teamData} 
                 partnerItems={partnerItems}
@@ -4607,7 +4610,8 @@ export default function App() {
             ) : activeTab === 'daily' ? (
               <DailyDetailView 
                 initialVisibility={taskStartVisibility}
-                onPartnerKind={() => { if (confirmDiscardEdits()) setActiveTab('partner'); }}
+                initialQuick={taskStartQuick}
+                onPartnerKind={quick => { if (!confirmDiscardEdits()) return; setTaskStartQuick(quick); setActiveTab('partner'); }}
                 inventoryItems={inventoryItems}
                 addTask={async (dateStr, targetUid, text, imageUrl = '', imageName = '', imagePublicId = '', imageBytes = 0, visibility = 'public', subject = '', endTime = '', productId = '', productQuantity = 1, images = [], assigneeIds = [targetUid], important = false, periodEndDate = '', repeat = null) => {
                   if (periodEndDate && periodEndDate < dateStr) throw new Error('作業期間を確認してください。');
@@ -4827,7 +4831,7 @@ export default function App() {
               />
             )}
 
-            <BottomNav inventorySection={inventorySection} setInventorySection={setInventorySection} activeTab={activeTab} currentUser={currentUser} roles={roles} setActiveTab={tab => { setTaskStartVisibility('public'); setActiveTab(tab); }} setSelectedDate={setSelectedDate}/>
+            <BottomNav inventorySection={inventorySection} setInventorySection={setInventorySection} activeTab={activeTab} currentUser={currentUser} roles={roles} setActiveTab={tab => { setTaskStartVisibility('public'); setTaskStartQuick(true); setActiveTab(tab); }} setSelectedDate={setSelectedDate}/>
           </div>
         </div>
       )}
