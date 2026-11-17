@@ -1,4 +1,5 @@
 import TaskPeriodPanel from './TaskPeriodPanel';
+import TaskKindTabs from './TaskKindTabs';
 import { taskOnDay, isTaskPast } from '../periodTask.mjs';
 import { japanDateTime } from '../japanTime.mjs';
 import DateInput from './DateInput';
@@ -10,7 +11,7 @@ import { ImportantBadge } from './ImportantToggle';
 import { partnerAssigneeIds } from '../partnerAssignees.mjs';
 import { inventoryProductLabel } from '../inventoryProduct.mjs';
 
-export default function ViewerWorkspace({ inventorySection = 'list', inventoryMovements = [], tab, teamData, partnerItems, inventoryItems, users, date, onDate }) {
+export default function ViewerWorkspace({ inventorySection = 'list', inventoryMovements = [], tab, teamData, partnerItems, inventoryItems, users, date, onDate, onTab }) {
   const [query, setQuery] = useState('');
   const names = ids => ids.map(id => users.find(user => user.id === id)?.name || '担当者不明').join('・');
   const allTasks = Object.entries(teamData.tasks || {}).flatMap(([taskDate, owners]) => Object.entries(owners || {}).flatMap(([uid, tasks]) => (tasks || []).filter(task => task.visibility !== 'private').map(task => ({ ...task, taskDate, assigneeIds: task.assigneeIds?.length ? task.assigneeIds : [uid], recordKey: taskDate + uid + task.id }))));
@@ -18,10 +19,11 @@ export default function ViewerWorkspace({ inventorySection = 'list', inventoryMo
   const records = (tab === 'partner' ? partners : tab === 'completed' ? [...allTasks, ...partners].filter(item => item.completed) : allTasks.filter(item => taskOnDay(item, item.taskDate, date) || isTaskPast(item, item.taskDate, date)))
     .filter(item => !query || [item.subject, item.text, item.content, item.partnerName, names(item.assigneeIds)].join(' ').includes(query))
     .sort((a, b) => (tab === 'completed' ? String(b.completedAt || '').localeCompare(String(a.completedAt || '')) : String(a.taskDate || '').localeCompare(String(b.taskDate || '')) || String(a.time || '').localeCompare(String(b.time || ''))));
-  const title = { daily: '日別タスク', partner: 'パートナータスク', completed: '終了履歴', inventory: '在庫一覧' }[tab] || '閲覧';
+  const title = { daily: '個人タスク', partner: 'パートナータスク', completed: '終了履歴', inventory: '在庫一覧' }[tab] || '閲覧';
   if (tab === 'inventory' && inventorySection === 'history') return <main className="flex-1 overflow-y-auto bg-gray-50 p-3 pb-24 space-y-3"><h2 className="text-lg font-bold">在庫変動履歴</h2><p className="rounded-lg bg-blue-50 p-2 text-sm text-blue-800">閲覧のみ：在庫を変更できません。</p>{inventoryMovements.length ? [...inventoryMovements].sort((a,b)=>String(b.timestamp||'').localeCompare(String(a.timestamp||''))).slice(0,50).map(entry=><article key={entry.id} className="rounded-xl border bg-white p-3 text-sm space-y-1"><p className="font-bold">{entry.productName || '商品'}</p><p>{entry.typeLabel || entry.type} ・ {entry.timestamp ? japanDateTime(entry.timestamp) : ''}</p><p>変更数：{Number(entry.delta||0)>0?'+':''}{Number(entry.delta||0)}個</p>{entry.stockBefore!==undefined && <p>在庫：{entry.stockBefore} → {entry.stockAfter}個</p>}{entry.actorName && <p>操作：{entry.actorName}</p>}{entry.reason && <p>理由：{entry.reason}</p>}</article>) : <p className="text-sm text-gray-500">まだ履歴はありません。</p>}</main>;
   return <main className="flex-1 overflow-y-auto bg-gray-50 p-3 pb-24 space-y-3">
     <h2 className="text-lg font-bold">{title}</h2><p className="rounded-lg bg-blue-50 p-2 text-sm text-blue-800">閲覧のみ：追加・編集・削除・終了操作はできません。</p>
+    {['daily', 'partner'].includes(tab) && onTab && <TaskKindTabs only={['member', 'partner']} value={tab === 'partner' ? 'partner' : 'member'} onChange={kind => onTab(kind === 'partner' ? 'partner' : 'daily')}/>}
     {tab === 'daily' && <label className="block text-sm font-bold">対象日<DateInput value={date} onChange={event => onDate(event.target.value)} className="ml-2 min-h-11 rounded-lg border bg-white px-2"/></label>}
     <input aria-label="表示内容を検索" placeholder="検索" value={query} onChange={event => setQuery(event.target.value)} className="w-full min-h-11 rounded-lg border bg-white px-3"/>
     {tab === 'inventory' ? inventoryItems.filter(item => !query || [inventoryProductLabel(item), item.barcode, item.usageLocation].join(' ').includes(query)).map(item => <details key={item.id} className="rounded-xl border bg-white p-3"><summary className="cursor-pointer font-bold">{inventoryProductLabel(item)} ／ 在庫 {Number(item.stock || 0)}個</summary><p className="mt-2 text-sm">品番：{item.modelNumber || '未登録'} ／ 棚：{item.shelfNumber || '未登録'}</p><p className="text-sm">使用箇所：{item.usageLocation || '未登録'} ／ JAN：{item.barcode || '未登録'}</p>{item.imageUrl && <img src={item.imageUrl} alt={inventoryProductLabel(item)} className="mt-2 max-h-48 max-w-full object-contain"/>}</details>) : records.length ? records.map(item => <details key={item.recordKey} className={'rounded-xl border bg-white p-3 ' + (item.important ? 'border-2 border-red-500' : 'border-blue-100')}>

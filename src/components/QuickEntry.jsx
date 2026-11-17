@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
 import { useEditGuard } from '../editGuard';
 
-export default function QuickEntry({ title, steps, summary, onSave, onClose, tasksContent, tasksDescription, hasDraft = false }) {
+// header: shown above everything (the 個人タスク／パートナータスク／個人メモ row).
+export default function QuickEntry({ title, steps, summary, onSave, onClose, tasksContent, tasksDescription, hasDraft = false, header = null }) {
   const [page, setPage] = useState(0);
   const [mode, setMode] = useState('entry');
   const [saving, setSaving] = useState(false);
@@ -22,6 +23,7 @@ export default function QuickEntry({ title, steps, summary, onSave, onClose, tas
   };
   return <div className="fixed inset-x-0 top-0 bottom-[68px] z-[100] bg-slate-50 overflow-y-auto" role="region" aria-label={title} onKeyDown={event => { if (event.key === 'Escape' && !saving) onClose(); }}>
     <div className="max-w-xl mx-auto p-5 pb-12 text-base">
+      {header}
       <button autoFocus type="button" disabled={saving} onClick={onClose} className="min-h-12 px-4 rounded-xl border border-gray-300 mb-5">詳しく入力する</button>
       <div className="grid grid-cols-2 gap-3 mb-6">
         <button type="button" disabled={saving} onClick={() => setMode('entry')} className={`min-h-14 rounded-xl font-bold border-2 ${mode === 'entry' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-200 text-slate-700'}`}>＋ 新しく登録</button>

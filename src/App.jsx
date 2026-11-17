@@ -15,6 +15,7 @@ import ReceiptImport from './components/ReceiptImport';
 import { TaskContent } from './components/TaskReadPreview';
 import TaskPeriodPanel from './components/TaskPeriodPanel';
 import PartnerNameSettings from './components/PartnerNameSettings';
+import TaskKindTabs from './components/TaskKindTabs';
 import TaskRepeatFields from './components/TaskRepeatFields';
 import { isPeriodTask, taskOnDay, periodTaskChanges, taskDisplayDay, isTaskPast, isDailyWorkFinished, isRecurringTask, isRepeatOver, normalizeRepeat, repeatLabel } from './periodTask.mjs';
 import { japanToday, japanTime, japanDateTime, calendarDate } from './japanTime.mjs';
@@ -1362,7 +1363,7 @@ const DailyTaskItem = ({ task, selectedDate, selectedUserUid, currentUserUid, cu
 
 const DailyDetailView = ({
   selectedDate, changeDay, teamData, currentUserUid, shiftTypes, inventoryItems = [],
-  addTask, toggleTask, deleteTask, updateTaskText, updateTaskAssignees, users, roles, sortedUsers
+  addTask, toggleTask, deleteTask, updateTaskText, updateTaskAssignees, users, roles, sortedUsers, initialVisibility = 'public', onPartnerKind
 }) => {
   const [newAssigneeIds, setNewAssigneeIds] = useState(null);
   const [quickTaskOpen, setQuickTaskOpen] = useState(true);
@@ -1378,7 +1379,7 @@ const DailyDetailView = ({
   const [newTaskProductQuantity, setNewTaskProductQuantity] = useState('1');
   // Bumped after a task is added so the product search box starts empty.
   const [productSearchKey, setProductSearchKey] = useState(0);
-  const [newTaskVisibility, setNewTaskVisibility] = useState('public');
+  const [newTaskVisibility, setNewTaskVisibility] = useState(initialVisibility);
   const [selectedUserUid, setSelectedUserUid] = useState(currentUserUid);
   const taskAssigneeIds = newAssigneeIds || [selectedUserUid];
   const [selectedTaskId, setSelectedTaskId] = useState(null);
@@ -1395,7 +1396,7 @@ const DailyDetailView = ({
   const [isSavingPersonalMemo, setIsSavingPersonalMemo] = useState(false);
   const [isDeletingPersonalMemo, setIsDeletingPersonalMemo] = useState(false);
   // Keep the guard mounted in both the guided and detailed input forms.
-  const hasNewTaskDraft = !!(newTaskPeriodEnd || newTaskRepeat || newTaskDate !== null || newTaskSubject.trim() || newTaskText.trim() || newTaskImportant || newTaskEndTime || newTaskProductId || newTaskProductQuantity !== '1' || newTaskVisibility !== 'public' || newTaskImages.length || newAssigneeIds !== null);
+  const hasNewTaskDraft = !!(newTaskPeriodEnd || newTaskRepeat || newTaskDate !== null || newTaskSubject.trim() || newTaskText.trim() || newTaskImportant || newTaskEndTime || newTaskProductId || newTaskProductQuantity !== '1' || newTaskImages.length || newAssigneeIds !== null);
   useEditGuard(hasNewTaskDraft || isUploading, isUploading);
 
   const currentUser = users[currentUserUid];
@@ -1584,6 +1585,12 @@ const DailyDetailView = ({
     finally { deletingTaskRef.current = false; setDeletingTaskId(null); }
   };
 
+  // 個人タスク／パートナータスク／個人メモ: the partner kind opens the partner form, the other two switch this form.
+  const kindTabs = <TaskKindTabs value={newTaskVisibility === 'private' ? 'memo' : 'member'} disabled={isUploading} memoDisabled={selectedUserUid !== currentUserUid} onChange={kind => {
+    if (kind === 'partner') onPartnerKind?.();
+    else if (kind === 'memo') { setNewTaskVisibility('private'); setNewTaskSubject(''); setNewTaskEndTime(''); }
+    else setNewTaskVisibility('public');
+  }}/>;
   const taskItemProps = { selectedDate, selectedUserUid, currentUserUid, currentUser, isAdmin, selectedTaskId, setSelectedTaskId, setPastFinishConfirmTaskKey, updateTaskAssignees, updateTaskText, toggleTask, sortedUsers, inventoryItems, users, pastFinishConfirmTaskKey, deletingTaskId, handleDeleteDailyTask };
 
   return (
@@ -1619,7 +1626,7 @@ const DailyDetailView = ({
         <div className="bg-white border-b border-gray-200 p-3 shrink-0 shadow-sm">
           <div className="max-w-3xl mx-auto">
 <button type="button" disabled={isUploading} onClick={() => setQuickTaskOpen(true)} className="w-full min-h-14 mb-4 rounded-xl bg-blue-50 border-2 border-blue-500 text-blue-700 text-lg font-bold">かんたん入力（タスク）</button>
-{quickTaskOpen && <QuickEntry hasDraft={!!(newTaskImportant || newTaskSubject.trim() || newTaskText.trim() || newTaskEndTime || newTaskProductId || newTaskImages.length)} tasksContent={<div className="space-y-3">{[...unfinishedPastTasks, ...selectedDateActiveTasks].length ? [...unfinishedPastTasks, ...selectedDateActiveTasks].map(task => <DailyTaskItem key={`${task.taskDate}-${task.ownerUid}-${task.id}`} {...taskItemProps} task={task}/>) : <p className="rounded-xl bg-white border p-5">この担当者の未終了タスクはありません。</p>}</div>} tasksDescription={`${selectedDate} ／ ${users[selectedUserUid]?.name || ''} のタスクと過去の未終了タスクです。終わった作業の「タスクを終了」を押してください。`} title="タスクのかんたん入力" onClose={() => setQuickTaskOpen(false)} onSave={handleAddTask}
+{quickTaskOpen && <QuickEntry header={kindTabs} hasDraft={!!(newTaskImportant || newTaskSubject.trim() || newTaskText.trim() || newTaskEndTime || newTaskProductId || newTaskImages.length)} tasksContent={<div className="space-y-3">{[...unfinishedPastTasks, ...selectedDateActiveTasks].length ? [...unfinishedPastTasks, ...selectedDateActiveTasks].map(task => <DailyTaskItem key={`${task.taskDate}-${task.ownerUid}-${task.id}`} {...taskItemProps} task={task}/>) : <p className="rounded-xl bg-white border p-5">この担当者の未終了タスクはありません。</p>}</div>} tasksDescription={`${selectedDate} ／ ${users[selectedUserUid]?.name || ''} のタスクと過去の未終了タスクです。終わった作業の「タスクを終了」を押してください。`} title="タスクのかんたん入力" onClose={() => setQuickTaskOpen(false)} onSave={handleAddTask}
 steps={[
 {title:'何をしますか？何をしましたか？', content:<>
 <p>登録日：{taskRegistrationDate || '日付を選択してください'}</p>
@@ -1636,12 +1643,7 @@ steps={[
 ]}
 summary={[[ '重要', newTaskVisibility !== 'private' && newTaskImportant ? '重要' : 'なし' ], [ '登録日', taskRegistrationDate ], ['繰り返し・期間', newTaskVisibility !== 'private' && newTaskRepeat ? repeatLabel(newTaskRepeat) + (newTaskPeriodEnd ? '（' + newTaskPeriodEnd.replaceAll('-', '/') + 'まで）' : '（終了日なし）') : newTaskPeriodEnd ? '〜' + newTaskPeriodEnd : '単日タスク'], ['担当', newTaskVisibility === 'private' ? users[selectedUserUid]?.name : taskAssigneeIds.map(id => users[id]?.name).filter(Boolean).join('・')], ['公開範囲', newTaskVisibility === 'private' ? '自分だけの個人メモ' : 'みんなに公開'], ['どこで？どんな内容？', newTaskSubject], ['内容', newTaskText], ['終了予定', newTaskEndTime], ['使用する商品', newTaskProductId ? inventoryProductLabel(inventoryItems.find(item => item.id === newTaskProductId) || {}) + ' × ' + newTaskProductQuantity : 'なし'], ['写真・動画', newTaskImages.length + '件']]}
 />}
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <span className="text-xs font-black text-gray-600">このタスクを</span>
-              <button type="button" onClick={() => setNewTaskVisibility('public')} className={`px-3 py-1.5 rounded-full text-xs font-black border transition-all ${newTaskVisibility === 'public' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-500 border-gray-200'}`}>👥 みんなに公開</button>
-              <button type="button" onClick={() => { setNewTaskVisibility('private'); setNewTaskSubject(''); setNewTaskEndTime(''); }} disabled={selectedUserUid !== currentUserUid} className={`px-3 py-1.5 rounded-full text-xs font-black border transition-all ${newTaskVisibility === 'private' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-500 border-gray-200'} ${selectedUserUid !== currentUserUid ? 'opacity-40 cursor-not-allowed' : ''}`}>🔒 個人メモ</button>
-              {newTaskVisibility === 'private' && <span className="text-[10px] font-bold text-purple-600">自分だけに表示されます</span>}
-            </div>
+            {kindTabs}
 
             <div className="space-y-2 mb-2">
               {newTaskVisibility !== 'private' && <ImportantToggle value={newTaskImportant} onChange={setNewTaskImportant} disabled={isUploading}/>}
@@ -1714,7 +1716,7 @@ summary={[[ '重要', newTaskVisibility !== 'private' && newTaskImportant ? '重
                 {personalMemoTasks.length === 0 ? (
                   <div className="py-5 text-center">
                     <p className="text-xs font-bold text-gray-500">個人メモはまだありません</p>
-                    <p className="text-[10px] text-gray-400 mt-1">上の入力欄で「個人メモ」を選んで保存すると、ここに表示されます。</p>
+                    <p className="text-[10px] text-gray-400 mt-1">上の「個人メモ」ボタンを選んで保存すると、ここに表示されます。</p>
                   </div>
                 ) : personalMemoTasks.map(memo => (
                   <button
@@ -2348,7 +2350,7 @@ const SettingsView = ({ shiftTypes, updateShiftTypes, users, updateUsers, curren
   );
 };
 
-const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartnerItem, togglePartnerItem, completePartnerItem, reschedulePartnerItem, deletePartnerItem, updatePartnerName, deletePartnerName, currentUser, debugLog, sortedUsers }) => {
+const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartnerItem, togglePartnerItem, completePartnerItem, reschedulePartnerItem, deletePartnerItem, updatePartnerName, deletePartnerName, currentUser, debugLog, sortedUsers, onKind }) => {
   const [scheduleNow, setScheduleNow] = useState(Date.now);
   useEffect(() => {
     const refresh = () => setScheduleNow(Date.now());
@@ -2440,6 +2442,8 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
     setShowPartnerNameMenu(false);
   };
 
+  // The same kind row as the member form; it is hidden while a registered partner task is being edited.
+  const kindTabs = editingItemId ? null : <TaskKindTabs value="partner" disabled={isSaving} onChange={kind => onKind?.(kind)}/>;
   // Required fields, shown on the form (badge, red box, list above the save button).
   const partnerRequired = [['パートナー名', !!String(partnerName || '').trim()], ['どこ？で何を？（件名）', !!subject.trim()], ['日付', !!date], ['開始時間', !!time], ['担当者', !!assigneeUid]];
   const handleSave = async () => {
@@ -2575,7 +2579,8 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
       <div className="p-4 max-w-2xl mx-auto space-y-4">
         <div ref={partnerFormRef} tabIndex={-1} role="region" aria-label={editingItemId ? "パートナータスク編集フォーム" : "パートナータスク登録フォーム"} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 space-y-3 scroll-mt-4">
 {!editingItemId && <button type="button" disabled={isSaving} onClick={() => setQuickPartnerOpen(true)} className="w-full min-h-14 mb-4 rounded-xl bg-blue-50 border-2 border-blue-500 text-blue-700 text-lg font-bold">かんたん入力（パートナータスク）</button>}
-{quickPartnerOpen && <QuickEntry hasDraft={!!(partnerImportant || partnerName || subject.trim() || content.trim() || timeHour || assigneeUid || newPartnerImages.length)} tasksContent={<div className="space-y-3">{activePartnerItems.length ? activePartnerItems.map(renderPartnerItem) : <p className="rounded-xl bg-white border p-5">未終了のパートナータスクはありません。</p>}</div>} tasksDescription="終わった作業の「タスクを終了」を押してください。" title="パートナータスクのかんたん入力" onClose={() => setQuickPartnerOpen(false)} onSave={handleSave}
+{kindTabs}
+{quickPartnerOpen && <QuickEntry header={kindTabs} hasDraft={!!(partnerImportant || partnerName || subject.trim() || content.trim() || timeHour || assigneeUid || newPartnerImages.length)} tasksContent={<div className="space-y-3">{activePartnerItems.length ? activePartnerItems.map(renderPartnerItem) : <p className="rounded-xl bg-white border p-5">未終了のパートナータスクはありません。</p>}</div>} tasksDescription="終わった作業の「タスクを終了」を押してください。" title="パートナータスクのかんたん入力" onClose={() => setQuickPartnerOpen(false)} onSave={handleSave}
 steps={[
 {title:'どの会社に、何をお願いしますか？', content:<>
 <ImportantToggle value={partnerImportant} onChange={setPartnerImportant} disabled={isSaving}/>
@@ -3514,7 +3519,7 @@ const InventoryView = ({ section = 'list', onSectionChange, inventoryItems = [],
       };
   return <div ref={inventoryScrollRef} className="flex-1 overflow-y-auto bg-gray-50 pb-[84px]">
     <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-4">
-      <div className="flex items-center gap-3"><div className="w-11 h-11 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center"><Package size={24}/></div><div><h2 className="text-xl font-black text-gray-800">{section==='register'?'商品登録':section==='history'?'在庫変動履歴':'在庫一覧'}</h2><p className="text-xs text-gray-500">日別タスクで商品を選ぶと在庫が1個減ります。</p></div></div>
+      <div className="flex items-center gap-3"><div className="w-11 h-11 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center"><Package size={24}/></div><div><h2 className="text-xl font-black text-gray-800">{section==='register'?'商品登録':section==='history'?'在庫変動履歴':'在庫一覧'}</h2><p className="text-xs text-gray-500">個人タスクで商品を選ぶと在庫が1個減ります。</p></div></div>
       {section === 'list' && <InventoryAccessQr/>}
       {section !== 'history' && <section className="rounded-2xl border border-gray-200 bg-white p-4 space-y-3">
         <div className="flex items-center justify-between gap-2"><h3 className="text-sm font-black text-gray-700">バーコード・QRコード・型番で商品を確認</h3><button type="button" disabled={isSaving} onClick={()=>setScannerOpen(true)} className="shrink-0 inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-indigo-600 px-3 text-xs font-bold text-white"><Camera size={16}/>カメラで読取</button></div>
@@ -3573,8 +3578,6 @@ const BottomNav = ({ inventorySection, setInventorySection, activeTab, setActive
   const canManageSettings = (roles[currentUser.role]?.level || 10) >= 30;
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
-  const taskMenuRef = useRef(null);
-  const [taskMenuOpen, setTaskMenuOpen] = useState(false);
   const inventoryMenuRef = useRef(null);
   const [inventoryMenuOpen, setInventoryMenuOpen] = useState(false);
   const primary = [
@@ -3594,7 +3597,7 @@ const BottomNav = ({ inventorySection, setInventorySection, activeTab, setActive
     ...(canManageSettings ? [{ id:'settings', label:'設定', description:'メンバー管理・アプリの設定', Icon:Settings }] : [])
   ];
   const moreActive = secondary.some(item => item.id === activeTab);
-  const closeMenu = () => { menuRef.current?.close(); taskMenuRef.current?.close(); inventoryMenuRef.current?.close(); };
+  const closeMenu = () => { menuRef.current?.close(); inventoryMenuRef.current?.close(); };
   const isPrimaryActive = id => id === 'daily' ? ['daily','partner'].includes(activeTab) : activeTab === id;
   const navigate = tab => {
     if (tab === activeTab) { closeMenu(); return; }
@@ -3604,16 +3607,16 @@ const BottomNav = ({ inventorySection, setInventorySection, activeTab, setActive
     closeMenu();
   };
   useEffect(() => {
-    if (!menuOpen && !taskMenuOpen && !inventoryMenuOpen) return;
+    if (!menuOpen && !inventoryMenuOpen) return;
     const previous = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = previous; };
-  }, [menuOpen, taskMenuOpen, inventoryMenuOpen]);
+  }, [menuOpen, inventoryMenuOpen]);
   const navClass = selected => `min-w-0 flex-1 min-h-[68px] flex flex-col items-center justify-center gap-1.5 relative active:bg-blue-50 ${selected?'text-blue-600':'text-gray-500'}`;
   return <>
     <nav aria-label="メインメニュー" className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 pb-safe z-20 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
       <div className="flex min-h-[68px] w-full">
-        {primary.map(({id,label,Icon})=><button key={id} type="button" aria-current={isPrimaryActive(id)?'page':undefined} aria-haspopup={['daily','inventory'].includes(id)?'dialog':undefined} aria-expanded={id==='daily'?taskMenuOpen:id==='inventory'?inventoryMenuOpen:undefined} aria-controls={id==='daily'?'task-navigation':id==='inventory'?'inventory-navigation':undefined} onClick={()=>{if(id==='daily'){taskMenuRef.current?.showModal();setTaskMenuOpen(true);}else if(id==='inventory'){inventoryMenuRef.current?.showModal();setInventoryMenuOpen(true);}else navigate(id);}} className={navClass(isPrimaryActive(id)||(id==='daily'&&taskMenuOpen)||(id==='inventory'&&inventoryMenuOpen))}><Icon className="w-6 h-6" aria-hidden="true"/><span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">{label}</span>{isPrimaryActive(id)&&<span className="absolute top-0 w-1/2 h-0.5 bg-blue-600 rounded-b-full"/>}</button>)}
+        {primary.map(({id,label,Icon})=><button key={id} type="button" aria-current={isPrimaryActive(id)?'page':undefined} aria-haspopup={id==='inventory'?'dialog':undefined} aria-expanded={id==='inventory'?inventoryMenuOpen:undefined} aria-controls={id==='inventory'?'inventory-navigation':undefined} onClick={()=>{if(id==='daily'){if(['daily','partner'].includes(activeTab))closeMenu();else navigate('daily');}else if(id==='inventory'){inventoryMenuRef.current?.showModal();setInventoryMenuOpen(true);}else navigate(id);}} className={navClass(isPrimaryActive(id)||(id==='inventory'&&inventoryMenuOpen))}><Icon className="w-6 h-6" aria-hidden="true"/><span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">{label}</span>{isPrimaryActive(id)&&<span className="absolute top-0 w-1/2 h-0.5 bg-blue-600 rounded-b-full"/>}</button>)}
         <button type="button" aria-haspopup="dialog" aria-expanded={menuOpen} aria-controls="more-navigation" onClick={()=>{menuRef.current?.showModal();setMenuOpen(true);}} className={navClass(moreActive||menuOpen)}><span aria-hidden="true" className="h-6 flex items-center text-2xl font-black leading-none tracking-widest">•••</span><span className="text-[10px] sm:text-xs font-bold">その他</span>{moreActive&&<span className="absolute top-0 w-1/2 h-0.5 bg-blue-600 rounded-b-full"/>}</button>
       </div>
     </nav>
@@ -3621,12 +3624,6 @@ const BottomNav = ({ inventorySection, setInventorySection, activeTab, setActive
       <div className="p-4 sm:p-6 space-y-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
         <div className="flex items-center justify-between"><h2 id="inventory-navigation-heading" className="text-lg font-bold">在庫管理</h2><button type="button" autoFocus onClick={closeMenu} aria-label="在庫管理メニューを閉じる" className="min-h-11 min-w-11 flex items-center justify-center rounded-full bg-gray-100 active:bg-gray-200"><X size={22}/></button></div>
         <div className="grid grid-cols-2 gap-3">{[...(!isReadOnlyUser(currentUser,roles)?[{id:'register',label:'登録',Icon:UserPlus}]:[]),{id:'list',label:'在庫一覧',Icon:Package},{id:'history',label:'在庫変動履歴',Icon:History}].map(({id,label,Icon})=><button key={id} type="button" aria-current={activeTab==='inventory'&&inventorySection===id?'page':undefined} onClick={()=>{if(activeTab==='inventory'&&inventorySection===id){closeMenu();return;}if(!confirmDiscardEdits())return;setInventorySection(id);setActiveTab('inventory');closeMenu();}} className={`min-h-28 rounded-2xl border p-4 text-left flex flex-col items-start gap-3 active:bg-blue-100 ${activeTab==='inventory'&&inventorySection===id?'border-blue-500 bg-blue-50 text-blue-800':'border-gray-200 bg-gray-50 text-gray-800'}`}><Icon size={26} aria-hidden="true"/><span className="text-base font-bold">{label}</span></button>)}</div>
-      </div>
-    </dialog>
-    <dialog id="task-navigation" ref={taskMenuRef} aria-labelledby="task-navigation-heading" onClose={()=>setTaskMenuOpen(false)} onClick={event=>{if(event.target===event.currentTarget)closeMenu();}} className="fixed inset-x-0 top-auto bottom-0 m-0 mx-auto w-full max-w-xl max-h-[85dvh] overflow-y-auto rounded-t-3xl border-0 bg-white p-0 text-gray-800 shadow-2xl backdrop:bg-black/40">
-      <div className="p-4 sm:p-6 space-y-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
-        <div className="flex items-center justify-between"><h2 id="task-navigation-heading" className="text-lg font-bold">タスク</h2><button type="button" autoFocus onClick={closeMenu} aria-label="タスクメニューを閉じる" className="min-h-11 min-w-11 flex items-center justify-center rounded-full bg-gray-100 active:bg-gray-200"><X size={22}/></button></div>
-        <div className="grid grid-cols-2 gap-3">{[{id:'daily',label:'日別タスク',Icon:CheckSquare},{id:'partner',label:'パートナー',Icon:Users}].map(({id,label,Icon})=><button key={id} type="button" aria-current={activeTab===id?'page':undefined} onClick={()=>navigate(id)} className={`min-h-28 rounded-2xl border p-4 text-left flex flex-col items-start gap-3 active:bg-blue-100 ${activeTab===id?'border-blue-500 bg-blue-50 text-blue-800':'border-gray-200 bg-gray-50 text-gray-800'}`}><Icon size={26} aria-hidden="true"/><span className="text-base font-bold">{label}</span></button>)}</div>
       </div>
     </dialog>
     <dialog id="more-navigation" ref={menuRef} aria-labelledby="more-navigation-heading" onClose={()=>setMenuOpen(false)} onClick={event=>{if(event.target===event.currentTarget)closeMenu();}} className="fixed inset-x-0 top-auto bottom-0 m-0 mx-auto w-full max-w-xl max-h-[85dvh] overflow-y-auto rounded-t-3xl border-0 bg-white p-0 text-gray-800 shadow-2xl backdrop:bg-black/40">
@@ -3641,6 +3638,8 @@ const BottomNav = ({ inventorySection, setInventorySection, activeTab, setActive
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [activeTab, setActiveTab] = useState('calendar');
+  // Which kind the task screen starts with: 個人メモ only when it was chosen on the partner form.
+  const [taskStartVisibility, setTaskStartVisibility] = useState('public');
   const [inventorySection, setInventorySection] = useState('list');
   const [currentDate, setCurrentDate] = useState(() => calendarDate());
   const [selectedDate, setSelectedDate] = useState(japanToday());
@@ -4219,9 +4218,10 @@ export default function App() {
             {activeTab === 'help' ? (
               <HelpView currentUser={currentUser}/>
             ) : isReadOnlyUser(currentUser, roles) && !['calendar', 'team-shift'].includes(activeTab) ? (
-              <ViewerWorkspace inventorySection={inventorySection} inventoryMovements={inventoryMovements} tab={activeTab} teamData={teamData} partnerItems={partnerItems} inventoryItems={inventoryItems} users={sortedUsers} date={selectedDate} onDate={setSelectedDate}/>
+              <ViewerWorkspace inventorySection={inventorySection} inventoryMovements={inventoryMovements} tab={activeTab} teamData={teamData} partnerItems={partnerItems} inventoryItems={inventoryItems} users={sortedUsers} date={selectedDate} onDate={setSelectedDate} onTab={setActiveTab}/>
             ) : activeTab === 'partner' ? (
               <PartnerView
+                onKind={kind => { if (!confirmDiscardEdits()) return; setTaskStartVisibility(kind === 'memo' ? 'private' : 'public'); setSelectedDate(japanToday()); setActiveTab('daily'); }}
                 currentUser={currentUser}
                 debugLog={debugLog}
                 partnerItems={partnerItems}
@@ -4389,7 +4389,7 @@ export default function App() {
                 currentUserUid={currentUser.id} 
                 currentUser={currentUser}
                 roles={roles}
-                onDateClick={(dateStr) => { setSelectedDate(dateStr); setActiveTab('daily'); }} 
+                onDateClick={(dateStr) => { setSelectedDate(dateStr); setTaskStartVisibility('public'); setActiveTab('daily'); }} 
                 shiftTypes={shiftTypes} 
                 teamData={teamData} 
                 partnerItems={partnerItems}
@@ -4606,6 +4606,8 @@ export default function App() {
               />
             ) : activeTab === 'daily' ? (
               <DailyDetailView 
+                initialVisibility={taskStartVisibility}
+                onPartnerKind={() => { if (confirmDiscardEdits()) setActiveTab('partner'); }}
                 inventoryItems={inventoryItems}
                 addTask={async (dateStr, targetUid, text, imageUrl = '', imageName = '', imagePublicId = '', imageBytes = 0, visibility = 'public', subject = '', endTime = '', productId = '', productQuantity = 1, images = [], assigneeIds = [targetUid], important = false, periodEndDate = '', repeat = null) => {
                   if (periodEndDate && periodEndDate < dateStr) throw new Error('作業期間を確認してください。');
@@ -4825,7 +4827,7 @@ export default function App() {
               />
             )}
 
-            <BottomNav inventorySection={inventorySection} setInventorySection={setInventorySection} activeTab={activeTab} currentUser={currentUser} roles={roles} setActiveTab={setActiveTab} setSelectedDate={setSelectedDate}/>
+            <BottomNav inventorySection={inventorySection} setInventorySection={setInventorySection} activeTab={activeTab} currentUser={currentUser} roles={roles} setActiveTab={tab => { setTaskStartVisibility('public'); setActiveTab(tab); }} setSelectedDate={setSelectedDate}/>
           </div>
         </div>
       )}

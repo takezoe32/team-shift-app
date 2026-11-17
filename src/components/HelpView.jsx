@@ -14,7 +14,7 @@ function Note({ children }) {
 export default function HelpView({ currentUser }) {
   const [skip, setSkip] = useState(() => localStorage.getItem('teamshift_skip_help_on_login') === 'true');
   const isReportOwner = String(currentUser?.email || '').trim().toLowerCase() === 'mitsutake.takezoe@plandosee.co.jp';
-  const topics = [['calendar', '予定を見る'], ['daily', '日別タスクを登録'], ['finish', 'タスクを終了'], ['period', '期間のある作業'], ['partner', 'パートナーを登録'], ['schedule', '日程を変更'], ['handoff', '申し送りを追加'], ['history', '終了履歴を見る'], ['line', 'LINEから登録'], ['receipt', 'レシート取込'], ['other', 'シフト・在庫・個人メモ']];
+  const topics = [['calendar', '予定を見る'], ['daily', '個人タスクを登録'], ['finish', 'タスクを終了'], ['period', '期間のある作業'], ['partner', 'パートナーを登録'], ['schedule', '日程を変更'], ['handoff', '申し送りを追加'], ['history', '終了履歴を見る'], ['line', 'LINEから登録'], ['receipt', 'レシート取込'], ['other', 'シフト・在庫・個人メモ']];
   return <div className="flex-1 overflow-y-auto bg-slate-50 pb-24 text-gray-800">
     <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-5">
       <header className="rounded-2xl bg-blue-600 text-white p-6 space-y-4">
@@ -26,20 +26,20 @@ export default function HelpView({ currentUser }) {
       <nav aria-label="使い方の目次" className="grid grid-cols-2 gap-2">{topics.map(([id, title]) => <a key={id} href={`#help-${id}`} className="min-h-12 rounded-xl bg-white border border-blue-100 px-3 py-3 text-blue-800 font-bold">{title} ↓</a>)}{isReportOwner && <a href="#help-report" className="min-h-12 rounded-xl bg-white border border-blue-100 px-3 py-3 text-blue-800 font-bold">日報プレビュー ↓</a>}</nav>
 
       <Section id="help-calendar" title="予定を見る：カレンダー">
-        <Steps items={['下の「カレンダー」を押します。', 'カレンダーで出勤・休みを確認します。見たい日付を押すと、その日の日別タスクを確認できます。過去の未終了タスクも表示されます。', 'パートナータスク・日別タスクのカードを押すと、詳しい内容を開けます。']}/>
+        <Steps items={['下の「カレンダー」を押します。', 'カレンダーで出勤・休みを確認します。見たい日付を押すと、その日の個人タスクを確認できます。過去の未終了タスクも表示されます。', 'パートナータスク・個人タスクのカードを押すと、詳しい内容を開けます。']}/>
         <Note>予定は古い日付から順に並びます。当日分は青い枠と「今日」で強調されますが、先頭には移動しません。</Note>
       </Section>
 
-      <Section id="help-daily" title="日別タスクを登録する">
-        <p>下の「日別タスク」を押すと、最初にかんたん入力が開きます。</p>
+      <Section id="help-daily" title="個人タスクを登録する">
+        <p>下の「タスク」を押すと、最初に個人タスクのかんたん入力が開きます。画面の上にある「個人タスク」「パートナータスク」「個人メモ」のボタンで、登録する種類を切り替えます。</p>
         <Steps items={['「＋ 新しく登録」を押し、表示されている登録日を確認します。', '「どこで？どんな内容？」に作業を書きます。例：「1階ロビーの電球交換」。この項目は必須です。', '詳しい内容は、必要なときだけ入力します。写真・動画や終了予定時間も任意です。', '担当する人の名前をすべて選びます。複数選べます。', '「次へ」で確認画面を開き、「この内容で登録する」を押します。直すときは「戻る」を押します。']}/>
         <Note>日付は入力欄のカレンダーで選択できます。毎週・毎月の作業は「繰り返し」で曜日（複数可）または日にちを指定します。「繰り返しの終了日」は、毎週・毎月を選んだときだけ表示されます。詳しい内容は任意です。</Note>
         <div className="rounded-xl border border-gray-200 p-4 space-y-2"><p className="font-bold">入力の例</p><p>どこで？どんな内容？：1階ロビーの電球交換</p><p>詳しい内容：空欄でもかまいません</p><p>担当者：竹添・高橋など、作業する人を選択</p></div>
       </Section>
 
       <Section id="help-finish" title="作業が終わったら「終了」を押す">
-        <Steps items={['日別タスクまたはパートナーの、かんたん画面を開きます。', '上の「✓ タスクを終了」を押します。登録直後も、この一覧が表示されます。', '終わった作業を確認して、緑色の「終了」を押します。まだ終わっていない作業は押しません。']}/>
-        <Note>日別タスクは、担当者として選ばれた人も終了できます。過去の日別タスクでは、追加の終了確認が出ます。カレンダーの詳細から終了するときも、対象を確認して操作してください。</Note>
+        <Steps items={['下の「タスク」を押し、上のボタンで「個人タスク」または「パートナータスク」を選びます。', '上の「✓ タスクを終了」を押します。登録直後も、この一覧が表示されます。', '終わった作業を確認して、緑色の「終了」を押します。まだ終わっていない作業は押しません。']}/>
+        <Note>個人タスクは、担当者として選ばれた人も終了できます。過去の個人タスクでは、追加の終了確認が出ます。カレンダーの詳細から終了するときも、対象を確認して操作してください。</Note>
       </Section>
 
       <Section id="help-period" title="何日かにわたる作業を登録する">
@@ -49,7 +49,7 @@ export default function HelpView({ currentUser }) {
       </Section>
 
       <Section id="help-partner" title="パートナータスクを登録する">
-        <Steps items={['下の「パートナー」を押し、「＋ 新しく登録」を選びます。', 'パートナー名と「どこ？で何を？」を入力します。例：「〇〇設備」「1階ロビーでエアコン点検」。', '日付・開始時間を選び、担当する人をすべて選びます。担当者は複数選べます。終了予定は任意です。', '必要なら詳しい内容や写真・動画を追加します。空欄でも登録できます。', '「次へ」で内容を確認し、「この内容で登録する」を押します。']}/>
+        <Steps items={['下の「タスク」を押し、上の「パートナータスク」を選んで、「＋ 新しく登録」を選びます。', 'パートナー名と「どこ？で何を？」を入力します。例：「〇〇設備」「1階ロビーでエアコン点検」。', '日付・開始時間を選び、担当する人をすべて選びます。担当者は複数選べます。終了予定は任意です。', '必要なら詳しい内容や写真・動画を追加します。空欄でも登録できます。', '「次へ」で内容を確認し、「この内容で登録する」を押します。']}/>
         <Note>時間はすべて15分刻みで選びます。「詳しく入力する」から通常入力にも切り替えられ、入力済みの内容は引き継がれます。</Note>
         <Note>通常入力で選ぶパートナー名の一覧は、「設定」の「パートナー名の登録」で追加・変更します（設定を開ける人のみ）。かんたん入力では、一覧にない会社名もそのまま入力できます。</Note>
       </Section>
@@ -87,8 +87,8 @@ export default function HelpView({ currentUser }) {
       <Section id="help-other" title="シフト・在庫・個人メモ">
         <div className="space-y-4">
           <div><h3 className="text-lg font-bold">シフト管理</h3><p className="leading-relaxed mt-1">出勤・休みを確認し、権限のある人が変更します。変更内容は他の人にも表示されます。利用できる人だけメニューが表示されます。</p></div>
-          <div><h3 className="text-lg font-bold">在庫管理</h3><p className="leading-relaxed mt-1">画面下の「在庫管理」から「登録」「在庫一覧」「在庫変動履歴」を選びます。在庫一覧ではバーコードや手入力で商品を探し、在庫数を変更できます。未登録商品の登録ボタンではバーコードを引き継ぎます。日別タスクの通常入力で使用商品と数量を選ぶと、登録時に在庫へ反映されます。</p></div>
-          <div><h3 className="text-lg font-bold">自分だけの個人メモ</h3><p className="leading-relaxed mt-1">日別タスクの「詳しく入力する」から、自分の名前を選んで「個人メモ」に切り替えます。内容か写真を追加して保存します。本人だけに表示され、日報には含まれません。</p></div>
+          <div><h3 className="text-lg font-bold">在庫管理</h3><p className="leading-relaxed mt-1">画面下の「在庫管理」から「登録」「在庫一覧」「在庫変動履歴」を選びます。在庫一覧ではバーコードや手入力で商品を探し、在庫数を変更できます。未登録商品の登録ボタンではバーコードを引き継ぎます。個人タスクの通常入力で使用商品と数量を選ぶと、登録時に在庫へ反映されます。</p></div>
+          <div><h3 className="text-lg font-bold">自分だけの個人メモ</h3><p className="leading-relaxed mt-1">下の「タスク」を押し、上の「個人メモ」を選びます（「詳しく入力する」の画面で自分の名前を選んでいるときだけ選べます）。内容か写真を追加して保存します。本人だけに表示され、日報には含まれません。</p></div>
         </div>
       </Section>
 
