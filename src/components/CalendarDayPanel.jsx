@@ -41,7 +41,7 @@ export default function CalendarDayPanel({ date, today, teamData, partnerItems, 
       <div className="min-h-0 overflow-y-auto p-3 space-y-4">
         <section><h3 className="text-sm font-bold text-gray-700">出勤者</h3><p className="mt-1 rounded-xl bg-white p-3 text-sm text-gray-800">{staff.map(user => user.name).join('・') || '出勤者の登録はありません'}</p></section>
         {!tasks.length && !partners.length && <p className="rounded-xl bg-white p-4 text-center text-sm text-gray-500">この日のタスクはありません</p>}
-        <section><h3 className="mb-2 text-sm font-bold text-gray-700">個人タスク（{tasks.length}件）</h3><div className="space-y-2">{tasks.length ? tasks.map(item => row(item, false)) : <p className="text-sm text-gray-500">日別タスクはありません</p>}</div></section>
+        <section><h3 className="mb-2 text-sm font-bold text-gray-700">個人タスク（{tasks.length}件）</h3><div className="space-y-2">{tasks.length ? tasks.map(item => row(item, false)) : <p className="text-sm text-gray-500">個人タスクはありません</p>}</div></section>
         <section><h3 className="mb-2 text-sm font-bold text-purple-800">パートナータスク（{partners.length}件）</h3><div className="space-y-2">{partners.length ? partners.map(item => row(item, true)) : <p className="text-sm text-gray-500">パートナータスクはありません</p>}</div></section>
       </div>
     </section>
