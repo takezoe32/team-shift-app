@@ -80,3 +80,7 @@ OAuthクライアントIDは既存の `147696997284-sttbu4gtchokcqqn0votaeq49s17
 - https://developers.google.com/identity/protocols/oauth2/web-server
 - https://developers.google.com/identity/protocols/oauth2#expiration
 - https://firebase.google.com/docs/firestore/security/rules-structure#overlapping_match_statements
+
+## 本日の日報（途中経過）
+
+メニュー「その他」の「本日の日報（途中経過）」で、今日これまでに終了したタスクで作った日報を、保存前に閲覧できる（ログインした全員。閲覧のみで、何も保存しない）。夜間の自動保存と同じ `collectDailyReport` を、アプリが読み込み済みのデータに対して端末内で実行するため、Google Driveの連携・日報保存用ログインは不要。タスクを終了するとその場で反映される。天候は気象庁の予報を表示し、塩素投入数・備考（保存時の入力項目）は空欄。個人メモ・私用タスクは含まない。実装は `src/components/TodayReport.jsx`。

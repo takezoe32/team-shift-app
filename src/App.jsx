@@ -48,6 +48,7 @@ import QuickEntry from './components/QuickEntry';
 import { establishReportSession, endReportSession } from './dailyReportApi.mjs';
 import { planPartnerTaskAction } from './partnerTaskActions.mjs';
 import DailyReportPanel from './components/DailyReportPanel';
+import TodayReport from './components/TodayReport';
 import { parseInventoryCode, findModelProducts } from './inventoryQr.mjs';
 import { planCompletedTaskDelete } from './completedTaskDelete.mjs';
 import { confirmEditDiscard, confirmDiscardEdits, useEditGuard } from './editGuard';
@@ -62,7 +63,7 @@ import { planTaskEdit } from './taskEdit.mjs';
 import { prepareInventoryImage } from './inventoryImage.js';
 import { hasInventoryProductDetails, inventoryProductLabel, validateInventoryReplacement } from './inventoryProduct.mjs';
 import LabelOcrCapture from './components/LabelOcrCapture';
-import { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { GoogleOAuthProvider, GoogleLogin, googleLogout } from '@react-oauth/google';
 import { getAuth, onAuthStateChanged, signInWithCustomToken, signOut, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { sharedDataError, appAuthError } from './appAuth.mjs';
@@ -3621,6 +3622,7 @@ const BottomNav = ({ inventorySection, setInventorySection, activeTab, setActive
   ];
   const secondary = [
     { id:'completed', label:'終了履歴', description:'終了したタスクを確認', Icon:ClipboardList },
+    { id:'report-today', label:'本日の日報（途中経過）', description:'今日終了したタスクで作った日報を表示', Icon:FileSpreadsheet },
     { id:'receipt', label:'レシート取込（テスト中）', description:'撮影・読取して仕入れ表用にコピー', Icon:Camera },
     ...(canAccessMeters(currentUser) ? [
     { id:'meter-daily', label:'毎朝検針（テスト中）', description:'検針値を入力・前日比を確認して原本に保存', Icon:FileSpreadsheet },
@@ -3700,6 +3702,8 @@ export default function App() {
   const [calendarNote, setCalendarNote] = useState(null);
   const [meterSaves, setMeterSaves] = useState(null);
   const [inventoryItems, setInventoryItems] = useState([]);
+  // 本日の日報（途中経過）: the same data the nightly report reads, as loaded on this device.
+  const todayReportSource = useMemo(() => ({ users, shiftTypes, userOrder, teamData, partnerItems, inventoryItems }), [users, shiftTypes, userOrder, teamData, partnerItems, inventoryItems]);
   const [inventoryMovements, setInventoryMovements] = useState([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [debugLogs, setDebugLogs] = useState([]);
@@ -4305,6 +4309,8 @@ export default function App() {
               <MeterReadings key={currentUser.id} currentUser={currentUser}/>
             ) : activeTab === 'meter-monthly' ? (
               <MeterReadings key={currentUser.id+'-monthly'} currentUser={currentUser} kind="monthly"/>
+            ) : activeTab === 'report-today' ? (
+              <TodayReport source={todayReportSource} onClose={()=>setActiveTab('calendar')}/>
             ) : activeTab === 'receipt' ? (
               <ReceiptImport key={currentUser.id} userId={currentUser.id} buyer={currentUser.name} onClose={()=>setActiveTab('calendar')}/>
             ) : activeTab === 'inventory' ? (
