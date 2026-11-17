@@ -36,6 +36,8 @@ import ImportantToggle, { ImportantBadge } from './components/ImportantToggle';
 import CalendarDayPanel from './components/CalendarDayPanel';
 import HelpView from './components/HelpView';
 import AssigneePicker from './components/AssigneePicker';
+import { RequiredBadge, RequiredSummary } from './components/RequiredField';
+import { missingRequired, requiredBox } from './requiredFields.mjs';
 import { partnerAssigneeIds } from './partnerAssignees.mjs';
 import { newestPartnerUpdates } from './partnerUpdateOrder.mjs';
 import { isPartnerOverdue } from './partnerOverdue.mjs';
@@ -1524,6 +1526,9 @@ const DailyDetailView = ({
 
   const clearNewTaskImage = () => setNewTaskImages([]);
 
+  // Required fields, shown on the form (badge, red box, list above the save button).
+  const taskSubjectFilled = !!newTaskSubject.trim(), taskMemoFilled = !!(newTaskText.trim() || newTaskImage), taskAssigneeFilled = taskAssigneeIds.length > 0;
+  const taskMissing = missingRequired(newTaskVisibility === 'private' ? [['個人メモの内容か写真', taskMemoFilled], ['日付', !!taskRegistrationDate]] : [['どこで？どんな内容？', taskSubjectFilled], ['担当者', taskAssigneeFilled], ['日付', !!taskRegistrationDate]]);
   const handleAddTask = async () => {
     if (!taskRegistrationDate) { alert('日付を選択してください。'); return; }
     if (newTaskPeriodEnd && newTaskPeriodEnd < taskRegistrationDate) { alert('作業期間の終了日は開始日以降を選択してください。'); return; }
@@ -1619,12 +1624,13 @@ steps={[
 <p>登録日：{taskRegistrationDate || '日付を選択してください'}</p>
 <p>{newTaskVisibility === 'private' ? '自分だけの個人メモ' : 'みんなに公開するタスク'}</p>
 {newTaskVisibility !== 'private' && <ImportantToggle value={newTaskImportant} onChange={setNewTaskImportant} disabled={isUploading}/>}
-{newTaskVisibility !== 'private' && <label className="block font-bold">どこで？どんな内容？（必須）<input type="text" value={newTaskSubject} onChange={e => setNewTaskSubject(e.target.value)} placeholder="例：1階ロビーの電球交換" className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label>}
-<label className="block font-bold">{newTaskVisibility === 'private' ? '個人メモ（内容か写真が必要）' : '詳しい内容（任意）'}<textarea rows={4} value={newTaskText} onChange={e => setNewTaskText(e.target.value)} placeholder="例：1階ロビーの電球を交換する" className="w-full mt-2 border border-gray-300 rounded-xl p-3 text-base"/></label>
-{newTaskVisibility !== 'private' && <fieldset className="my-4"><legend className="font-bold text-base">担当者（複数選べます）</legend><p className="text-sm text-gray-500 my-2">担当する人の名前をすべて選んでください。</p><div className="flex flex-wrap gap-2">{sortedUsers.map(user => <label key={user.id} className={`flex items-center gap-2 min-h-12 px-3 border-2 rounded-xl text-base ${taskAssigneeIds.includes(user.id) ? 'bg-blue-50 border-blue-500' : 'border-gray-200'}`}><input type="checkbox" checked={taskAssigneeIds.includes(user.id)} onChange={e => setNewAssigneeIds(e.target.checked ? [...taskAssigneeIds, user.id] : taskAssigneeIds.filter(id => id !== user.id))}/>{user.name}</label>)}</div></fieldset>}
-<label className="block text-sm font-bold">日付<DateInput aria-label="タスクの登録日" value={taskRegistrationDate} onChange={e => setNewTaskDate(e.target.value)} disabled={isUploading} required className="block w-full min-h-12 mt-1 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label>{newTaskVisibility !== 'private' && <TaskRepeatFields repeat={newTaskRepeat} onRepeat={setNewTaskRepeat} periodEnd={newTaskPeriodEnd} onPeriodEnd={setNewTaskPeriodEnd} min={taskRegistrationDate} disabled={isUploading}/>}
+{newTaskVisibility !== 'private' && <label className="block font-bold">どこで？どんな内容？<RequiredBadge filled={taskSubjectFilled}/><input type="text" value={newTaskSubject} onChange={e => setNewTaskSubject(e.target.value)} placeholder="例：1階ロビーの電球交換" className={'w-full min-h-14 mt-2 border rounded-xl p-3 text-base ' + requiredBox(taskSubjectFilled)}/></label>}
+<label className="block font-bold">{newTaskVisibility === 'private' ? <>個人メモ（内容か写真）<RequiredBadge filled={taskMemoFilled}/></> : '詳しい内容（任意）'}<textarea rows={4} value={newTaskText} onChange={e => setNewTaskText(e.target.value)} placeholder="例：1階ロビーの電球を交換する" className={'w-full mt-2 border rounded-xl p-3 text-base ' + (newTaskVisibility === 'private' ? requiredBox(taskMemoFilled) : 'border-gray-300')}/></label>
+{newTaskVisibility !== 'private' && <fieldset className="my-4"><legend className="font-bold text-base">担当者（複数選べます）<RequiredBadge filled={taskAssigneeFilled}/></legend><p className="text-sm text-gray-500 my-2">担当する人の名前をすべて選んでください。</p><div className="flex flex-wrap gap-2">{sortedUsers.map(user => <label key={user.id} className={`flex items-center gap-2 min-h-12 px-3 border-2 rounded-xl text-base ${taskAssigneeIds.includes(user.id) ? 'bg-blue-50 border-blue-500' : 'border-gray-200'}`}><input type="checkbox" checked={taskAssigneeIds.includes(user.id)} onChange={e => setNewAssigneeIds(e.target.checked ? [...taskAssigneeIds, user.id] : taskAssigneeIds.filter(id => id !== user.id))}/>{user.name}</label>)}</div></fieldset>}
+<label className="block text-sm font-bold">日付<RequiredBadge filled={!!taskRegistrationDate}/><DateInput aria-label="タスクの登録日" value={taskRegistrationDate} onChange={e => setNewTaskDate(e.target.value)} disabled={isUploading} required className={'block w-full min-h-12 mt-1 border rounded-xl p-3 text-base ' + requiredBox(!!taskRegistrationDate)}/></label>{newTaskVisibility !== 'private' && <TaskRepeatFields repeat={newTaskRepeat} onRepeat={setNewTaskRepeat} periodEnd={newTaskPeriodEnd} onPeriodEnd={setNewTaskPeriodEnd} min={taskRegistrationDate} disabled={isUploading}/>}
 {newTaskVisibility !== 'private' && <QuarterHourTime label="終了予定時間" value={newTaskEndTime} onChange={setNewTaskEndTime} disabled={isUploading}/>}
 <ImagePicker files={newTaskImages} onChange={setNewTaskImages} disabled={isUploading}/>
+<RequiredSummary missing={taskMissing}/>
 </>, validate:() => !taskRegistrationDate ? '日付を選択してください。' : newTaskVisibility !== 'private' && !taskAssigneeIds.length ? '担当者を1人以上選んでください。' : newTaskVisibility !== 'private' && !newTaskSubject.trim() ? 'どこで？どんな内容？を入力してください。' : newTaskVisibility === 'private' && !newTaskText.trim() && !newTaskImage ? '個人メモか写真を追加してください。' : ''}
 ]}
 summary={[[ '重要', newTaskVisibility !== 'private' && newTaskImportant ? '重要' : 'なし' ], [ '登録日', taskRegistrationDate ], ['繰り返し・期間', newTaskVisibility !== 'private' && newTaskRepeat ? repeatLabel(newTaskRepeat) + '（終了日なし）' : newTaskPeriodEnd ? '〜' + newTaskPeriodEnd : '単日タスク'], ['担当', newTaskVisibility === 'private' ? users[selectedUserUid]?.name : taskAssigneeIds.map(id => users[id]?.name).filter(Boolean).join('・')], ['公開範囲', newTaskVisibility === 'private' ? '自分だけの個人メモ' : 'みんなに公開'], ['どこで？どんな内容？', newTaskSubject], ['内容', newTaskText], ['終了予定', newTaskEndTime], ['使用する商品', newTaskProductId ? inventoryProductLabel(inventoryItems.find(item => item.id === newTaskProductId) || {}) + ' × ' + newTaskProductQuantity : 'なし'], ['写真・動画', newTaskImages.length + '件']]}
@@ -1638,22 +1644,23 @@ summary={[[ '重要', newTaskVisibility !== 'private' && newTaskImportant ? '重
 
             <div className="space-y-2 mb-2">
               {newTaskVisibility !== 'private' && <ImportantToggle value={newTaskImportant} onChange={setNewTaskImportant} disabled={isUploading}/>}
-              {newTaskVisibility !== 'private' && <label className="block text-sm font-bold">どこで？どんな内容？（必須）<input type="text" value={newTaskSubject} onChange={e=>setNewTaskSubject(e.target.value)} placeholder="例：1階ロビーの電球交換" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm" disabled={isUploading}/></label>}
-              <label className="block text-sm font-bold">日付<DateInput aria-label="タスクの登録日" value={taskRegistrationDate} onChange={e => setNewTaskDate(e.target.value)} disabled={isUploading} required className="block w-full min-h-12 mt-1 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label>{newTaskVisibility !== 'private' && <TaskRepeatFields repeat={newTaskRepeat} onRepeat={setNewTaskRepeat} periodEnd={newTaskPeriodEnd} onPeriodEnd={setNewTaskPeriodEnd} min={taskRegistrationDate} disabled={isUploading}/>}
+              {newTaskVisibility !== 'private' && <label className="block text-sm font-bold">どこで？どんな内容？<RequiredBadge filled={taskSubjectFilled}/><input type="text" value={newTaskSubject} onChange={e=>setNewTaskSubject(e.target.value)} placeholder="例：1階ロビーの電球交換" className={'w-full mt-1 border rounded-xl px-3 py-2.5 text-sm ' + requiredBox(taskSubjectFilled)} disabled={isUploading}/></label>}
+              <label className="block text-sm font-bold">日付<RequiredBadge filled={!!taskRegistrationDate}/><DateInput aria-label="タスクの登録日" value={taskRegistrationDate} onChange={e => setNewTaskDate(e.target.value)} disabled={isUploading} required className={'block w-full min-h-12 mt-1 border rounded-xl p-3 text-base ' + requiredBox(!!taskRegistrationDate)}/></label>{newTaskVisibility !== 'private' && <TaskRepeatFields repeat={newTaskRepeat} onRepeat={setNewTaskRepeat} periodEnd={newTaskPeriodEnd} onPeriodEnd={setNewTaskPeriodEnd} min={taskRegistrationDate} disabled={isUploading}/>}
               {newTaskVisibility !== 'private' && <label className="flex items-center gap-2 text-xs text-gray-600"><span className="font-bold">終了予定時刻</span><div className="flex items-center gap-1"><select aria-label="終了予定時刻の時" value={newTaskEndTime ? newTaskEndTime.split(':')[0] : ''} onChange={e=>setNewTaskEndTime(e.target.value ? e.target.value+':'+((newTaskEndTime||'').split(':')[1]||'00') : '')} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" disabled={isUploading}><option value="">時</option>{Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(v=><option key={v} value={v}>{v}</option>)}</select><span>:</span><select aria-label="終了予定時刻の分" value={newTaskEndTime ? newTaskEndTime.split(':')[1] : ''} onChange={e=>setNewTaskEndTime(((newTaskEndTime||'').split(':')[0]||'00')+':'+e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm" disabled={isUploading}><option value="">分</option>{['00','15','30','45'].map(v=><option key={v} value={v}>{v}</option>)}</select></div></label>}
               {newTaskVisibility !== 'private' && <div className="space-y-2"><div className="block text-xs text-gray-600"><span className="block font-bold mb-1">使用する商品（任意）</span><InventoryProductSearch key={productSearchKey} items={inventoryItems} disabled={isUploading} selectedId={newTaskProductId} onSelect={item=>setNewTaskProductId(item?.id || '')} unavailable={item=>Number(item.stock||0)<=0?'在庫なし':''}/></div><div className="flex gap-2"><label className="flex-1 text-xs text-gray-600 flex items-center gap-2">使用数量<input type="number" min="1" step="1" value={newTaskProductQuantity} onChange={e=>setNewTaskProductQuantity(e.target.value)} className="min-h-10 w-20 rounded-lg border border-gray-200 px-2 text-center text-sm"/></label></div></div>}
             </div>
             <div className="flex flex-col gap-2 items-stretch">
-              <label className="block text-sm font-bold">{newTaskVisibility === 'private' ? '個人メモ' : '詳しい内容（任意）'}<textarea
+              <label className="block text-sm font-bold">{newTaskVisibility === 'private' ? <>個人メモ（内容か写真）<RequiredBadge filled={taskMemoFilled}/></> : '詳しい内容（任意）'}<textarea
                 value={newTaskText}
                 onChange={(e) => setNewTaskText(e.target.value)}
                 placeholder={newTaskVisibility === 'private' ? '個人メモを入力' : '内容・申し送りを入力'}
-                className="w-full mt-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow resize-y"
+                className={'w-full mt-1 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-shadow resize-y ' + (newTaskVisibility === 'private' ? requiredBox(taskMemoFilled) : 'bg-gray-50 border-gray-200')}
                 rows={2}
                 style={{ minHeight: '52px', maxHeight: '160px' }}
                 disabled={isUploading}
               /></label>
-{newTaskVisibility !== 'private' && <fieldset className="my-4"><legend className="font-bold text-base">担当者（複数選べます）</legend><p className="text-sm text-gray-500 my-2">担当する人の名前をすべて選んでください。</p><div className="flex flex-wrap gap-2">{sortedUsers.map(user => <label key={user.id} className={`flex items-center gap-2 min-h-12 px-3 border-2 rounded-xl text-base ${taskAssigneeIds.includes(user.id) ? 'bg-blue-50 border-blue-500' : 'border-gray-200'}`}><input type="checkbox" checked={taskAssigneeIds.includes(user.id)} onChange={e => setNewAssigneeIds(e.target.checked ? [...taskAssigneeIds, user.id] : taskAssigneeIds.filter(id => id !== user.id))}/>{user.name}</label>)}</div></fieldset>}
+{newTaskVisibility !== 'private' && <fieldset className="my-4"><legend className="font-bold text-base">担当者（複数選べます）<RequiredBadge filled={taskAssigneeFilled}/></legend><p className="text-sm text-gray-500 my-2">担当する人の名前をすべて選んでください。</p><div className="flex flex-wrap gap-2">{sortedUsers.map(user => <label key={user.id} className={`flex items-center gap-2 min-h-12 px-3 border-2 rounded-xl text-base ${taskAssigneeIds.includes(user.id) ? 'bg-blue-50 border-blue-500' : 'border-gray-200'}`}><input type="checkbox" checked={taskAssigneeIds.includes(user.id)} onChange={e => setNewAssigneeIds(e.target.checked ? [...taskAssigneeIds, user.id] : taskAssigneeIds.filter(id => id !== user.id))}/>{user.name}</label>)}</div></fieldset>}
+              <RequiredSummary missing={taskMissing}/>
               <button type="button"
                 onClick={handleAddTask}
                 disabled={isUploading || (newTaskVisibility === 'private' ? (!newTaskText.trim() && !newTaskImage) : !newTaskSubject.trim())}
@@ -2431,6 +2438,8 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
     setShowPartnerNameMenu(false);
   };
 
+  // Required fields, shown on the form (badge, red box, list above the save button).
+  const partnerRequired = [['パートナー名', !!String(partnerName || '').trim()], ['どこ？で何を？（件名）', !!subject.trim()], ['日付', !!date], ['開始時間', !!time], ['担当者', !!assigneeUid]];
   const handleSave = async () => {
     if (partnerPeriodEnd && partnerPeriodEnd < date) { alert('作業期間の終了日は開始日以降を選択してください。'); return; }
     if (partnerRepeat && !normalizeRepeat(partnerRepeat)) { alert('繰り返しの曜日を1つ以上選んでください。'); return; }
@@ -2568,14 +2577,16 @@ const PartnerView = ({ partnerItems, partnerNames, addPartnerItem, updatePartner
 steps={[
 {title:'どの会社に、何をお願いしますか？', content:<>
 <ImportantToggle value={partnerImportant} onChange={setPartnerImportant} disabled={isSaving}/>
-<label className="block font-bold">パートナー名（必須）<input list="quick-partner-names" value={partnerName} onChange={e => setPartnerName(e.target.value)} placeholder="例：〇〇設備" className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base"/><datalist id="quick-partner-names">{(partnerNames || []).map(name => <option key={name} value={name}/>)}</datalist></label>
-<label className="block font-bold">どこ？で何を？（必須）<input type="text" value={subject} onChange={e => setSubject(e.target.value)} placeholder="例：1階ロビーでエアコン点検" className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label>
+<label className="block font-bold">パートナー名<RequiredBadge filled={partnerRequired[0][1]}/><input list="quick-partner-names" value={partnerName} onChange={e => setPartnerName(e.target.value)} placeholder="例：〇〇設備" className={'w-full min-h-14 mt-2 border rounded-xl p-3 text-base ' + requiredBox(partnerRequired[0][1])}/><datalist id="quick-partner-names">{(partnerNames || []).map(name => <option key={name} value={name}/>)}</datalist></label>
+<label className="block font-bold">どこ？で何を？<RequiredBadge filled={partnerRequired[1][1]}/><input type="text" value={subject} onChange={e => setSubject(e.target.value)} placeholder="例：1階ロビーでエアコン点検" className={'w-full min-h-14 mt-2 border rounded-xl p-3 text-base ' + requiredBox(partnerRequired[1][1])}/></label>
+<RequiredSummary missing={missingRequired(partnerRequired.slice(0, 2))}/>
 </>, validate:() => !partnerName.trim() || !subject.trim() ? 'パートナー名と「どこ？で何を？」を入力してください。' : ''},
 {title:'いつ、誰が担当しますか？', content:<>
-<label className="block font-bold">日付（必須）<DateInput value={date} onChange={e => setDate(e.target.value)} placeholder="" className="w-full min-h-14 mt-2 border border-gray-300 rounded-xl p-3 text-base bg-white"/></label><TaskRepeatFields repeat={partnerRepeat} onRepeat={setPartnerRepeat} periodEnd={partnerPeriodEnd} onPeriodEnd={setPartnerPeriodEnd} min={date} disabled={isSaving} labelClassName="block font-bold" inputClassName="w-full min-h-12 mt-1 border rounded-xl bg-white p-3 text-base"/>
-<fieldset><legend className="font-bold">開始時間（必須・15分刻み）</legend><div className="flex items-center gap-2 mt-2"><select aria-label="開始時間の時" value={timeHour} onChange={e => setTimeHour(e.target.value)} className="flex-1 min-h-14 border border-gray-300 rounded-xl p-3 text-base bg-white"><option value="">時を選択</option>{Array.from({length:24}, (_, h) => String(h).padStart(2, '0')).map(h => <option key={h} value={h}>{h}時</option>)}</select><select aria-label="開始時間の分" value={timeMinute} onChange={e => setTimeMinute(e.target.value)} className="flex-1 min-h-14 border border-gray-300 rounded-xl p-3 text-base bg-white"><option value="">分を選択</option>{['00', '15', '30', '45'].map(m => <option key={m} value={m}>{m}分</option>)}</select></div></fieldset>
+<label className="block font-bold">日付<RequiredBadge filled={!!date}/><DateInput value={date} onChange={e => setDate(e.target.value)} placeholder="" className={'w-full min-h-14 mt-2 border rounded-xl p-3 text-base ' + requiredBox(!!date)}/></label><TaskRepeatFields repeat={partnerRepeat} onRepeat={setPartnerRepeat} periodEnd={partnerPeriodEnd} onPeriodEnd={setPartnerPeriodEnd} min={date} disabled={isSaving} labelClassName="block font-bold" inputClassName="w-full min-h-12 mt-1 border rounded-xl bg-white p-3 text-base"/>
+<fieldset><legend className="font-bold">開始時間（15分刻み）<RequiredBadge filled={!!time}/></legend><div className="flex items-center gap-2 mt-2"><select aria-label="開始時間の時" value={timeHour} onChange={e => setTimeHour(e.target.value)} className={'flex-1 min-h-14 border rounded-xl p-3 text-base ' + requiredBox(!!timeHour)}><option value="">時を選択</option>{Array.from({length:24}, (_, h) => String(h).padStart(2, '0')).map(h => <option key={h} value={h}>{h}時</option>)}</select><select aria-label="開始時間の分" value={timeMinute} onChange={e => setTimeMinute(e.target.value)} className={'flex-1 min-h-14 border rounded-xl p-3 text-base ' + requiredBox(!!timeMinute)}><option value="">分を選択</option>{['00', '15', '30', '45'].map(m => <option key={m} value={m}>{m}分</option>)}</select></div></fieldset>
 <AssigneePicker users={sortedUsers} value={partnerAssignees} onChange={setPartnerAssignees} disabled={isSaving}/>
 <QuarterHourTime label="終了予定時間" value={endTime} onChange={setEndTime}/>
+<RequiredSummary missing={missingRequired(partnerRequired.slice(2))}/>
 </>,validate:() => !date || !time || !assigneeUid ? '日付・開始時間・担当者を選んでください。' : ''},
 {title:'お願いする内容を教えてください', content:<><label className="block font-bold">詳しい内容（任意）<textarea rows={4} value={content} onChange={e => setContent(e.target.value)} placeholder="例：1階ロビーの電球を交換する" className="w-full mt-2 border border-gray-300 rounded-xl p-3 text-base"/></label><ImagePicker files={newPartnerImages} onChange={setNewPartnerImages} disabled={isSaving}/></>}
 ]}
@@ -2642,12 +2653,12 @@ summary={[[ '重要', partnerImportant ? '重要' : 'なし' ], [ 'パートナ�
           </div>
 
           <div className="block">
-            <span className="text-[10px] font-bold text-gray-500">パートナー名</span>
+            <span className="text-[10px] font-bold text-gray-500">パートナー名<RequiredBadge filled={partnerRequired[0][1]}/></span>
             <div className="relative mt-1">
               <button
                 type="button"
                 onClick={() => setShowPartnerNameMenu(v => !v)}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-400 text-left flex items-center justify-between"
+                className={'w-full border rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400 text-left flex items-center justify-between ' + requiredBox(partnerRequired[0][1])}
               >
                 <span className={partnerName ? 'text-gray-800' : 'text-gray-400'}>
                   {partnerName || 'パートナー名を選択'}
@@ -2721,20 +2732,20 @@ summary={[[ '重要', partnerImportant ? '重要' : 'なし' ], [ 'パートナ�
           <AssigneePicker users={sortedUsers} value={partnerAssignees} onChange={setPartnerAssignees} disabled={isSaving}/>
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="text-[10px] font-bold text-gray-500">日付</span>
+              <span className="text-[10px] font-bold text-gray-500">日付<RequiredBadge filled={!!date}/></span>
               <DateInput
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400"
+                className={'mt-1 w-full border rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400 ' + requiredBox(!!date)}
               />
             </label>
             <label className="block">
-              <span className="text-[10px] font-bold text-gray-500">時間</span>
+              <span className="text-[10px] font-bold text-gray-500">開始時間<RequiredBadge filled={!!time}/></span>
               <div className="mt-1 flex items-center gap-2">
                 <select
                   value={timeHour}
                   onChange={(e) => setTimeHour(e.target.value)}
-                  className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-400"
+                  className={'flex-1 border rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400 ' + requiredBox(!!timeHour)}
                 >
                   <option value="">時</option>
                   {Array.from({ length: 24 }, (_, hour) => {
@@ -2746,7 +2757,7 @@ summary={[[ '重要', partnerImportant ? '重要' : 'なし' ], [ 'パートナ�
                 <select
                   value={timeMinute}
                   onChange={(e) => setTimeMinute(e.target.value)}
-                  className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-400"
+                  className={'flex-1 border rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400 ' + requiredBox(!!timeMinute)}
                 >
                   <option value="">分</option>
                   {['00', '15', '30', '45'].map(value => (
@@ -2765,7 +2776,7 @@ summary={[[ '重要', partnerImportant ? '重要' : 'なし' ], [ 'パートナ�
 
           <div className="space-y-2">
             <ImportantToggle value={partnerImportant} onChange={setPartnerImportant} disabled={isSaving}/>
-            <label className="block"><span className="text-[10px] font-bold text-gray-500">件名</span><input type="text" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="パートナータスクの件名を入力" className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400" /></label>
+            <label className="block"><span className="text-[10px] font-bold text-gray-500">件名（どこ？で何を？）<RequiredBadge filled={partnerRequired[1][1]}/></span><input type="text" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="パートナータスクの件名を入力" className={'mt-1 w-full border rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400 ' + requiredBox(partnerRequired[1][1])} /></label>
 
             {editingItemId && <PartnerUpdateHistory currentUserUid={currentUser.id} item={editingPartnerItem} onChange={operation => updatePartnerItem(editingPartnerItem.id, { handoffOperation: operation })}/>}
             <label className="block">
@@ -2781,6 +2792,7 @@ summary={[[ '重要', partnerImportant ? '重要' : 'なし' ], [ 'パートナ�
             </label>
           </div>
 
+          <RequiredSummary missing={missingRequired(partnerRequired)}/>
           <button
             type="button"
             onClick={handleSave}
