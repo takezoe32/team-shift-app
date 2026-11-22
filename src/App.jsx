@@ -55,6 +55,7 @@ import DailyReportPanel from './components/DailyReportPanel';
 import TodayReport from './components/TodayReport';
 import { parseInventoryCode, findModelProducts } from './inventoryQr.mjs';
 import { planCompletedTaskDelete } from './completedTaskDelete.mjs';
+import { planCompletedTaskReopen } from './completedTaskReopen.mjs';
 import { confirmEditDiscard, confirmDiscardEdits, useEditGuard } from './editGuard';
 import { sortInventoryItems } from './inventorySort.mjs';
 import { planTaskDelete } from './taskDelete.mjs';
@@ -2788,7 +2789,7 @@ summary={[[ '重要', partnerImportant ? '重要' : 'なし' ], [ 'パートナ�
   );
 };
 
-const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUid, currentUserEmail, isAdmin, deleteCompletedTask }) => {
+const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUid, currentUserEmail, isAdmin, deleteCompletedTask, reopenCompletedTask }) => {
   const deletingRef = useRef(false);
   const [deletingKey, setDeletingKey] = useState(null);
   const handleDelete = async (entry) => {
@@ -2798,6 +2799,18 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
     setDeletingKey(`${entry.type}-${entry.date}-${entry.ownerUid}-${entry.id}`);
     try { await deleteCompletedTask(entry); }
     catch (error) { alert(`終了履歴を削除できませんでした。\n${error.message || 'もう一度お試しください。'}`); }
+    finally { deletingRef.current = false; setDeletingKey(null); }
+  };
+  // 未終了に戻す: a task finished by mistake goes back to the open lists (one action at a time, shared with delete).
+  const handleReopen = async (entry) => {
+    if (deletingRef.current) return;
+    if (!window.confirm(`「${entry.title}」を未終了に戻しますか？
+終了履歴から外れ、未終了のタスクとして一覧に戻ります。保存済みの日報は変わりません。`)) return;
+    deletingRef.current = true;
+    setDeletingKey(`${entry.type}-${entry.date}-${entry.ownerUid}-${entry.id}`);
+    try { await reopenCompletedTask(entry); }
+    catch (error) { alert(`未終了に戻せませんでした。
+${error.message || 'もう一度お試しください。'}`); }
     finally { deletingRef.current = false; setDeletingKey(null); }
   };
   const [memberFilter, setMemberFilter] = useState('all');
@@ -2823,6 +2836,7 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
             .map(uid => memberMap[uid]?.name)
             .filter(Boolean),
           title: task.subject || task.text || '内容なし',
+          canReopen: canCompleteTask(task, ownerUid, currentUserUid, isAdmin),
           content: task.subject && task.text ? task.text : '',
           imageUrl: task.imageUrl || '', images: getTaskImages(task)
         };
@@ -2845,6 +2859,7 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
       assigneeIds,
       assigneeNames: assigneeIds.map(id => memberMap[id]?.name).filter(Boolean),
       title: item.subject || item.partnerName || 'パートナータスク',
+      canReopen: true,
       content: item.content || '',
       partnerName: item.partnerName || '',
       imageUrl: item.imageUrl || '', images: mergeTaskImages(item, getPartnerUpdates(item).flatMap(getTaskImages))
@@ -2957,9 +2972,12 @@ const CompletedTasksView = ({ teamData, partnerItems, sortedUsers, currentUserUi
                 <div className="mt-2 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600 whitespace-pre-wrap break-words">{entry.content}</div>
               )}
               <ImageGallery item={entry}/>
-              {entry.historyKind !== 'daily' && (entry.type === 'partner' || isAdmin || entry.ownerUid === currentUserUid) && (
-                <ActionIconButton action="delete" type="button" onClick={() => handleDelete(entry)} disabled={deletingKey !== null} aria-label={`${entry.title}の終了履歴を削除`} className=""/>
-              )}
+              {entry.historyKind !== 'daily' && <div className="mt-2 flex flex-wrap items-center gap-2">
+                {entry.canReopen && reopenCompletedTask && <button type="button" onClick={() => handleReopen(entry)} disabled={deletingKey !== null} aria-label={`${entry.title}を未終了に戻す`} className="min-h-11 rounded-xl border border-blue-300 bg-blue-50 px-3 text-sm font-bold text-blue-800 hover:bg-blue-100 disabled:opacity-40">未終了に戻す</button>}
+                {(entry.type === 'partner' || isAdmin || entry.ownerUid === currentUserUid) && (
+                  <ActionIconButton action="delete" type="button" onClick={() => handleDelete(entry)} disabled={deletingKey !== null} aria-label={`${entry.title}の終了履歴を削除`} className=""/>
+                )}
+              </div>}
             </div>
           </div>
         );
@@ -4173,6 +4191,20 @@ export default function App() {
     if (plan?.teamData) setTeamData(plan.teamData);
     if (plan?.partnerItems) setPartnerItems(plan.partnerItems);
   };
+  // 終了履歴の「未終了に戻す」
+  const reopenCompletedTask = async (entry) => {
+    if (isReadOnlyUser(currentUser, roles)) throw new Error('閲覧のみのため変更できません。');
+    const ref = doc(db, 'app_data', 'shared_state');
+    const plan = await runTransaction(db, async transaction => {
+      const snapshot = await transaction.get(ref);
+      if (!snapshot.exists()) throw new Error('共有データが見つかりません。');
+      const next = planCompletedTaskReopen(snapshot.data(), entry, currentUser, (roles[currentUser.role]?.level || 0) >= 40);
+      if (next) transaction.update(ref, next.updates);
+      return next;
+    });
+    if (plan?.teamData) setTeamData(plan.teamData);
+    if (plan?.partnerItems) setPartnerItems(plan.partnerItems);
+  };
 
   return (
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
@@ -4606,6 +4638,7 @@ export default function App() {
                 currentUserUid={currentUser.id}
                 isAdmin={(roles[currentUser.role]?.level || 0) >= 40}
                 deleteCompletedTask={deleteCompletedTask}
+                reopenCompletedTask={reopenCompletedTask}
               />
             ) : activeTab === 'daily' ? (
               <DailyDetailView 
