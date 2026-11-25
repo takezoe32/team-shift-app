@@ -7,7 +7,7 @@ import { canManageMeterMap,validateMeterPoints,METER_MAP_ID,METER_MAP_PATHS } fr
 import { MONTHLY_INPUT_FIELDS,monthlyMonth,monthlyChanges } from '../src/meterMonthly.mjs';
 import { randomBytes } from 'node:crypto';
 import { readYearFiles } from './_lib/year-files.js';
-import { recordMeterSave,meterComplete } from '../src/meterSaveStatus.mjs';
+import { recordMeterSave,meterComplete,meterCompleteFields } from '../src/meterSaveStatus.mjs';
 import { japanToday } from '../src/japanTime.mjs';
 export function createMeterHandler({configure=configuration,makeStore=privateStore,makeLocks=makeLineStore,makeClient=oauth,makeSheets=(token,options)=>meterSheets(token,fetch,options),makeMonthlySheets=(token,options)=>monthlyMeterSheets(token,fetch,options),env=globalThis.process.env,now=Date.now}={}){
  return async(req,res)=>{
@@ -66,9 +66,10 @@ export function createMeterHandler({configure=configuration,makeStore=privateSto
     const saved=await sheets.read(date);
     if(Object.entries(changes).some(([id,value])=>saved.current[id]!==value))throw fault(409,'保存結果が一致しません。原本を再読込して確認してください。');
     // Shown under the calendar's shared memo for the rest of the day after 「保存」, or after any save that leaves every
-    // item of the book filled (the last values may go in with 途中保存); the 毎朝検針 only for today's reading.
+    // item on the map filled (the last values may go in with 途中保存; items of the book that are not on the map are
+    // never asked for, so they do not count); the 毎朝検針 only for today's reading.
     // The book is already saved, so a failure here does not fail the request.
-    if((req.body.final===true||meterComplete(saved,monthly?MONTHLY_INPUT_FIELDS:METER_FIELDS))&&(monthly||date===japanToday(now()))){const at=new Date(now()).toISOString(),shared='app_data/shared_state';
+    if((req.body.final===true||meterComplete(saved,meterCompleteFields(monthly?MONTHLY_INPUT_FIELDS:METER_FIELDS,currentMap?.points)))&&(monthly||date===japanToday(now()))){const at=new Date(now()).toISOString(),shared='app_data/shared_state';
      try{await locks.transact([shared],records=>({writes:[{path:shared,fields:['meterSaves'],value:{meterSaves:recordMeterSave(records[shared]?.meterSaves,{kind:monthly?'monthly':'daily',uid,name:records[shared]?.users?.[uid]?.name||user.name,at,month:monthly?date:''})}}]}));}catch{ /* The calendar line is a convenience. */ }}
     return res.status(200).json({...response(saved),savedAt:new Date(now()).toISOString(),savedBy:user.name||''});
    }finally{await locks.transact([path],values=>values[path]?.nonce===nonce?{writes:[{path,value:{...values[path],expires:0}}]}:{});}

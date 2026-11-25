@@ -16,10 +16,18 @@ export function recordMeterSave(current, { kind, uid, name, at, month = '' }) {
   return { date: today, daily: list(base.daily), monthly: list(base.monthly), [kind]: rows };
 }
 
-// Every input item of the book is filled after a save (formula cells do not count): the line then appears even when
+// Every given item is filled after a save (formula cells do not count): the line then appears even when
 // the last values went in with 途中保存, and stays away while an item is still missing.
 export function meterComplete(snapshot, fields) {
   return fields.every(f => snapshot?.formulas?.[f.id] || ![null, undefined, ''].includes(snapshot?.current?.[f.id]));
+}
+
+// The items that have to be filled for "complete": those placed on the meter map, which is what the screen asks for
+// (items of the book that are not on the map, e.g. 給湯配管気泡, stay empty); every item while the map is still empty.
+export function meterCompleteFields(fields, points) {
+  const placed = new Set((Array.isArray(points) ? points : []).flatMap(point => Array.isArray(point?.fields) ? point.fields : []));
+  const onMap = fields.filter(f => placed.has(f.id));
+  return onMap.length ? onMap : fields;
 }
 
 // What the calendar shows now: nothing once the day has changed.

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { recordMeterSave, todayMeterSaves, msUntilJapanMidnight, meterComplete } from '../src/meterSaveStatus.mjs';
+import { recordMeterSave, todayMeterSaves, msUntilJapanMidnight, meterComplete, meterCompleteFields } from '../src/meterSaveStatus.mjs';
 import { METER_FIELDS } from '../src/meterReadings.mjs';
 import { createMeterHandler } from '../api/meter-readings.js';
 import { seal } from '../api/_lib/report-auth.js';
@@ -28,10 +28,10 @@ test('日付が変わったら表示せず、次の保存で前日分を消す�
 const secret = Buffer.alloc(32, 8).toString('base64'), uid = 'u1', email = 'member@plandosee.co.jp';
 const today = Date.UTC(2026, 9, 26, 23, 0), now = () => today; // 2026-10-27 08:00 in Japan
 const baseline = { date: '2026-10-27', previousDate: '2026-10-26', current: { 'gas-main': 10 }, previous: { 'gas-main': 8 }, formulas: { 'gas-main': false }, sheets: { main: '10', h: 'Ｈ-10' } };
-function fixture({ filled = false } = {}) {
+function fixture({ filled = false, map = null, empty = [] } = {}) {
   const records = { 'app_data/shared_state': { users: { [uid]: { email, name: '田中' } } } };
   let reads = 0;
-  const h = createMeterHandler({ now, configure: () => ({ ready: true, secret }), makeStore: () => ({ source: async () => ({ users: { [uid]: { email, role: 'member', name: '田中' } } }), get: async () => ({ refreshToken: 't' }) }), makeClient: () => ({ setCredentials() {}, getAccessToken: async () => ({ token: 'a' }) }), makeSheets: () => ({ read: async () => (++reads > 1 ? { ...baseline, current: { ...(filled ? Object.fromEntries(METER_FIELDS.map(f => [f.id, 1])) : {}), 'gas-main': 11 } } : baseline), write: async () => {} }), makeLocks: () => ({ read: async () => null, transact: async (paths, plan) => { const out = plan(records); for (const w of out.writes || []) records[w.path] = w.fields ? { ...records[w.path], ...w.value } : w.value; return out.result; } }) });
+  const h = createMeterHandler({ now, configure: () => ({ ready: true, secret }), makeStore: () => ({ source: async () => ({ users: { [uid]: { email, role: 'member', name: '田中' } } }), get: async () => ({ refreshToken: 't' }) }), makeClient: () => ({ setCredentials() {}, getAccessToken: async () => ({ token: 'a' }) }), makeSheets: () => ({ read: async () => (++reads > 1 ? { ...baseline, current: { ...(filled ? Object.fromEntries(METER_FIELDS.map(f => [f.id, empty.includes(f.id) ? null : 1])) : {}), 'gas-main': 11 } } : baseline), write: async () => {} }), makeLocks: () => ({ read: async () => map, transact: async (paths, plan) => { const out = plan(records); for (const w of out.writes || []) records[w.path] = w.fields ? { ...records[w.path], ...w.value } : w.value; return out.result; } }) });
   return { h, records };
 }
 function request(body) {
@@ -56,4 +56,18 @@ test('途中保存でも原本の全項目がそろえば記録し、1項目で�
   assert.equal(meterComplete({ current: all, formulas: {} }, METER_FIELDS), true);
   assert.equal(meterComplete({ current: { ...all, [METER_FIELDS[3].id]: null }, formulas: {} }, METER_FIELDS), false);
   assert.equal(meterComplete({ current: { ...all, [METER_FIELDS[3].id]: null }, formulas: { [METER_FIELDS[3].id]: true } }, METER_FIELDS), true);
+});
+test('途中保存はマップに置いた項目がそろえば記録する（マップにない項目は空欄でもよい）', async () => {
+  // The 給湯配管気泡 items are in the book but not on the map, so the screen never asks for them.
+  const placed = METER_FIELDS.filter(f => !f.id.startsWith('bubble-')).map(f => f.id);
+  const map = { map: 'm', version: 1, points: [{ n: 1, name: 'A', x: 0.1, y: 0.1, fields: placed.slice(0, 5) }, { n: 2, name: 'B', x: 0.2, y: 0.2, fields: placed.slice(5) }] };
+  const done = fixture({ filled: true, map, empty: ['bubble-8f', 'bubble-roof'] });
+  assert.equal((await invoke(done.h, request({ final: false }))).code, 200);
+  assert.deepEqual(done.records['app_data/shared_state'].meterSaves.daily.map(r => r.name), ['田中']);
+  const missing = fixture({ filled: true, map, empty: ['bubble-8f', 'tank-1'] });
+  assert.equal((await invoke(missing.h, request({ final: false }))).code, 200);
+  assert.equal(missing.records['app_data/shared_state'].meterSaves, undefined);
+  assert.deepEqual(meterCompleteFields(METER_FIELDS, map.points).map(f => f.id), placed);
+  assert.equal(meterCompleteFields(METER_FIELDS, []).length, METER_FIELDS.length);
+  assert.equal(meterCompleteFields(METER_FIELDS, undefined).length, METER_FIELDS.length);
 });
