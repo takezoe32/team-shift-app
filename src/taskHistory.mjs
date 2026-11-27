@@ -20,6 +20,7 @@ export function taskHistoryEntries(base, task) {
       completedAt: record.completedAt || null,
       completedByName: record.actorName || '記録なし',
       content: record.note || '',
+      handoffs: [],
       imageUrl: '',
       images: [],
     });

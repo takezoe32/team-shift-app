@@ -6,6 +6,9 @@ import { compareCalendarTasks } from './calendarTaskSort.mjs';
 import { canManageTask, assertTaskManage } from './taskManagePermission.mjs';
 import { compareCalendarPartners } from './calendarPartnerSort.mjs';
 import { taskHistoryEntries } from './taskHistory.mjs';
+import { filterHistory, searchWords } from './completedTaskSearch.mjs';
+import { taskBody } from './taskReadContent.mjs';
+import CompletedHandoffList from './components/CompletedHandoffList';
 import { isTaskFile, validateTaskFiles, uploadTaskDocuments } from './taskFiles.mjs';
 import { canAccessMeters } from './meterReadings.mjs';
 import MeterReadings from './components/MeterReadings';
@@ -2814,6 +2817,7 @@ ${error.message || 'もう一度お試しください。'}`); }
     finally { deletingRef.current = false; setDeletingKey(null); }
   };
   const [memberFilter, setMemberFilter] = useState('all');
+  const [keyword, setKeyword] = useState('');
   const [openMonths, setOpenMonths] = useState({});
 
   const members = Array.isArray(sortedUsers) ? sortedUsers : [];
@@ -2838,7 +2842,9 @@ ${error.message || 'もう一度お試しください。'}`); }
           title: task.subject || task.text || '内容なし',
           canReopen: canCompleteTask(task, ownerUid, currentUserUid, isAdmin),
           content: task.subject && task.text ? task.text : '',
-          imageUrl: task.imageUrl || '', images: getTaskImages(task)
+          productName: task.productName || '',
+          handoffs: newestPartnerUpdates(handoffUpdates(task)).reverse(),
+          imageUrl: task.imageUrl || '', images: mergeTaskImages(task, handoffUpdates(task).flatMap(getTaskImages))
         };
         completedEntries.push(...taskHistoryEntries(entry, task));
       });
@@ -2860,16 +2866,20 @@ ${error.message || 'もう一度お試しください。'}`); }
       assigneeNames: assigneeIds.map(id => memberMap[id]?.name).filter(Boolean),
       title: item.subject || item.partnerName || 'パートナータスク',
       canReopen: true,
-      content: item.content || '',
+      content: taskBody(item),
+      handoffs: newestPartnerUpdates(handoffUpdates(item)).reverse(),
       partnerName: item.partnerName || '',
       imageUrl: item.imageUrl || '', images: mergeTaskImages(item, getPartnerUpdates(item).flatMap(getTaskImages))
     };
     completedEntries.push(...taskHistoryEntries(entry, item));
   });
 
-  const filteredEntries = memberFilter === 'all'
+  const memberEntries = memberFilter === 'all'
     ? completedEntries
     : completedEntries.filter(entry => entry.ownerUid === memberFilter || entry.assigneeIds?.includes(memberFilter));
+  // キーワード検索: while a keyword is entered, every month with a match is shown open.
+  const searching = searchWords(keyword).length > 0;
+  const filteredEntries = filterHistory(memberEntries, keyword);
 
   const monthGroups = filteredEntries.reduce((groups, entry) => {
     const monthKey = String(entry.historyDate || entry.date || entry.completedAt || '').slice(0, 7) || '日付未設定';
@@ -2929,13 +2939,22 @@ ${error.message || 'もう一度お試しください。'}`); }
           ))}
         </div>
       </div>
+      <div className="mt-3">
+        <label htmlFor="completed-search" className="block text-xs font-bold text-gray-700">キーワードで探す</label>
+        <div className="mt-1 flex gap-2">
+          <input id="completed-search" type="search" enterKeyHint="search" value={keyword} onChange={event => setKeyword(event.target.value)} placeholder="例：電球　ロビー" className="min-w-0 flex-1 min-h-11 rounded-xl border border-gray-300 bg-white px-3 text-base"/>
+          {keyword && <button type="button" onClick={() => setKeyword('')} className="shrink-0 min-h-11 rounded-xl bg-gray-100 px-3 text-sm font-bold text-gray-700">消す</button>}
+        </div>
+        <p className="mt-1 text-[11px] text-gray-500">件名・詳しい内容・申し送り・パートナー名・担当者・使用商品から探します。空白で区切ると、すべてを含むものだけ出ます。</p>
+        {searching && <p role="status" className="mt-1 text-sm font-bold text-green-800">{filteredEntries.length ? filteredEntries.length + '件見つかりました' : '見つかりませんでした'}</p>}
+      </div>
     </div>
 
     <div className="flex-1 overflow-y-auto p-3 space-y-3">
       {String(currentUserEmail || '').trim().toLowerCase() === 'mitsutake.takezoe@plandosee.co.jp' && <DailyReportPanel/>}
       {!sortedMonthKeys.length ? (
         <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-sm text-gray-400">
-          終了したタスクはありません。
+          {searching ? '「' + keyword.trim() + '」を含む終了したタスクはありません。別の言葉で探すか、上の名前の絞り込みを「全員」にしてください。' : '終了したタスクはありません。'}
         </div>
       ) : sortedMonthKeys.map(monthKey => {
         const entries = [...monthGroups[monthKey]].sort((a, b) =>
@@ -2948,7 +2967,7 @@ ${error.message || 'もう一度お試しください。'}`); }
           return groups;
         }, {});
         const sortedDayKeys = Object.keys(dayGroups).sort((a, b) => b.localeCompare(a));
-        const isOpen = openMonths[monthKey] === true;
+        const isOpen = searching || openMonths[monthKey] === true;
 
         const renderEntry = (entry) => (
           <div key={entry.type + '-' + entry.id + '-' + entry.historyKind + '-' + entry.historyDate} className="p-3">
@@ -2968,9 +2987,11 @@ ${error.message || 'もう一度お試しください。'}`); }
                 終了日時: {formatCompletedAt(entry.completedAt)}
                 <div>終了操作: {entry.completedByName}</div>
               </div>
+              {entry.productName && <div className="mt-1 text-[10px] font-bold text-emerald-700">使用商品: {entry.productName}</div>}
               {entry.content && (
                 <div className="mt-2 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600 whitespace-pre-wrap break-words">{entry.content}</div>
               )}
+              <CompletedHandoffList handoffs={entry.handoffs}/>
               <ImageGallery item={entry}/>
               {entry.historyKind !== 'daily' && <div className="mt-2 flex flex-wrap items-center gap-2">
                 {entry.canReopen && reopenCompletedTask && <button type="button" onClick={() => handleReopen(entry)} disabled={deletingKey !== null} aria-label={`${entry.title}を未終了に戻す`} className="min-h-11 rounded-xl border border-blue-300 bg-blue-50 px-3 text-sm font-bold text-blue-800 hover:bg-blue-100 disabled:opacity-40">未終了に戻す</button>}
@@ -2986,12 +3007,13 @@ ${error.message || 'もう一度お試しください。'}`); }
           <button
             type="button"
             onClick={() => toggleMonth(monthKey)}
+            disabled={searching}
             aria-expanded={isOpen}
             className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 border-b border-gray-100"
           >
             <span className="text-sm font-black text-gray-800">{formatMonth(monthKey)}</span>
             <span className="flex items-center gap-2 text-[10px] text-gray-500 font-bold">
-              {entries.length}件 {isOpen ? <ChevronUp size={15}/> : <ChevronDown size={15}/>}
+              {entries.length}件 {searching ? null : isOpen ? <ChevronUp size={15}/> : <ChevronDown size={15}/>}
             </span>
           </button>
 
